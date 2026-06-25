@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+{% include 'includes/rriv_core.html' %}
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>👥 Nhân Sự</title>
+<meta name="theme-color" content="#0068FF">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+
+<!-- Styles -->
+<link rel="stylesheet" href="/static/css/app-nhansu.css">
+
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+  <button class="btn-icon btn-hamburger" id="btnHamburger" title="Mở cây tổ chức">☰</button>
+  <button class="btn-icon" id="btnHome" title="Trang chủ">🏠</button>
+  <div class="header-title">
+    <h1>👥 Nhân Sự</h1>
+    <p>Tinh gọn · Cây tổ chức</p>
+  </div>
+  <div class="header-search">
+    <input type="text" id="searchInput" placeholder="Tìm tên, mã NV, SĐT, CCCD..." autocomplete="off">
+    <button class="clear-btn" title="Xóa">✕</button>
+  </div>
+  <div class="header-actions">
+    <button class="btn-icon" id="btnRefresh" title="Làm mới">🔄</button>
+    <div class="user-chip" id="userChip" title="Quyền của tôi">
+      <div class="avatar">?</div>
+      <div class="name">Đang tải...</div>
+    </div>
+  </div>
+</header>
+
+<!-- Main 2-pane layout -->
+<div class="main">
+  <!-- Tree sidebar -->
+  <aside class="tree-sidebar" id="treeSidebar">
+    <div class="tree-toolbar">
+      <h2>Cây tổ chức</h2>
+      <button class="btn-tree" id="btnTreeRoot" title="Về gốc">🏛️</button>
+      <button class="btn-tree" id="btnTreeExpand" title="Mở tất cả">⊕</button>
+      <button class="btn-tree" id="btnTreeCollapse" title="Đóng tất cả">⊖</button>
+    </div>
+    <div class="tree-scroll" id="treeRoot">
+      <div class="tree-loading"><div class="spinner"></div></div>
+    </div>
+  </aside>
+
+  <!-- Right panel -->
+  <main class="panel">
+    <div class="panel-head" id="panelHead"></div>
+    <div class="panel-body" id="panelBody">
+      <div class="state"><div class="spinner"></div></div>
+    </div>
+  </main>
+</div>
+
+<!-- Drawer backdrop (mobile) -->
+<div class="drawer-backdrop" id="drawerBackdrop"></div>
+
+<!-- Modal root: modals are injected lazily by modals.js -->
+<div id="modalRoot"></div>
+
+<!-- App scripts -->
+<script src="/static/js/nhansu/state.js"></script>
+<script src="/static/js/nhansu/services.js"></script>
+<script src="/static/js/nhansu/permissions.js"></script>
+<script src="/static/js/nhansu/tree.js"></script>
+<script src="/static/js/nhansu/panel.js"></script>
+<script src="/static/js/nhansu/modals.js"></script>
+<script src="/static/js/nhansu/main.js"></script>
+</body>
+</html>

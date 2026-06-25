@@ -1,0 +1,3935 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+{% include 'includes/rriv_core.html' %}
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Quản Lý Đầu Tư XDCB - RRIV</title>
+<meta name="theme-color" content="#1e40af">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(135deg, #1e3a5f 0%, #1e40af 50%, #1e3a5f 100%);
+  min-height: 100vh;
+}
+
+/* Header */
+.app-header {
+  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+  padding: 15px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 20px rgba(59,130,246,0.3);
+}
+.header-left { display: flex; align-items: center; gap: 15px; }
+.back-btn {
+  background: rgba(255,255,255,0.2);
+  border: none;
+  color: #fff;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.back-btn:hover { background: rgba(255,255,255,0.3); }
+.header-title h1 { color: #fff; font-size: 18px; font-weight: 700; }
+.header-title p { color: rgba(255,255,255,0.8); font-size: 12px; }
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.15);
+  padding: 8px 15px;
+  border-radius: 25px;
+}
+.user-avatar {
+  width: 35px;
+  height: 35px;
+  background: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #1e40af;
+}
+.user-name { color: #fff; font-size: 13px; font-weight: 600; }
+
+/* Content */
+.app-content { padding: 20px; max-width: 1400px; margin: 0 auto; }
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  background: rgba(255,255,255,0.1);
+  padding: 10px;
+  border-radius: 15px;
+}
+.tab {
+  padding: 12px 20px;
+  background: rgba(255,255,255,0.1);
+  border: none;
+  border-radius: 10px;
+  color: rgba(255,255,255,0.8);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+.tab:hover { background: rgba(255,255,255,0.2); color: #fff; }
+.tab.active {
+  background: linear-gradient(135deg, #3b82f6, #1e40af);
+  color: #fff;
+  box-shadow: 0 4px 15px rgba(59,130,246,0.4);
+}
+
+/* Cards */
+.content-card {
+  display: none;
+  background: rgba(255,255,255,0.95);
+  border-radius: 20px;
+  padding: 25px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+}
+.content-card.active { display: block; }
+.content-card h2 {
+  color: #1e40af;
+  font-size: 20px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Summary Cards */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 15px;
+  margin-bottom: 25px;
+}
+.summary-card {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  padding: 20px;
+  border-radius: 15px;
+  text-align: center;
+  border: 1px solid #93c5fd;
+}
+.summary-card.warning {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-color: #fcd34d;
+}
+.summary-card.danger {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border-color: #fca5a5;
+}
+.summary-card.success {
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+  border-color: #86efac;
+}
+.summary-card h3 { font-size: 26px; color: #1e40af; margin-bottom: 5px; }
+.summary-card.warning h3 { color: #d97706; }
+.summary-card.danger h3 { color: #dc2626; }
+.summary-card.success h3 { color: #059669; }
+.summary-card p { color: #64748b; font-size: 12px; }
+.summary-card .sub { font-size: 11px; color: #94a3b8; margin-top: 3px; }
+
+/* Table */
+table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+th {
+  background: linear-gradient(135deg, #1e40af, #3b82f6);
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+}
+th:first-child { border-radius: 10px 0 0 10px; }
+th:last-child { border-radius: 0 10px 10px 0; }
+tr:hover { background: #eff6ff; }
+td { font-size: 13px; color: #334155; }
+
+/* Progress Bar */
+.progress-bar {
+  width: 100%;
+  height: 20px;
+  background: #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 10px;
+  transition: width 0.5s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+.progress-fill.on-track { background: linear-gradient(90deg, #059669, #10b981); }
+.progress-fill.delayed { background: linear-gradient(90deg, #d97706, #f59e0b); }
+.progress-fill.critical { background: linear-gradient(90deg, #dc2626, #ef4444); }
+
+/* Status Badges */
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+.status-dot.on-track { background: #10b981; }
+.status-dot.delayed { background: #f59e0b; }
+.status-dot.critical { background: #ef4444; }
+.status-dot.completed { background: #3b82f6; }
+
+/* Gantt Chart */
+.gantt-container {
+  overflow-x: auto;
+  margin: 20px 0;
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 15px;
+}
+.gantt-header {
+  display: flex;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+}
+.gantt-label { width: 200px; min-width: 200px; font-weight: 600; color: #1e40af; }
+.gantt-timeline { flex: 1; display: flex; min-width: 600px; }
+.gantt-month {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  border-left: 1px solid #e2e8f0;
+  padding: 5px;
+}
+.gantt-row {
+  display: flex;
+  padding: 8px 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+.gantt-item-label {
+  width: 200px;
+  min-width: 200px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gantt-bar-container {
+  flex: 1;
+  position: relative;
+  min-width: 600px;
+  height: 24px;
+}
+.gantt-bar {
+  position: absolute;
+  height: 20px;
+  top: 2px;
+  border-radius: 4px;
+  font-size: 10px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+.gantt-bar.planned { background: #93c5fd; opacity: 0.6; }
+.gantt-bar.actual { background: #3b82f6; }
+.gantt-bar.actual.delayed { background: #f59e0b; }
+.gantt-bar.actual.critical { background: #ef4444; }
+
+/* Section Title */
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e40af;
+  margin: 25px 0 15px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Diary Entry */
+.diary-entry {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 15px;
+  border-left: 4px solid #3b82f6;
+}
+.diary-entry .date {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+.diary-entry .content {
+  font-size: 14px;
+  color: #334155;
+  margin-bottom: 10px;
+}
+.diary-entry .images {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.diary-entry .images img {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* Buttons */
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+.btn-primary {
+  background: linear-gradient(135deg, #1e40af, #3b82f6);
+  color: #fff;
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 20px rgba(59,130,246,0.4);
+}
+.btn-success { background: linear-gradient(135deg, #059669, #10b981); color: #fff; }
+.btn-danger { background: linear-gradient(135deg, #dc2626, #ef4444); color: #fff; }
+.btn-warning { background: linear-gradient(135deg, #d97706, #f59e0b); color: #fff; }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+.btn-outline {
+  background: transparent;
+  border: 2px solid #3b82f6;
+  color: #3b82f6;
+}
+
+/* Badge */
+.badge {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-block;
+}
+.badge-pending { background: #fef3c7; color: #92400e; }
+.badge-approved { background: #d1fae5; color: #065f46; }
+.badge-cancelled { background: #e2e8f0; color: #475569; }
+.badge-on-track { background: #d1fae5; color: #065f46; }
+.badge-delayed { background: #fef3c7; color: #92400e; }
+.badge-critical { background: #fee2e2; color: #991b1b; }
+
+/* Form */
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; }
+.form-group { margin-bottom: 15px; }
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: #1e40af;
+  font-size: 13px;
+}
+.form-group input, .form-group select, .form-group textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: border-color 0.3s;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+/* Modal */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+  background: #fff;
+  border-radius: 20px;
+  padding: 25px;
+  max-width: 700px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #e2e8f0;
+}
+.modal-header h3 { color: #1e40af; font-size: 18px; margin: 0; }
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+  color: #64748b;
+  line-height: 1;
+}
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 15px 30px;
+  border-radius: 10px;
+  color: #fff;
+  font-weight: 600;
+  z-index: 9999;
+  animation: slideUp 0.3s ease;
+}
+.toast.success { background: linear-gradient(135deg, #059669, #10b981); }
+.toast.error { background: linear-gradient(135deg, #dc2626, #ef4444); }
+.toast.warning { background: linear-gradient(135deg, #d97706, #f59e0b); }
+@keyframes slideUp { from { transform: translate(-50%, 100px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+
+/* Loading & Empty */
+.loading { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; }
+.spinner { width: 50px; height: 50px; border: 4px solid rgba(59,130,246,0.2); border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty-state { text-align: center; padding: 40px; color: #64748b; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .form-row, .form-row-3 { grid-template-columns: 1fr; }
+  .header-title h1 { font-size: 16px; }
+  .user-info { display: none; }
+  .tabs { justify-content: center; }
+  .tab { padding: 10px 15px; font-size: 12px; }
+  th, td { padding: 8px 10px; font-size: 12px; }
+  .gantt-label, .gantt-item-label { width: 120px; min-width: 120px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="app-header">
+  <div class="header-left">
+    <button class="back-btn" onclick="goBack()">&#8592;</button>
+    <div class="header-title">
+      <h1>Quản Lý Đầu Tư XDCB</h1>
+      <p>Quản lý dự án xây dựng cơ bản</p>
+    </div>
+  </div>
+  <div class="user-info">
+    <div class="user-avatar" id="userAvatar">?</div>
+    <span class="user-name" id="userName">...</span>
+  </div>
+</header>
+
+<!-- Content -->
+<div class="app-content">
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" onclick="showTab(0)">Danh Mục Dự Án</button>
+    <button class="tab" onclick="showTab(1)">Tiến Độ</button>
+    <button class="tab" onclick="showTab(2)">Chi Phí</button>
+    <button class="tab" onclick="showTab(3)">Quyết Toán</button>
+    <button class="tab" onclick="showTab(4)">Quy Trình</button>
+    <button class="tab" onclick="showTab(5)">Biểu Mẫu</button>
+    <button class="tab" onclick="showTab(6)">Báo Cáo</button>
+    <button class="tab" onclick="showTab(7)">📅 Lịch Công Tác</button>
+  </div>
+
+  <!-- Tab 0: Danh mục dự án -->
+  <div class="content-card active" id="tab0">
+    <h2>Danh Mục Dự Án Đầu Tư</h2>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h3 id="totalProjects">0</h3>
+        <p>Tổng số dự án</p>
+      </div>
+      <div class="summary-card">
+        <h3 id="activeProjects">0</h3>
+        <p>Đang thực hiện</p>
+      </div>
+      <div class="summary-card warning">
+        <h3 id="pendingProjects">0</h3>
+        <p>Chờ phê duyệt</p>
+      </div>
+      <div class="summary-card">
+        <h3 id="completedProjects">0</h3>
+        <p>Đã hoàn thành</p>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
+      <select id="filterStatus" style="padding:10px 15px;border-radius:8px;border:2px solid #e2e8f0;" onchange="loadProjects()">
+        <option value="">Tất cả trạng thái</option>
+        <option value="proposed">Đề xuất</option>
+        <option value="approved">Đã phê duyệt</option>
+        <option value="active">Đang thực hiện</option>
+        <option value="suspended">Tạm dừng</option>
+        <option value="completed">Hoàn thành</option>
+      </select>
+      <select id="filterYear" style="padding:10px 15px;border-radius:8px;border:2px solid #e2e8f0;" onchange="loadProjects()">
+        <option value="">Tất cả năm</option>
+      </select>
+      <button class="btn btn-primary" onclick="showAddProjectModal()">+ Thêm Dự Án</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Mã DA</th>
+            <th>Tên dự án</th>
+            <th>Nhóm</th>
+            <th>Tổng mức ĐT</th>
+            <th>Thời gian</th>
+            <th>Tiến độ</th>
+            <th>Trạng thái</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody id="projectsBody">
+          <tr><td colspan="8" style="text-align:center;padding:30px;">Đang tải...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab 1: Tiến độ - COMPREHENSIVE -->
+  <div class="content-card" id="tab1">
+    <h2>Theo Dõi Tiến Độ Dự Án</h2>
+
+    <!-- Project Selection -->
+    <div style="display:flex;gap:15px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">
+      <select id="progressProject" style="padding:10px 15px;border-radius:8px;border:2px solid #e2e8f0;min-width:300px;" onchange="loadProjectProgress()">
+        <option value="">-- Chọn dự án --</option>
+      </select>
+      <button class="btn btn-primary" onclick="showAddWorkItemModal()" id="btnAddWorkItem" style="display:none;">+ Thêm Hạng Mục</button>
+      <button class="btn btn-success" onclick="showAddDiaryModal()" id="btnAddDiary" style="display:none;">+ Nhật Ký Công Trình</button>
+      <button class="btn" onclick="showDocProgressModal()" id="btnDocProgress" style="display:none;background:#8b5cf6;color:#fff;">📄 Tiến Độ Văn Bản</button>
+    </div>
+
+    <div id="progressContent">
+      <div class="empty-state">
+        <p style="font-size:48px;margin-bottom:10px;">📊</p>
+        <p>Chọn dự án để xem và quản lý tiến độ</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab 2: Chi phí -->
+  <div class="content-card" id="tab2">
+    <h2>Quản Lý Chi Phí</h2>
+    <div style="margin-bottom:20px;">
+      <select id="costProject" style="padding:10px 15px;border-radius:8px;border:2px solid #e2e8f0;min-width:300px;" onchange="loadProjectCost()">
+        <option value="">-- Chọn dự án --</option>
+      </select>
+    </div>
+    <div id="costContent">
+      <div class="empty-state">
+        <p style="font-size:48px;margin-bottom:10px;">💰</p>
+        <p>Chọn dự án để xem chi phí</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab 3: Quyết toán -->
+  <div class="content-card" id="tab3">
+    <h2>Hoàn Thành - Quyết Toán</h2>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Mã DA</th>
+            <th>Tên dự án</th>
+            <th>Tổng mức ĐT</th>
+            <th>Giá trị QT</th>
+            <th>Chênh lệch</th>
+            <th>Trạng thái</th>
+          </tr>
+        </thead>
+        <tbody id="settlementBody">
+          <tr><td colspan="6" style="text-align:center;padding:30px;">Đang tải...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab 4: Quy trình thủ tục đầu tư -->
+  <div class="content-card" id="tab4">
+    <h2>Quy Trình Thủ Tục Đầu Tư</h2>
+    <p style="color:#64748b;margin-bottom:20px;">Hướng dẫn các quy trình lựa chọn nhà thầu theo quy định</p>
+
+    <div class="process-tabs" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:25px;">
+      <button class="process-tab active" onclick="showProcess('chidinh')" id="tabChidinh" style="padding:10px 20px;border:2px solid #3b82f6;background:#3b82f6;color:#fff;border-radius:8px;cursor:pointer;font-weight:600;">Chỉ định thầu</button>
+      <button class="process-tab" onclick="showProcess('chaohang')" id="tabChaohang" style="padding:10px 20px;border:2px solid #e2e8f0;background:#fff;color:#475569;border-radius:8px;cursor:pointer;font-weight:600;">Chào hàng cạnh tranh</button>
+      <button class="process-tab" onclick="showProcess('dauthau')" id="tabDauthau" style="padding:10px 20px;border:2px solid #e2e8f0;background:#fff;color:#475569;border-radius:8px;cursor:pointer;font-weight:600;">Đấu thầu rộng rãi</button>
+      <button class="process-tab" onclick="showProcess('muasam')" id="tabMuasam" style="padding:10px 20px;border:2px solid #e2e8f0;background:#fff;color:#475569;border-radius:8px;cursor:pointer;font-weight:600;">Mua sắm trực tiếp</button>
+    </div>
+
+    <!-- Quy trình Chỉ định thầu -->
+    <div class="process-content" id="processChidinh">
+      <div style="background:#f8fafc;border-radius:12px;padding:20px;margin-bottom:20px;">
+        <h3 style="color:#1e40af;margin-bottom:15px;">📋 Quy trình Chỉ định thầu</h3>
+        <p style="color:#64748b;margin-bottom:15px;"><strong>Áp dụng:</strong> Gói thầu ≤ 500 triệu (xây lắp) hoặc ≤ 100 triệu (mua sắm, tư vấn)</p>
+        <div class="timeline" style="position:relative;padding-left:30px;border-left:3px solid #3b82f6;">
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#3b82f6;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">1</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Lập Tờ trình đề xuất</h4>
+            <p style="color:#64748b;font-size:14px;">Nêu rõ nội dung, phạm vi công việc, dự toán, lý do chỉ định thầu</p>
+          </div>
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#3b82f6;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">2</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Phê duyệt kế hoạch lựa chọn nhà thầu</h4>
+            <p style="color:#64748b;font-size:14px;">Cấp có thẩm quyền phê duyệt KHLCNT</p>
+          </div>
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#3b82f6;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">3</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Gửi dự thảo hợp đồng cho nhà thầu</h4>
+            <p style="color:#64748b;font-size:14px;">Nhà thầu xác nhận năng lực và báo giá</p>
+          </div>
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#3b82f6;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">4</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Thương thảo, hoàn thiện hợp đồng</h4>
+            <p style="color:#64748b;font-size:14px;">Đàm phán giá, điều khoản hợp đồng</p>
+          </div>
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#10b981;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">5</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Trình phê duyệt kết quả và ký hợp đồng</h4>
+            <p style="color:#64748b;font-size:14px;">QĐ phê duyệt kết quả LCNT, ký hợp đồng</p>
+          </div>
+        </div>
+      </div>
+      <div style="background:#fef3c7;border-radius:8px;padding:15px;">
+        <p style="color:#92400e;font-size:14px;"><strong>⚠️ Lưu ý:</strong> Thời gian thực hiện tối đa 45 ngày kể từ ngày phê duyệt KHLCNT</p>
+      </div>
+    </div>
+
+    <!-- Quy trình Chào hàng cạnh tranh -->
+    <div class="process-content" id="processChaohang" style="display:none;">
+      <div style="background:#f8fafc;border-radius:12px;padding:20px;margin-bottom:20px;">
+        <h3 style="color:#059669;margin-bottom:15px;">📋 Quy trình Chào hàng cạnh tranh</h3>
+        <p style="color:#64748b;margin-bottom:15px;"><strong>Áp dụng:</strong> Gói thầu ≤ 5 tỷ (xây lắp) hoặc ≤ 2 tỷ (mua sắm), hàng hóa thông dụng</p>
+        <div class="timeline" style="position:relative;padding-left:30px;border-left:3px solid #059669;">
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#059669;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">1</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Lập và phê duyệt hồ sơ yêu cầu (HSYC)</h4>
+            <p style="color:#64748b;font-size:14px;">Nội dung HSYC, tiêu chuẩn đánh giá, yêu cầu kỹ thuật</p>
+          </div>
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#059669;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">2</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Gửi HSYC cho ≥ 3 nhà thầu</h4>
+            <p style="color:#64748b;font-size:14px;">Đăng tải trên Hệ thống mạng đấu thầu quốc gia (nếu cần)</p>
+          </div>
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#059669;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">3</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Nhà thầu nộp báo giá</h4>
+            <p style="color:#64748b;font-size:14px;">Thời gian nộp: tối thiểu 5 ngày làm việc</p>
+          </div>
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#059669;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">4</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Đánh giá hồ sơ đề xuất</h4>
+            <p style="color:#64748b;font-size:14px;">Đánh giá năng lực, kỹ thuật, giá. Chọn nhà thầu đáp ứng và giá thấp nhất</p>
+          </div>
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#10b981;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">5</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Phê duyệt kết quả và ký hợp đồng</h4>
+            <p style="color:#64748b;font-size:14px;">Báo cáo kết quả, QĐ phê duyệt, thông báo kết quả, ký hợp đồng</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quy trình Đấu thầu rộng rãi -->
+    <div class="process-content" id="processDauthau" style="display:none;">
+      <div style="background:#f8fafc;border-radius:12px;padding:20px;margin-bottom:20px;">
+        <h3 style="color:#7c3aed;margin-bottom:15px;">📋 Quy trình Đấu thầu rộng rãi</h3>
+        <p style="color:#64748b;margin-bottom:15px;"><strong>Áp dụng:</strong> Gói thầu > 5 tỷ (xây lắp) hoặc > 2 tỷ (mua sắm, tư vấn)</p>
+        <div class="timeline" style="position:relative;padding-left:30px;border-left:3px solid #7c3aed;">
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#7c3aed;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">1</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Chuẩn bị lựa chọn nhà thầu</h4>
+            <p style="color:#64748b;font-size:14px;">Lập HSMT, tiêu chuẩn đánh giá, phê duyệt HSMT</p>
+          </div>
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#7c3aed;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">2</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Đăng tải thông báo mời thầu</h4>
+            <p style="color:#64748b;font-size:14px;">Đăng trên Hệ thống mạng đấu thầu quốc gia tối thiểu 20 ngày</p>
+          </div>
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#7c3aed;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">3</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Phát hành HSMT, nhận HSDT</h4>
+            <p style="color:#64748b;font-size:14px;">Tổ chức hội nghị tiền đấu thầu (nếu cần), làm rõ HSMT</p>
+          </div>
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#7c3aed;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">4</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Mở thầu và đánh giá HSDT</h4>
+            <p style="color:#64748b;font-size:14px;">Đánh giá sơ bộ, chi tiết về năng lực, kỹ thuật, tài chính</p>
+          </div>
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#7c3aed;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">5</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Thương thảo hợp đồng</h4>
+            <p style="color:#64748b;font-size:14px;">Làm rõ các vấn đề còn tồn tại, hoàn thiện dự thảo HĐ</p>
+          </div>
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#10b981;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">6</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Phê duyệt kết quả và ký hợp đồng</h4>
+            <p style="color:#64748b;font-size:14px;">QĐ phê duyệt, thông báo kết quả, đàm phán ký kết HĐ</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quy trình Mua sắm trực tiếp -->
+    <div class="process-content" id="processMuasam" style="display:none;">
+      <div style="background:#f8fafc;border-radius:12px;padding:20px;margin-bottom:20px;">
+        <h3 style="color:#dc2626;margin-bottom:15px;">📋 Quy trình Mua sắm trực tiếp</h3>
+        <p style="color:#64748b;margin-bottom:15px;"><strong>Áp dụng:</strong> Mua bổ sung hàng hóa đã có HĐ trước đó (≤ 130% khối lượng), trong vòng 12 tháng</p>
+        <div class="timeline" style="position:relative;padding-left:30px;border-left:3px solid #dc2626;">
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#dc2626;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">1</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Xác định điều kiện áp dụng</h4>
+            <p style="color:#64748b;font-size:14px;">HĐ gốc đã hoàn thành, đơn giá không tăng, nhà thầu còn năng lực</p>
+          </div>
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#dc2626;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">2</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Lập Tờ trình đề xuất mua sắm trực tiếp</h4>
+            <p style="color:#64748b;font-size:14px;">Nêu căn cứ, HĐ gốc, khối lượng cần mua thêm</p>
+          </div>
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#dc2626;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">3</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Gửi dự thảo HĐ cho nhà thầu</h4>
+            <p style="color:#64748b;font-size:14px;">Nhà thầu xác nhận đơn giá, năng lực cung cấp</p>
+          </div>
+          <div class="timeline-item" style="margin-bottom:20px;position:relative;">
+            <div style="position:absolute;left:-39px;width:20px;height:20px;background:#10b981;border-radius:50%;color:#fff;text-align:center;line-height:20px;font-size:12px;font-weight:bold;">4</div>
+            <h4 style="color:#1e3a5f;margin-bottom:5px;">Phê duyệt kết quả và ký hợp đồng</h4>
+            <p style="color:#64748b;font-size:14px;">QĐ phê duyệt kết quả LCNT, ký HĐ mua sắm trực tiếp</p>
+          </div>
+        </div>
+      </div>
+      <div style="background:#fee2e2;border-radius:8px;padding:15px;">
+        <p style="color:#dc2626;font-size:14px;"><strong>⚠️ Điều kiện bắt buộc:</strong> Khối lượng mua thêm ≤ 130% khối lượng HĐ gốc; Thực hiện trong 12 tháng kể từ khi ký HĐ gốc</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab 5: Biểu mẫu -->
+  <div class="content-card" id="tab5">
+    <h2>Biểu Mẫu Văn Bản</h2>
+    <p style="color:#64748b;margin-bottom:20px;">Tạo văn bản tự động theo mẫu chuẩn thể thức</p>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;">
+      <!-- Tờ trình -->
+      <div class="template-card" style="background:#f8fafc;border-radius:12px;padding:20px;border:2px solid #e2e8f0;cursor:pointer;transition:all 0.3s;" onclick="showTemplateModal('toTrinh')">
+        <div style="font-size:36px;margin-bottom:10px;">📝</div>
+        <h3 style="color:#1e3a5f;margin-bottom:8px;">Tờ Trình</h3>
+        <p style="color:#64748b;font-size:14px;">Tờ trình đề xuất, xin phê duyệt dự án, kế hoạch lựa chọn nhà thầu</p>
+        <span style="display:inline-block;margin-top:10px;padding:4px 12px;background:#3b82f6;color:#fff;border-radius:20px;font-size:12px;">Tạo mới →</span>
+      </div>
+
+      <!-- Quyết định -->
+      <div class="template-card" style="background:#f8fafc;border-radius:12px;padding:20px;border:2px solid #e2e8f0;cursor:pointer;transition:all 0.3s;" onclick="showTemplateModal('quyetDinh')">
+        <div style="font-size:36px;margin-bottom:10px;">📋</div>
+        <h3 style="color:#1e3a5f;margin-bottom:8px;">Quyết Định</h3>
+        <p style="color:#64748b;font-size:14px;">Quyết định phê duyệt kết quả lựa chọn nhà thầu, phê duyệt dự án</p>
+        <span style="display:inline-block;margin-top:10px;padding:4px 12px;background:#10b981;color:#fff;border-radius:20px;font-size:12px;">Tạo mới →</span>
+      </div>
+
+      <!-- BB Nghiệm thu -->
+      <div class="template-card" style="background:#f8fafc;border-radius:12px;padding:20px;border:2px solid #e2e8f0;cursor:pointer;transition:all 0.3s;" onclick="showTemplateModal('bbNghiemThu')">
+        <div style="font-size:36px;margin-bottom:10px;">✅</div>
+        <h3 style="color:#1e3a5f;margin-bottom:8px;">BB Nghiệm Thu</h3>
+        <p style="color:#64748b;font-size:14px;">Biên bản nghiệm thu thanh toán giai đoạn, hoàn thành</p>
+        <span style="display:inline-block;margin-top:10px;padding:4px 12px;background:#f59e0b;color:#fff;border-radius:20px;font-size:12px;">Tạo mới →</span>
+      </div>
+
+      <!-- Quyết toán -->
+      <div class="template-card" style="background:#f8fafc;border-radius:12px;padding:20px;border:2px solid #e2e8f0;cursor:pointer;transition:all 0.3s;" onclick="showTemplateModal('quyetToan')">
+        <div style="font-size:36px;margin-bottom:10px;">💰</div>
+        <h3 style="color:#1e3a5f;margin-bottom:8px;">Quyết Toán</h3>
+        <p style="color:#64748b;font-size:14px;">Báo cáo quyết toán công trình hoàn thành</p>
+        <span style="display:inline-block;margin-top:10px;padding:4px 12px;background:#7c3aed;color:#fff;border-radius:20px;font-size:12px;">Tạo mới →</span>
+      </div>
+
+      <!-- BB Thanh lý -->
+      <div class="template-card" style="background:#f8fafc;border-radius:12px;padding:20px;border:2px solid #e2e8f0;cursor:pointer;transition:all 0.3s;" onclick="showTemplateModal('bbThanhLy')">
+        <div style="font-size:36px;margin-bottom:10px;">🤝</div>
+        <h3 style="color:#1e3a5f;margin-bottom:8px;">BB Thanh Lý HĐ</h3>
+        <p style="color:#64748b;font-size:14px;">Biên bản thanh lý hợp đồng sau khi nghiệm thu hoàn thành</p>
+        <span style="display:inline-block;margin-top:10px;padding:4px 12px;background:#64748b;color:#fff;border-radius:20px;font-size:12px;">Tạo mới →</span>
+      </div>
+
+      <!-- Hợp đồng -->
+      <div class="template-card" style="background:#f8fafc;border-radius:12px;padding:20px;border:2px solid #e2e8f0;cursor:pointer;transition:all 0.3s;" onclick="showTemplateModal('hopDong')">
+        <div style="font-size:36px;margin-bottom:10px;">📄</div>
+        <h3 style="color:#1e3a5f;margin-bottom:8px;">Hợp Đồng</h3>
+        <p style="color:#64748b;font-size:14px;">Hợp đồng kinh tế, xây dựng, mua sắm</p>
+        <span style="display:inline-block;margin-top:10px;padding:4px 12px;background:#0ea5e9;color:#fff;border-radius:20px;font-size:12px;">Tạo mới →</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab 6: Báo cáo -->
+  <div class="content-card" id="tab6">
+    <h2>Báo Cáo - Thống Kê</h2>
+    <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
+      <select id="reportType" style="padding:10px 15px;border-radius:8px;border:2px solid #e2e8f0;">
+        <option value="summary">Tổng hợp đầu tư XDCB</option>
+        <option value="progress">Tiến độ thực hiện</option>
+        <option value="cost">Chi phí đầu tư</option>
+      </select>
+      <select id="reportYear" style="padding:10px 15px;border-radius:8px;border:2px solid #e2e8f0;"></select>
+      <button class="btn btn-primary" onclick="generateReport()">Tạo báo cáo</button>
+    </div>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h3 id="reportTotalProjects">0</h3>
+        <p>Tổng dự án</p>
+      </div>
+      <div class="summary-card">
+        <h3 id="reportTotalBudget">0</h3>
+        <p>Tổng vốn (tr.đ)</p>
+      </div>
+      <div class="summary-card">
+        <h3 id="reportTotalDisbursed">0</h3>
+        <p>Đã giải ngân</p>
+      </div>
+      <div class="summary-card">
+        <h3 id="reportAvgProgress">0%</h3>
+        <p>Tiến độ TB</p>
+      </div>
+    </div>
+    <div id="reportContent"></div>
+  </div>
+
+  <!-- Tab 7: Lịch Công Tác -->
+  <div class="content-card" id="tab7">
+    <h2>📅 Lịch Công Tác Tuần</h2>
+
+    <!-- Week Selector & Actions -->
+    <div style="display:flex;gap:15px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button class="btn btn-sm" onclick="changeWeek(-1)" style="background:#64748b;color:#fff;">◀ Tuần trước</button>
+        <div style="background:#f1f5f9;padding:10px 20px;border-radius:8px;font-weight:600;color:#1e40af;">
+          <span id="currentWeekDisplay">--/--/---- - --/--/----</span>
+        </div>
+        <button class="btn btn-sm" onclick="changeWeek(1)" style="background:#64748b;color:#fff;">Tuần sau ▶</button>
+        <button class="btn btn-sm" onclick="goToCurrentWeek()" style="background:#3b82f6;color:#fff;">Hôm nay</button>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:10px;">
+        <button class="btn btn-primary" onclick="showAddTaskModal()">+ Thêm Công Việc</button>
+        <button class="btn btn-success" onclick="exportWeeklyReport()">📥 Xuất Excel</button>
+      </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-grid" style="margin-bottom:20px;">
+      <div class="summary-card">
+        <h3 id="totalTasks">0</h3>
+        <p>Tổng công việc</p>
+      </div>
+      <div class="summary-card success">
+        <h3 id="completedTasks">0</h3>
+        <p>Hoàn thành</p>
+      </div>
+      <div class="summary-card warning">
+        <h3 id="inProgressTasks">0</h3>
+        <p>Đang thực hiện</p>
+      </div>
+      <div class="summary-card danger">
+        <h3 id="pendingTasks">0</h3>
+        <p>Chưa bắt đầu</p>
+      </div>
+    </div>
+
+    <!-- Tasks Table -->
+    <div style="overflow-x:auto;">
+      <table id="tasksTable">
+        <thead>
+          <tr>
+            <th style="width:50px;">STT</th>
+            <th style="min-width:250px;">Nội dung công việc</th>
+            <th style="width:140px;">Thời gian</th>
+            <th style="width:140px;">Người thực hiện</th>
+            <th style="width:100px;">Tiến độ</th>
+            <th style="width:110px;">Trạng thái</th>
+            <th style="width:90px;">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody id="tasksBody">
+          <tr><td colspan="7" style="text-align:center;padding:40px;color:#64748b;">
+            <p style="font-size:48px;margin-bottom:10px;">📋</p>
+            <p>Chưa có công việc trong tuần này</p>
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Task Modal -->
+<div class="modal-overlay" id="taskModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="taskModalTitle">Thêm Công Việc</h3>
+      <button type="button" class="modal-close" onclick="closeTaskModal()">&times;</button>
+    </div>
+    <form id="taskForm" onsubmit="saveTask(event)">
+      <input type="hidden" id="taskId">
+      <div class="form-group">
+        <label>Nội dung công việc *</label>
+        <textarea id="taskContent" rows="3" required placeholder="Mô tả chi tiết công việc cần thực hiện..." style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;resize:vertical;"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Người thực hiện *</label>
+          <select id="taskAssignee" required>
+            <option value="">-- Chọn người thực hiện --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Trạng thái</label>
+          <select id="taskStatus">
+            <option value="pending">Chưa bắt đầu</option>
+            <option value="in_progress">Đang thực hiện</option>
+            <option value="completed">Hoàn thành</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Từ ngày *</label>
+          <input type="date" id="taskStartDate" required>
+        </div>
+        <div class="form-group">
+          <label>Đến ngày *</label>
+          <input type="date" id="taskEndDate" required>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Tiến độ (%)</label>
+          <input type="number" id="taskProgress" min="0" max="100" value="0" placeholder="0-100">
+        </div>
+        <div class="form-group">
+          <label>Ghi chú</label>
+          <input type="text" id="taskNote" placeholder="Ghi chú thêm (nếu có)">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn" onclick="closeTaskModal()" style="background:#e2e8f0;color:#475569;">Hủy</button>
+        <button type="submit" class="btn btn-primary">Lưu công việc</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add/Edit Project Modal -->
+<div class="modal-overlay" id="projectModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="projectModalTitle">Thêm Dự Án Mới</h3>
+      <button type="button" class="modal-close" onclick="closeProjectModal()">&times;</button>
+    </div>
+    <form id="projectForm" onsubmit="saveProject(event)">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Mã dự án</label>
+          <input type="text" id="projectCode" readonly style="background:#f1f5f9;color:#64748b;cursor:not-allowed" placeholder="Tự động sinh">
+        </div>
+        <div class="form-group">
+          <label>Nhóm dự án *</label>
+          <select id="projectGroup" required>
+            <option value="">-- Chọn nhóm --</option>
+            <option value="kientruc">Kiến trúc</option>
+            <option value="giaothong">Giao thông thủy lợi</option>
+            <option value="thietbi">Thiết bị</option>
+            <option value="tuvan">Tư vấn</option>
+            <option value="muasam">Mua sắm thường xuyên</option>
+            <option value="suachua">Sửa chữa lớn</option>
+            <option value="khac">Khác</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Tên dự án *</label>
+        <input type="text" id="projectName" required placeholder="Nhập tên dự án">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Tổng mức đầu tư (triệu đồng) *</label>
+          <input type="number" id="projectBudget" required min="0" step="0.01" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label>Năm thực hiện</label>
+          <input type="number" id="projectYear" min="2020" max="2050">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Thời gian bắt đầu</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select id="projectStartType" onchange="toggleStartDateInputs()" style="width:100px;">
+              <option value="date">Ngày</option>
+              <option value="month">Tháng</option>
+              <option value="quarter">Quý</option>
+              <option value="year">Năm</option>
+            </select>
+            <input type="date" id="projectStartDate" style="flex:1;">
+            <select id="projectStartMonth" style="flex:1;display:none;">
+              <option value="01">Tháng 1</option>
+              <option value="02">Tháng 2</option>
+              <option value="03">Tháng 3</option>
+              <option value="04">Tháng 4</option>
+              <option value="05">Tháng 5</option>
+              <option value="06">Tháng 6</option>
+              <option value="07">Tháng 7</option>
+              <option value="08">Tháng 8</option>
+              <option value="09">Tháng 9</option>
+              <option value="10">Tháng 10</option>
+              <option value="11">Tháng 11</option>
+              <option value="12">Tháng 12</option>
+            </select>
+            <select id="projectStartQuarter" style="width:80px;display:none;">
+              <option value="Q1">Q1</option>
+              <option value="Q2">Q2</option>
+              <option value="Q3">Q3</option>
+              <option value="Q4">Q4</option>
+            </select>
+            <input type="number" id="projectStartYear" min="2020" max="2050" placeholder="Năm" style="width:90px;display:none;">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Thời gian kết thúc (dự kiến)</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select id="projectEndType" onchange="toggleEndDateInputs()" style="width:100px;">
+              <option value="date">Ngày</option>
+              <option value="month">Tháng</option>
+              <option value="quarter">Quý</option>
+              <option value="year">Năm</option>
+            </select>
+            <input type="date" id="projectEndDate" style="flex:1;">
+            <select id="projectEndMonth" style="flex:1;display:none;">
+              <option value="01">Tháng 1</option>
+              <option value="02">Tháng 2</option>
+              <option value="03">Tháng 3</option>
+              <option value="04">Tháng 4</option>
+              <option value="05">Tháng 5</option>
+              <option value="06">Tháng 6</option>
+              <option value="07">Tháng 7</option>
+              <option value="08">Tháng 8</option>
+              <option value="09">Tháng 9</option>
+              <option value="10">Tháng 10</option>
+              <option value="11">Tháng 11</option>
+              <option value="12">Tháng 12</option>
+            </select>
+            <select id="projectEndQuarter" style="width:80px;display:none;">
+              <option value="Q1">Q1</option>
+              <option value="Q2">Q2</option>
+              <option value="Q3">Q3</option>
+              <option value="Q4">Q4</option>
+            </select>
+            <input type="number" id="projectEndYear" min="2020" max="2050" placeholder="Năm" style="width:90px;display:none;">
+          </div>
+        </div>
+      </div>
+      <!-- Đơn vị quản lý - mặc định, ẩn -->
+      <input type="hidden" id="projectUnit" value="Công ty CP Cao su RRIV">
+      <!-- Trạng thái - hệ thống tự cập nhật -->
+      <input type="hidden" id="projectStatus" value="active">
+      <div class="form-group">
+        <label>Mô tả</label>
+        <textarea id="projectDesc" rows="3" placeholder="Mô tả chi tiết dự án..."></textarea>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn" onclick="closeProjectModal()" style="background:#e2e8f0;color:#475569">Hủy</button>
+        <button type="submit" class="btn btn-primary">Lưu dự án</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add/Edit Work Item Modal -->
+<div class="modal-overlay" id="workItemModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="workItemModalTitle">Thêm Hạng Mục Công Việc</h3>
+      <button type="button" class="modal-close" onclick="closeWorkItemModal()">&times;</button>
+    </div>
+    <form id="workItemForm" onsubmit="saveWorkItem(event)">
+      <div class="form-group">
+        <label>Tên hạng mục / Gói thầu *</label>
+        <input type="text" id="workItemName" required placeholder="VD: Xây dựng phần móng">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Trọng số (%) *</label>
+          <input type="number" id="workItemWeight" required min="0" max="100" step="0.1" placeholder="VD: 20">
+        </div>
+        <div class="form-group">
+          <label>Thứ tự</label>
+          <input type="number" id="workItemOrder" min="1" placeholder="1">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Ngày KH bắt đầu *</label>
+          <input type="date" id="workItemPlanStart" required>
+        </div>
+        <div class="form-group">
+          <label>Ngày KH kết thúc *</label>
+          <input type="date" id="workItemPlanEnd" required>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Ngày TT bắt đầu</label>
+          <input type="date" id="workItemActualStart">
+        </div>
+        <div class="form-group">
+          <label>Ngày TT kết thúc</label>
+          <input type="date" id="workItemActualEnd">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>% KL Kế hoạch</label>
+          <input type="number" id="workItemPlanProgress" min="0" max="100" step="0.1" value="0">
+        </div>
+        <div class="form-group">
+          <label>% KL Thực tế *</label>
+          <input type="number" id="workItemActualProgress" required min="0" max="100" step="0.1" value="0">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Ghi chú</label>
+        <textarea id="workItemNote" rows="2" placeholder="Ghi chú thêm..."></textarea>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn" onclick="closeWorkItemModal()" style="background:#e2e8f0;color:#475569">Hủy</button>
+        <button type="submit" class="btn btn-primary">Lưu hạng mục</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add Diary Entry Modal - IMPROVED VERSION -->
+<div class="modal-overlay" id="diaryModal">
+  <div class="modal" style="max-width:900px;max-height:90vh;overflow-y:auto;">
+    <div class="modal-header" style="background:linear-gradient(135deg,#059669,#10b981);">
+      <h3 style="color:#fff;">📋 Nhật Ký Công Trình</h3>
+      <button type="button" class="modal-close" onclick="closeDiaryModal()" style="color:#fff;">&times;</button>
+    </div>
+    <form id="diaryForm" onsubmit="saveDiaryEntry(event)">
+      <!-- Header with Copy Button -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;padding:10px;background:#f0fdf4;border-radius:8px;">
+        <span style="color:#059669;font-weight:600;">Nhập nhật ký thi công hàng ngày</span>
+        <button type="button" class="btn btn-sm" onclick="copyFromYesterday()" style="background:#f59e0b;color:#fff;font-size:12px;">
+          📋 Sao chép từ hôm qua
+        </button>
+      </div>
+
+      <!-- Section 1: Ngày & Ca làm việc -->
+      <div style="background:#f8fafc;padding:15px;border-radius:8px;margin-bottom:15px;">
+        <h4 style="color:#1e3a5f;margin-bottom:12px;font-size:14px;">📅 Thông tin ca làm việc</h4>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Ngày *</label>
+            <input type="date" id="diaryDate" required>
+          </div>
+          <div class="form-group">
+            <label>Ca làm việc *</label>
+            <div style="display:flex;gap:15px;flex-wrap:wrap;">
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+                <input type="checkbox" id="shiftMorning" value="morning"> Sáng (6h-11h30)
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+                <input type="checkbox" id="shiftAfternoon" value="afternoon"> Chiều (13h-17h)
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+                <input type="checkbox" id="shiftOvertime" value="overtime"> Tăng ca
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Thời tiết -->
+      <div style="background:#f8fafc;padding:15px;border-radius:8px;margin-bottom:15px;">
+        <h4 style="color:#1e3a5f;margin-bottom:12px;font-size:14px;">🌤️ Thời tiết</h4>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Tình trạng</label>
+            <select id="diaryWeather">
+              <option value="sunny">☀️ Nắng</option>
+              <option value="cloudy">⛅ Nhiều mây</option>
+              <option value="rainy">🌧️ Mưa</option>
+              <option value="stormy">⛈️ Bão/Giông</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Nhiệt độ (°C)</label>
+            <input type="number" id="diaryTemperature" min="15" max="45" placeholder="30">
+          </div>
+          <div class="form-group">
+            <label>Có mưa nghỉ?</label>
+            <div style="display:flex;gap:10px;align-items:center;">
+              <select id="diaryRainStop" style="width:80px;">
+                <option value="no">Không</option>
+                <option value="yes">Có</option>
+              </select>
+              <input type="number" id="diaryRainHours" min="0" max="8" step="0.5" placeholder="Số giờ" style="width:80px;display:none;">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Công việc theo hạng mục -->
+      <div style="background:#f8fafc;padding:15px;border-radius:8px;margin-bottom:15px;">
+        <h4 style="color:#1e3a5f;margin-bottom:12px;font-size:14px;">🔨 Công việc thực hiện</h4>
+        <div id="workTasksContainer">
+          <div class="work-task-row" style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:end;">
+            <div style="flex:2;min-width:200px;">
+              <label style="font-size:12px;">Hạng mục/Công việc</label>
+              <select class="taskWorkItem" style="width:100%;">
+                <option value="">-- Chọn từ danh sách --</option>
+              </select>
+            </div>
+            <div style="flex:1;min-width:100px;">
+              <label style="font-size:12px;">Khối lượng</label>
+              <input type="number" class="taskQuantity" step="0.01" placeholder="0">
+            </div>
+            <div style="flex:1;min-width:80px;">
+              <label style="font-size:12px;">Đơn vị</label>
+              <select class="taskUnit">
+                <option value="m3">m³</option>
+                <option value="m2">m²</option>
+                <option value="md">m.d</option>
+                <option value="kg">kg</option>
+                <option value="tan">tấn</option>
+                <option value="cai">cái</option>
+                <option value="bo">bộ</option>
+                <option value="cong">công</option>
+              </select>
+            </div>
+            <div style="flex:1;min-width:80px;">
+              <label style="font-size:12px;">% HT</label>
+              <input type="number" class="taskProgress" min="0" max="100" placeholder="0">
+            </div>
+          </div>
+        </div>
+        <button type="button" onclick="addWorkTaskRow()" style="background:#e2e8f0;border:none;padding:8px 15px;border-radius:5px;cursor:pointer;font-size:13px;">
+          + Thêm công việc
+        </button>
+        <div class="form-group" style="margin-top:10px;">
+          <label>Mô tả chi tiết công việc</label>
+          <textarea id="diaryContent" rows="3" placeholder="Mô tả chi tiết các công việc thực hiện trong ngày..."></textarea>
+        </div>
+      </div>
+
+      <!-- Section 4: Nhân công -->
+      <div style="background:#f8fafc;padding:15px;border-radius:8px;margin-bottom:15px;">
+        <h4 style="color:#1e3a5f;margin-bottom:12px;font-size:14px;">👷 Nhân công</h4>
+        <div id="workersContainer">
+          <div class="worker-row" style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:end;">
+            <div style="flex:2;min-width:150px;">
+              <label style="font-size:12px;">Tổ đội / Loại thợ</label>
+              <select class="workerType">
+                <option value="tho_xay">Thợ xây</option>
+                <option value="tho_han">Thợ hàn</option>
+                <option value="tho_dien">Thợ điện</option>
+                <option value="tho_nuoc">Thợ nước</option>
+                <option value="tho_son">Thợ sơn</option>
+                <option value="tho_moc">Thợ mộc</option>
+                <option value="phu_ho">Phụ hồ</option>
+                <option value="lai_xe">Lái xe/Máy</option>
+                <option value="ky_su">Kỹ sư/GSCT</option>
+                <option value="khac">Khác</option>
+              </select>
+            </div>
+            <div style="flex:1;min-width:80px;">
+              <label style="font-size:12px;">Số người</label>
+              <input type="number" class="workerCount" min="0" value="0">
+            </div>
+            <div style="flex:1;min-width:80px;">
+              <label style="font-size:12px;">Giờ làm</label>
+              <input type="number" class="workerHours" min="0" max="12" step="0.5" value="8">
+            </div>
+            <div style="flex:1;min-width:80px;">
+              <label style="font-size:12px;">Công quy đổi</label>
+              <input type="text" class="workerManDay" readonly style="background:#e2e8f0;">
+            </div>
+          </div>
+        </div>
+        <button type="button" onclick="addWorkerRow()" style="background:#e2e8f0;border:none;padding:8px 15px;border-radius:5px;cursor:pointer;font-size:13px;">
+          + Thêm loại thợ
+        </button>
+        <div style="margin-top:10px;padding:10px;background:#dbeafe;border-radius:5px;">
+          <strong>Tổng công:</strong> <span id="totalManDays">0</span> công
+        </div>
+      </div>
+
+      <!-- Section 5: Thiết bị -->
+      <div style="background:#f8fafc;padding:15px;border-radius:8px;margin-bottom:15px;">
+        <h4 style="color:#1e3a5f;margin-bottom:12px;font-size:14px;">🚜 Thiết bị / Máy móc</h4>
+        <div id="equipmentContainer">
+          <div class="equipment-row" style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:end;">
+            <div style="flex:2;min-width:150px;">
+              <label style="font-size:12px;">Tên thiết bị</label>
+              <input type="text" class="equipName" placeholder="VD: Cẩu 25T, Máy xúc...">
+            </div>
+            <div style="flex:1;min-width:60px;">
+              <label style="font-size:12px;">SL</label>
+              <input type="number" class="equipQty" min="0" value="1">
+            </div>
+            <div style="flex:1;min-width:80px;">
+              <label style="font-size:12px;">Giờ chạy</label>
+              <input type="number" class="equipHours" min="0" max="24" step="0.5" value="8">
+            </div>
+            <div style="flex:1;min-width:100px;">
+              <label style="font-size:12px;">Tình trạng</label>
+              <select class="equipStatus">
+                <option value="good">✅ Tốt</option>
+                <option value="issue">⚠️ Có vấn đề</option>
+                <option value="broken">❌ Hỏng</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <button type="button" onclick="addEquipmentRow()" style="background:#e2e8f0;border:none;padding:8px 15px;border-radius:5px;cursor:pointer;font-size:13px;">
+          + Thêm thiết bị
+        </button>
+      </div>
+
+      <!-- Section 6: Vật tư -->
+      <div style="background:#f8fafc;padding:15px;border-radius:8px;margin-bottom:15px;">
+        <h4 style="color:#1e3a5f;margin-bottom:12px;font-size:14px;">📦 Vật tư sử dụng</h4>
+        <div id="materialsContainer">
+          <div class="material-row" style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:end;">
+            <div style="flex:2;min-width:150px;">
+              <label style="font-size:12px;">Tên vật tư</label>
+              <input type="text" class="materialName" placeholder="VD: Xi măng, Cát, Sắt...">
+            </div>
+            <div style="flex:1;min-width:80px;">
+              <label style="font-size:12px;">Số lượng</label>
+              <input type="number" class="materialQty" min="0" step="0.01">
+            </div>
+            <div style="flex:1;min-width:80px;">
+              <label style="font-size:12px;">Đơn vị</label>
+              <select class="materialUnit">
+                <option value="bao">bao</option>
+                <option value="kg">kg</option>
+                <option value="tan">tấn</option>
+                <option value="m3">m³</option>
+                <option value="cay">cây</option>
+                <option value="tam">tấm</option>
+                <option value="cai">cái</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <button type="button" onclick="addMaterialRow()" style="background:#e2e8f0;border:none;padding:8px 15px;border-radius:5px;cursor:pointer;font-size:13px;">
+          + Thêm vật tư
+        </button>
+      </div>
+
+      <!-- Section 7: An toàn lao động -->
+      <div style="background:#fef3c7;padding:15px;border-radius:8px;margin-bottom:15px;">
+        <h4 style="color:#92400e;margin-bottom:12px;font-size:14px;">⚠️ An toàn lao động</h4>
+        <div style="display:flex;flex-wrap:wrap;gap:15px;">
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+            <input type="checkbox" id="safetyMeeting" checked> Đã họp ATLĐ đầu ca
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+            <input type="checkbox" id="safetyGear" checked> Trang bị BHLĐ đầy đủ
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+            <input type="checkbox" id="safetyIncident"> Có sự cố ATLĐ
+          </label>
+        </div>
+        <div id="safetyIncidentDetail" style="display:none;margin-top:10px;">
+          <textarea id="safetyIncidentDesc" rows="2" placeholder="Mô tả sự cố ATLĐ..." style="width:100%;"></textarea>
+        </div>
+      </div>
+
+      <!-- Section 8: Vấn đề / Chỉ đạo -->
+      <div style="background:#f8fafc;padding:15px;border-radius:8px;margin-bottom:15px;">
+        <h4 style="color:#1e3a5f;margin-bottom:12px;font-size:14px;">📝 Vấn đề & Chỉ đạo</h4>
+        <div class="form-group">
+          <label>Vấn đề / Sự cố phát sinh</label>
+          <textarea id="diaryIssues" rows="2" placeholder="Các vấn đề phát sinh trong ngày..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Chỉ đạo của Giám sát / Chủ đầu tư</label>
+          <textarea id="diaryInstructions" rows="2" placeholder="Nội dung chỉ đạo (nếu có)..."></textarea>
+        </div>
+      </div>
+
+      <!-- Section 9: Kế hoạch ngày mai -->
+      <div style="background:#ecfdf5;padding:15px;border-radius:8px;margin-bottom:15px;">
+        <h4 style="color:#059669;margin-bottom:12px;font-size:14px;">📅 Kế hoạch ngày mai</h4>
+        <div class="form-group">
+          <label>Công việc dự kiến</label>
+          <textarea id="diaryTomorrowPlan" rows="2" placeholder="Các công việc dự kiến thực hiện ngày mai..."></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Nhân công cần</label>
+            <input type="number" id="diaryTomorrowWorkers" min="0" placeholder="Số người">
+          </div>
+          <div class="form-group">
+            <label>Vật tư cần chuẩn bị</label>
+            <input type="text" id="diaryTomorrowMaterials" placeholder="VD: Xi măng 50 bao, Sắt 2 tấn...">
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="modal-actions" style="position:sticky;bottom:0;background:#fff;padding:15px 0;border-top:1px solid #e2e8f0;">
+        <button type="button" class="btn" onclick="closeDiaryModal()" style="background:#e2e8f0;color:#475569">Hủy</button>
+        <button type="submit" class="btn btn-primary" style="background:#059669;">💾 Lưu nhật ký</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Document Progress Modal -->
+<div class="modal-overlay" id="docProgressModal">
+  <div class="modal" style="max-width:700px;">
+    <div class="modal-header" style="background:#8b5cf6;">
+      <h3 style="color:#fff;">📄 Cập Nhật Tiến Độ Văn Bản</h3>
+      <button type="button" class="modal-close" onclick="closeDocProgressModal()" style="color:#fff;">&times;</button>
+    </div>
+    <form id="docProgressForm" onsubmit="saveDocProgress(event)">
+      <p style="color:#64748b;margin-bottom:15px;font-size:14px;">Cập nhật các văn bản pháp lý liên quan đến dự án</p>
+
+      <div class="form-group">
+        <label>Tờ trình đề xuất</label>
+        <div style="display:flex;gap:10px;">
+          <input type="text" id="docToTrinh" placeholder="Số tờ trình (VD: 123/TTr-CTCP)" style="flex:1;">
+          <input type="date" id="docToTrinhDate" style="width:150px;">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Quyết định phê duyệt KHLCNT</label>
+        <div style="display:flex;gap:10px;">
+          <input type="text" id="docQDKHLCNT" placeholder="Số QĐ (VD: 45/QĐ-CTCP)" style="flex:1;">
+          <input type="date" id="docQDKHLCNTDate" style="width:150px;">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Quyết định phê duyệt kết quả LCNT</label>
+        <div style="display:flex;gap:10px;">
+          <input type="text" id="docQDKQLCNT" placeholder="Số QĐ (VD: 67/QĐ-CTCP)" style="flex:1;">
+          <input type="date" id="docQDKQLCNTDate" style="width:150px;">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Hợp đồng</label>
+        <div style="display:flex;gap:10px;">
+          <input type="text" id="docHopDong" placeholder="Số HĐ (VD: 89/HĐKT-2024)" style="flex:1;">
+          <input type="date" id="docHopDongDate" style="width:150px;">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>BB Nghiệm thu hoàn thành</label>
+        <div style="display:flex;gap:10px;">
+          <input type="text" id="docBBNT" placeholder="Số BB (VD: 12/BBNT-2024)" style="flex:1;">
+          <input type="date" id="docBBNTDate" style="width:150px;">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Quyết định quyết toán</label>
+        <div style="display:flex;gap:10px;">
+          <input type="text" id="docQDQT" placeholder="Số QĐ (VD: 123/QĐQT-CTCP)" style="flex:1;">
+          <input type="date" id="docQDQTDate" style="width:150px;">
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn" onclick="closeDocProgressModal()" style="background:#e2e8f0;color:#475569">Hủy</button>
+        <button type="submit" class="btn" style="background:#8b5cf6;color:#fff;">Lưu tiến độ văn bản</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Template Modal -->
+<div class="modal-overlay" id="templateModal">
+  <div class="modal" style="max-width:900px;max-height:90vh;overflow-y:auto;">
+    <div class="modal-header" style="background:#1e40af;">
+      <h3 style="color:#fff;" id="templateModalTitle">Tạo Văn Bản</h3>
+      <button type="button" class="modal-close" onclick="closeTemplateModal()" style="color:#fff;">&times;</button>
+    </div>
+    <div id="templateFormContainer">
+      <!-- Dynamic form will be inserted here -->
+    </div>
+  </div>
+</div>
+
+<script>
+// Firebase Config
+const erpDbConfig = {
+  apiKey: "AIzaSyBCpPDhOKofImy_K8xiV2Mhut_3gbdB1vY",
+  authDomain: "rriv-erp.firebaseapp.com",
+  projectId: "rriv-erp",
+  storageBucket: "rriv-erp.firebasestorage.app",
+  messagingSenderId: "1024381876052",
+  appId: "1:1024381876052:web:150ee86fc411bd14733ac1"
+};
+
+ErpDb.initializeApp(erpDbConfig);
+const auth = ErpDb.auth();
+const db = ErpDb.firestore();
+
+auth.setPersistence(ErpDb.auth.Auth.Persistence.LOCAL);
+
+let currentUser = null;
+let currentTab = 0;
+let projectsList = [];
+let editingProjectId = null;
+let selectedProjectId = null;
+let workItemsList = [];
+let editingWorkItemId = null;
+let diaryEntries = [];
+
+const PROJECT_STATUS = {
+  proposed: { label: 'Đề xuất', class: 'badge-pending' },
+  approved: { label: 'Đã phê duyệt', class: 'badge-approved' },
+  active: { label: 'Đang thực hiện', class: 'badge-approved' },
+  overdue: { label: 'Trễ hạn', class: 'badge-cancelled' },
+  suspended: { label: 'Tạm dừng', class: 'badge-cancelled' },
+  completed: { label: 'Hoàn thành', class: 'badge-approved' }
+};
+
+const PROJECT_GROUPS = {
+  kientruc: 'Kiến trúc',
+  giaothong: 'Giao thông thủy lợi',
+  thietbi: 'Thiết bị',
+  tuvan: 'Tư vấn',
+  muasam: 'Mua sắm thường xuyên',
+  suachua: 'Sửa chữa lớn',
+  khac: 'Khác'
+};
+
+const WEATHER_ICONS = {
+  sunny: '☀️',
+  cloudy: '☁️',
+  rainy: '🌧️',
+  stormy: '⛈️'
+};
+
+// ==================== UTILITIES ====================
+function showToast(message, type = 'success') {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+function goBack() { window.location.href = 'index.html'; }
+
+function formatCurrency(amount) {
+  if (!amount) return '0';
+  return new Intl.NumberFormat('vi-VN').format(amount);
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('vi-VN');
+}
+
+function getProgressStatus(planned, actual) {
+  const diff = actual - planned;
+  if (actual >= 100) return 'completed';
+  if (diff >= 0) return 'on-track';
+  if (diff >= -10) return 'delayed';
+  return 'critical';
+}
+
+function getStatusLabel(status) {
+  switch(status) {
+    case 'on-track': return 'Đúng tiến độ';
+    case 'delayed': return 'Chậm nhẹ';
+    case 'critical': return 'Chậm nghiêm trọng';
+    case 'completed': return 'Hoàn thành';
+    default: return 'Chưa xác định';
+  }
+}
+
+// ==================== PROJECT CODE GENERATOR ====================
+async function generateProjectCode() {
+  const year = new Date().getFullYear();
+  const prefix = `DA-${year}-`;
+
+  try {
+    const snapshot = await db.collection('investment_projects')
+      .where('code', '>=', prefix)
+      .where('code', '<=', prefix + '\uf8ff')
+      .orderBy('code', 'desc')
+      .limit(1)
+      .get();
+
+    let nextNum = 1;
+    if (!snapshot.empty) {
+      const lastCode = snapshot.docs[0].data().code;
+      const lastNum = parseInt(lastCode.split('-').pop()) || 0;
+      nextNum = lastNum + 1;
+    }
+
+    return `${prefix}${String(nextNum).padStart(3, '0')}`;
+  } catch (error) {
+    console.error('Generate code error:', error);
+    return `${prefix}${String(Math.floor(Math.random() * 900) + 100)}`;
+  }
+}
+
+// ==================== DATE TYPE TOGGLE ====================
+function toggleStartDateInputs() {
+  const type = document.getElementById('projectStartType').value;
+  document.getElementById('projectStartDate').style.display = type === 'date' ? 'block' : 'none';
+  document.getElementById('projectStartMonth').style.display = type === 'month' ? 'block' : 'none';
+  document.getElementById('projectStartQuarter').style.display = type === 'quarter' ? 'block' : 'none';
+  document.getElementById('projectStartYear').style.display = (type === 'month' || type === 'quarter' || type === 'year') ? 'block' : 'none';
+}
+
+function toggleEndDateInputs() {
+  const type = document.getElementById('projectEndType').value;
+  document.getElementById('projectEndDate').style.display = type === 'date' ? 'block' : 'none';
+  document.getElementById('projectEndMonth').style.display = type === 'month' ? 'block' : 'none';
+  document.getElementById('projectEndQuarter').style.display = type === 'quarter' ? 'block' : 'none';
+  document.getElementById('projectEndYear').style.display = (type === 'month' || type === 'quarter' || type === 'year') ? 'block' : 'none';
+}
+
+// Lấy giá trị thời gian từ form
+function getStartTimeValue() {
+  const type = document.getElementById('projectStartType').value;
+  const year = document.getElementById('projectStartYear').value || new Date().getFullYear();
+
+  switch(type) {
+    case 'date':
+      return { type, value: document.getElementById('projectStartDate').value };
+    case 'month':
+      return { type, value: `${year}-${document.getElementById('projectStartMonth').value}` };
+    case 'quarter':
+      return { type, value: `${document.getElementById('projectStartQuarter').value}/${year}` };
+    case 'year':
+      return { type, value: String(year) };
+    default:
+      return { type: 'date', value: '' };
+  }
+}
+
+function getEndTimeValue() {
+  const type = document.getElementById('projectEndType').value;
+  const year = document.getElementById('projectEndYear').value || new Date().getFullYear();
+
+  switch(type) {
+    case 'date':
+      return { type, value: document.getElementById('projectEndDate').value };
+    case 'month':
+      return { type, value: `${year}-${document.getElementById('projectEndMonth').value}` };
+    case 'quarter':
+      return { type, value: `${document.getElementById('projectEndQuarter').value}/${year}` };
+    case 'year':
+      return { type, value: String(year) };
+    default:
+      return { type: 'date', value: '' };
+  }
+}
+
+// Set giá trị thời gian vào form khi edit
+function setStartTimeValue(startTime) {
+  if (!startTime || !startTime.type) {
+    document.getElementById('projectStartType').value = 'date';
+    toggleStartDateInputs();
+    return;
+  }
+
+  document.getElementById('projectStartType').value = startTime.type;
+  toggleStartDateInputs();
+
+  switch(startTime.type) {
+    case 'date':
+      document.getElementById('projectStartDate').value = startTime.value || '';
+      break;
+    case 'month':
+      const [mYear, mMonth] = (startTime.value || '').split('-');
+      document.getElementById('projectStartMonth').value = mMonth || '01';
+      document.getElementById('projectStartYear').value = mYear || new Date().getFullYear();
+      break;
+    case 'quarter':
+      const [quarter, qYear] = (startTime.value || '').split('/');
+      document.getElementById('projectStartQuarter').value = quarter || 'Q1';
+      document.getElementById('projectStartYear').value = qYear || new Date().getFullYear();
+      break;
+    case 'year':
+      document.getElementById('projectStartYear').value = startTime.value || new Date().getFullYear();
+      break;
+  }
+}
+
+function setEndTimeValue(endTime) {
+  if (!endTime || !endTime.type) {
+    document.getElementById('projectEndType').value = 'date';
+    toggleEndDateInputs();
+    return;
+  }
+
+  document.getElementById('projectEndType').value = endTime.type;
+  toggleEndDateInputs();
+
+  switch(endTime.type) {
+    case 'date':
+      document.getElementById('projectEndDate').value = endTime.value || '';
+      break;
+    case 'month':
+      const [mYear, mMonth] = (endTime.value || '').split('-');
+      document.getElementById('projectEndMonth').value = mMonth || '01';
+      document.getElementById('projectEndYear').value = mYear || new Date().getFullYear();
+      break;
+    case 'quarter':
+      const [quarter, qYear] = (endTime.value || '').split('/');
+      document.getElementById('projectEndQuarter').value = quarter || 'Q1';
+      document.getElementById('projectEndYear').value = qYear || new Date().getFullYear();
+      break;
+    case 'year':
+      document.getElementById('projectEndYear').value = endTime.value || new Date().getFullYear();
+      break;
+  }
+}
+
+// ==================== AUTO STATUS CALCULATION ====================
+function calculateProjectStatus(project) {
+  // Nếu đã hoàn thành, giữ nguyên
+  if (project.status === 'completed') return 'completed';
+  if (project.status === 'suspended') return 'suspended';
+
+  // Tính toán dựa trên thời gian kết thúc
+  const endTime = project.endTime;
+  if (!endTime || !endTime.value) return project.status || 'active';
+
+  const today = new Date();
+  let endDate;
+
+  switch(endTime.type) {
+    case 'date':
+      endDate = new Date(endTime.value);
+      break;
+    case 'month':
+      const [year, month] = endTime.value.split('-');
+      endDate = new Date(year, parseInt(month), 0); // Ngày cuối tháng
+      break;
+    case 'quarter':
+      const [q, qYear] = endTime.value.split('/');
+      const quarterEndMonth = { Q1: 3, Q2: 6, Q3: 9, Q4: 12 }[q] || 12;
+      endDate = new Date(qYear, quarterEndMonth, 0);
+      break;
+    case 'year':
+      endDate = new Date(endTime.value, 11, 31);
+      break;
+    default:
+      return project.status || 'active';
+  }
+
+  // Nếu quá hạn mà chưa hoàn thành -> trễ hạn
+  if (today > endDate && project.progress < 100) {
+    return 'overdue';
+  }
+
+  return project.status || 'active';
+}
+
+// Format hiển thị thời gian
+function formatTimeDisplay(timeObj) {
+  if (!timeObj || !timeObj.value) return '-';
+
+  switch(timeObj.type) {
+    case 'date':
+      return formatDate(timeObj.value);
+    case 'month':
+      const [year, month] = timeObj.value.split('-');
+      return `Tháng ${parseInt(month)}/${year}`;
+    case 'quarter':
+      return timeObj.value.replace('/', '/');
+    case 'year':
+      return `Năm ${timeObj.value}`;
+    default:
+      return timeObj.value || '-';
+  }
+}
+
+// ==================== TAB MANAGEMENT ====================
+function showTab(index) {
+  currentTab = index;
+  document.querySelectorAll('.tab').forEach((tab, i) => tab.classList.toggle('active', i === index));
+  document.querySelectorAll('.content-card').forEach((card, i) => card.classList.toggle('active', i === index));
+
+  if (index === 0) loadProjects();
+  if (index === 1 || index === 2) populateProjectDropdowns();
+  if (index === 3) loadSettlements();
+  // Tab 4: Quy trình - static content, no load needed
+  // Tab 5: Biểu mẫu - static content, no load needed
+  if (index === 6) loadReportSummary();
+  if (index === 7) {
+    // Tab 7: Lịch Công Tác
+    if (!currentWeekStart) initWeekDisplay();
+    loadPersonnelList();
+    loadWeeklyTasks();
+  }
+}
+
+// ==================== PROJECT MANAGEMENT ====================
+async function loadProjects() {
+  const tbody = document.getElementById('projectsBody');
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;">Đang tải...</td></tr>';
+
+  try {
+    const status = document.getElementById('filterStatus')?.value || '';
+    const year = document.getElementById('filterYear')?.value || '';
+    let query = db.collection('investment_projects').orderBy('createdAt', 'desc');
+    const snapshot = await query.limit(100).get();
+
+    projectsList = [];
+    let total = 0, active = 0, pending = 0, completed = 0, overdue = 0;
+
+    snapshot.forEach(doc => {
+      const data = { id: doc.id, ...doc.data() };
+      // Auto-calculate status
+      data.calculatedStatus = calculateProjectStatus(data);
+      if (status && data.calculatedStatus !== status) return;
+      if (year && data.year !== parseInt(year)) return;
+      projectsList.push(data);
+      total++;
+      if (data.calculatedStatus === 'active') active++;
+      if (data.calculatedStatus === 'proposed') pending++;
+      if (data.calculatedStatus === 'completed') completed++;
+      if (data.calculatedStatus === 'overdue') overdue++;
+    });
+
+    document.getElementById('totalProjects').textContent = total;
+    document.getElementById('activeProjects').textContent = active;
+    document.getElementById('pendingProjects').textContent = pending;
+    document.getElementById('completedProjects').textContent = completed;
+
+    if (projectsList.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#64748b;">Chưa có dự án</td></tr>';
+      return;
+    }
+
+    let html = '';
+    projectsList.forEach(p => {
+      const statusInfo = PROJECT_STATUS[p.calculatedStatus] || { label: p.calculatedStatus, class: 'badge-pending' };
+      const groupLabel = PROJECT_GROUPS[p.group] || p.group || '-';
+      const progress = p.progress || 0;
+      const progressStatus = getProgressStatus(100, progress);
+
+      // Format time display
+      const startTimeDisplay = formatTimeDisplay(p.startTime) || (p.startDate ? formatDate(p.startDate) : '-');
+      const endTimeDisplay = formatTimeDisplay(p.endTime) || (p.endDate ? formatDate(p.endDate) : '-');
+
+      // Overdue warning styling
+      const isOverdue = p.calculatedStatus === 'overdue';
+      const rowStyle = isOverdue ? 'background:#fef2f2;' : '';
+
+      html += `<tr style="${rowStyle}">
+        <td><strong>${p.code || '-'}</strong></td>
+        <td>${p.name || '-'}</td>
+        <td>${groupLabel}</td>
+        <td style="text-align:right">${formatCurrency(p.budget)}</td>
+        <td style="font-size:12px">${startTimeDisplay}<br><span style="color:#64748b">→</span> ${endTimeDisplay}</td>
+        <td>
+          <div class="progress-bar" style="width:100px">
+            <div class="progress-fill ${progressStatus}" style="width:${progress}%">${progress}%</div>
+          </div>
+        </td>
+        <td>
+          <span class="badge ${statusInfo.class}">${statusInfo.label}</span>
+          ${isOverdue ? '<br><small style="color:#dc2626">⚠️ Trễ hạn!</small>' : ''}
+        </td>
+        <td>
+          <button class="btn btn-sm btn-primary" onclick="editProject('${p.id}')">Sửa</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteProject('${p.id}')">Xóa</button>
+        </td>
+      </tr>`;
+    });
+
+    tbody.innerHTML = html;
+  } catch (error) {
+    console.error('Load projects error:', error);
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#dc2626;">Lỗi tải dữ liệu</td></tr>';
+  }
+}
+
+async function showAddProjectModal() {
+  editingProjectId = null;
+  document.getElementById('projectModalTitle').textContent = 'Thêm Dự Án Mới';
+  document.getElementById('projectForm').reset();
+  document.getElementById('projectYear').value = new Date().getFullYear();
+
+  // Auto generate project code
+  const code = await generateProjectCode();
+  document.getElementById('projectCode').value = code;
+
+  // Initialize time inputs
+  document.getElementById('projectStartType').value = 'date';
+  document.getElementById('projectEndType').value = 'date';
+  document.getElementById('projectStartYear').value = new Date().getFullYear();
+  document.getElementById('projectEndYear').value = new Date().getFullYear();
+  toggleStartDateInputs();
+  toggleEndDateInputs();
+
+  // Default unit
+  document.getElementById('projectUnit').value = 'Công ty CP Cao su RRIV';
+
+  document.getElementById('projectModal').classList.add('active');
+}
+
+function closeProjectModal() {
+  document.getElementById('projectModal').classList.remove('active');
+  editingProjectId = null;
+}
+
+async function editProject(projectId) {
+  const project = projectsList.find(p => p.id === projectId);
+  if (!project) return;
+
+  editingProjectId = projectId;
+  document.getElementById('projectModalTitle').textContent = 'Chỉnh Sửa Dự Án';
+  document.getElementById('projectCode').value = project.code || '';
+  document.getElementById('projectName').value = project.name || '';
+  document.getElementById('projectGroup').value = project.group || 'kientruc';
+  document.getElementById('projectBudget').value = project.budget || '';
+  document.getElementById('projectYear').value = project.year || '';
+
+  // Load time values (support both old format and new format)
+  if (project.startTime) {
+    setStartTimeValue(project.startTime);
+  } else if (project.startDate) {
+    // Fallback for old data
+    setStartTimeValue({ type: 'date', value: project.startDate });
+  } else {
+    setStartTimeValue(null);
+  }
+
+  if (project.endTime) {
+    setEndTimeValue(project.endTime);
+  } else if (project.endDate) {
+    // Fallback for old data
+    setEndTimeValue({ type: 'date', value: project.endDate });
+  } else {
+    setEndTimeValue(null);
+  }
+
+  document.getElementById('projectUnit').value = project.unit || 'Công ty CP Cao su RRIV';
+  document.getElementById('projectDesc').value = project.description || '';
+  // Status is auto-calculated, but we store the base status
+  document.getElementById('projectStatus').value = project.status || 'active';
+  document.getElementById('projectModal').classList.add('active');
+}
+
+async function saveProject(event) {
+  event.preventDefault();
+
+  // Get time values
+  const startTime = getStartTimeValue();
+  const endTime = getEndTimeValue();
+
+  const data = {
+    code: document.getElementById('projectCode').value.trim(),
+    name: document.getElementById('projectName').value.trim(),
+    group: document.getElementById('projectGroup').value,
+    budget: parseFloat(document.getElementById('projectBudget').value) || 0,
+    year: parseInt(document.getElementById('projectYear').value) || new Date().getFullYear(),
+    startTime: startTime,
+    endTime: endTime,
+    // Keep old fields for backward compatibility
+    startDate: startTime.type === 'date' ? startTime.value : '',
+    endDate: endTime.type === 'date' ? endTime.value : '',
+    unit: document.getElementById('projectUnit').value.trim() || 'Công ty CP Cao su RRIV',
+    description: document.getElementById('projectDesc').value.trim(),
+    status: document.getElementById('projectStatus').value || 'active',
+    updatedAt: ErpDb.firestore.FieldValue.serverTimestamp(),
+    updatedBy: currentUser?.id || ''
+  };
+
+  try {
+    if (editingProjectId) {
+      await db.collection('investment_projects').doc(editingProjectId).update(data);
+      showToast('Đã cập nhật dự án!');
+    } else {
+      data.createdAt = ErpDb.firestore.FieldValue.serverTimestamp();
+      data.createdBy = currentUser?.id || '';
+      data.progress = 0;
+      await db.collection('investment_projects').add(data);
+      showToast('Đã thêm dự án mới!');
+    }
+    closeProjectModal();
+    loadProjects();
+  } catch (error) {
+    console.error('Save project error:', error);
+    showToast('Lỗi: ' + error.message, 'error');
+  }
+}
+
+async function deleteProject(projectId) {
+  if (!confirm('Bạn có chắc muốn xóa dự án này?')) return;
+  try {
+    await db.collection('investment_projects').doc(projectId).delete();
+    showToast('Đã xóa dự án!');
+    loadProjects();
+  } catch (error) {
+    showToast('Lỗi: ' + error.message, 'error');
+  }
+}
+
+// ==================== PROGRESS MANAGEMENT ====================
+function populateProjectDropdowns() {
+  const progressSelect = document.getElementById('progressProject');
+  const costSelect = document.getElementById('costProject');
+  const options = '<option value="">-- Chọn dự án --</option>' +
+    projectsList.map(p => `<option value="${p.id}">${p.code} - ${p.name}</option>`).join('');
+  if (progressSelect) progressSelect.innerHTML = options;
+  if (costSelect) costSelect.innerHTML = options;
+}
+
+async function loadProjectProgress() {
+  const projectId = document.getElementById('progressProject').value;
+  const container = document.getElementById('progressContent');
+  const btnAddWorkItem = document.getElementById('btnAddWorkItem');
+  const btnAddDiary = document.getElementById('btnAddDiary');
+  const btnDocProgress = document.getElementById('btnDocProgress');
+
+  if (!projectId) {
+    container.innerHTML = '<div class="empty-state"><p style="font-size:48px;margin-bottom:10px;">📊</p><p>Chọn dự án để xem tiến độ</p></div>';
+    btnAddWorkItem.style.display = 'none';
+    btnAddDiary.style.display = 'none';
+    btnDocProgress.style.display = 'none';
+    return;
+  }
+
+  selectedProjectId = projectId;
+  btnAddWorkItem.style.display = 'inline-block';
+  btnAddDiary.style.display = 'inline-block';
+  btnDocProgress.style.display = 'inline-block';
+
+  const project = projectsList.find(p => p.id === projectId);
+  if (!project) return;
+
+  container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  try {
+    // Load work items
+    const workItemsSnapshot = await db.collection('project_work_items')
+      .where('projectId', '==', projectId)
+      .orderBy('order', 'asc')
+      .get();
+
+    workItemsList = [];
+    workItemsSnapshot.forEach(doc => {
+      workItemsList.push({ id: doc.id, ...doc.data() });
+    });
+
+    // Load diary entries
+    const diarySnapshot = await db.collection('project_diary')
+      .where('projectId', '==', projectId)
+      .orderBy('date', 'desc')
+      .limit(10)
+      .get();
+
+    diaryEntries = [];
+    diarySnapshot.forEach(doc => {
+      diaryEntries.push({ id: doc.id, ...doc.data() });
+    });
+
+    // Calculate overall progress
+    let totalWeight = 0;
+    let weightedProgress = 0;
+    let onTrack = 0, delayed = 0, critical = 0, completed = 0;
+
+    workItemsList.forEach(item => {
+      const weight = item.weight || 0;
+      const actualProgress = item.actualProgress || 0;
+      const planProgress = item.planProgress || 0;
+      totalWeight += weight;
+      weightedProgress += (weight * actualProgress / 100);
+
+      const status = getProgressStatus(planProgress, actualProgress);
+      if (status === 'on-track') onTrack++;
+      else if (status === 'delayed') delayed++;
+      else if (status === 'critical') critical++;
+      else if (status === 'completed') completed++;
+    });
+
+    const overallProgress = totalWeight > 0 ? Math.round(weightedProgress / totalWeight * 100) : 0;
+    const progressStatus = getProgressStatus(100, overallProgress);
+
+    // Update project progress in Firestore
+    if (project.progress !== overallProgress) {
+      await db.collection('investment_projects').doc(projectId).update({ progress: overallProgress });
+      project.progress = overallProgress;
+    }
+
+    // Render content
+    let html = `
+      <!-- Summary Cards -->
+      <div class="summary-grid">
+        <div class="summary-card ${progressStatus === 'critical' ? 'danger' : progressStatus === 'delayed' ? 'warning' : 'success'}">
+          <h3>${overallProgress}%</h3>
+          <p>Tiến độ tổng</p>
+          <div class="sub">${getStatusLabel(progressStatus)}</div>
+        </div>
+        <div class="summary-card success">
+          <h3>${onTrack + completed}</h3>
+          <p>Đúng tiến độ</p>
+        </div>
+        <div class="summary-card warning">
+          <h3>${delayed}</h3>
+          <p>Chậm nhẹ</p>
+        </div>
+        <div class="summary-card danger">
+          <h3>${critical}</h3>
+          <p>Chậm nghiêm trọng</p>
+        </div>
+      </div>
+
+      <!-- Progress Bar -->
+      <div style="margin-bottom:25px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-weight:600;color:#1e40af;">Tiến độ tổng thể</span>
+          <span style="font-weight:600;color:#1e40af;">${overallProgress}%</span>
+        </div>
+        <div class="progress-bar" style="height:30px;">
+          <div class="progress-fill ${progressStatus}" style="width:${overallProgress}%">${overallProgress}%</div>
+        </div>
+      </div>
+
+      <!-- Gantt Chart -->
+      <div class="section-title">
+        <span>📊 Biểu Đồ Tiến Độ (Gantt)</span>
+      </div>
+      ${renderGanttChart(project, workItemsList)}
+
+      <!-- Work Items Table -->
+      <div class="section-title">
+        <span>📋 Danh Sách Hạng Mục (${workItemsList.length})</span>
+      </div>
+      ${renderWorkItemsTable(workItemsList)}
+
+      <!-- Construction Diary -->
+      <div class="section-title">
+        <span>📝 Nhật Ký Công Trình</span>
+      </div>
+      ${renderDiaryEntries(diaryEntries)}
+    `;
+
+    container.innerHTML = html;
+
+  } catch (error) {
+    console.error('Load progress error:', error);
+    container.innerHTML = '<div class="empty-state"><p style="color:#dc2626;">Lỗi tải dữ liệu: ' + error.message + '</p></div>';
+  }
+}
+
+function renderGanttChart(project, items) {
+  if (items.length === 0) {
+    return '<div class="empty-state" style="padding:20px;"><p>Chưa có hạng mục nào. Thêm hạng mục để xem biểu đồ Gantt.</p></div>';
+  }
+
+  // Find date range
+  let minDate = project.startDate ? new Date(project.startDate) : new Date();
+  let maxDate = project.endDate ? new Date(project.endDate) : new Date();
+
+  items.forEach(item => {
+    if (item.planStart) {
+      const d = new Date(item.planStart);
+      if (d < minDate) minDate = d;
+    }
+    if (item.planEnd) {
+      const d = new Date(item.planEnd);
+      if (d > maxDate) maxDate = d;
+    }
+  });
+
+  // Generate months
+  const months = [];
+  let current = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+  while (current <= maxDate) {
+    months.push(new Date(current));
+    current.setMonth(current.getMonth() + 1);
+  }
+  if (months.length === 0) months.push(new Date());
+
+  const totalDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24)) || 1;
+
+  let html = `
+    <div class="gantt-container">
+      <div class="gantt-header">
+        <div class="gantt-label">Hạng mục</div>
+        <div class="gantt-timeline">
+          ${months.map(m => `<div class="gantt-month">${m.getMonth() + 1}/${m.getFullYear()}</div>`).join('')}
+        </div>
+      </div>
+  `;
+
+  items.forEach(item => {
+    const status = getProgressStatus(item.planProgress || 0, item.actualProgress || 0);
+    const planStart = item.planStart ? new Date(item.planStart) : minDate;
+    const planEnd = item.planEnd ? new Date(item.planEnd) : maxDate;
+    const actualStart = item.actualStart ? new Date(item.actualStart) : null;
+    const actualEnd = item.actualEnd ? new Date(item.actualEnd) : null;
+
+    const planLeft = Math.max(0, (planStart - minDate) / (1000 * 60 * 60 * 24) / totalDays * 100);
+    const planWidth = Math.max(5, (planEnd - planStart) / (1000 * 60 * 60 * 24) / totalDays * 100);
+
+    let actualBar = '';
+    if (actualStart) {
+      const actualEndDate = actualEnd || new Date();
+      const actualLeft = Math.max(0, (actualStart - minDate) / (1000 * 60 * 60 * 24) / totalDays * 100);
+      const actualWidth = Math.max(5, (actualEndDate - actualStart) / (1000 * 60 * 60 * 24) / totalDays * 100);
+      actualBar = `<div class="gantt-bar actual ${status}" style="left:${actualLeft}%;width:${actualWidth}%;">${item.actualProgress || 0}%</div>`;
+    }
+
+    html += `
+      <div class="gantt-row">
+        <div class="gantt-item-label">
+          <span class="status-dot ${status}"></span>
+          <span>${item.name}</span>
+        </div>
+        <div class="gantt-bar-container">
+          <div class="gantt-bar planned" style="left:${planLeft}%;width:${planWidth}%;">KH</div>
+          ${actualBar}
+        </div>
+      </div>
+    `;
+  });
+
+  html += '</div>';
+  return html;
+}
+
+function renderWorkItemsTable(items) {
+  if (items.length === 0) {
+    return '<div class="empty-state" style="padding:20px;"><p>Chưa có hạng mục nào. Bấm "+ Thêm Hạng Mục" để bắt đầu.</p></div>';
+  }
+
+  let html = `
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:30%">Hạng mục</th>
+            <th>Trọng số</th>
+            <th>KH bắt đầu</th>
+            <th>KH kết thúc</th>
+            <th>% KH</th>
+            <th>% TT</th>
+            <th>Trạng thái</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+
+  items.forEach(item => {
+    const status = getProgressStatus(item.planProgress || 0, item.actualProgress || 0);
+    html += `
+      <tr>
+        <td><strong>${item.name}</strong></td>
+        <td>${item.weight || 0}%</td>
+        <td>${formatDate(item.planStart)}</td>
+        <td>${formatDate(item.planEnd)}</td>
+        <td>${item.planProgress || 0}%</td>
+        <td>
+          <div class="progress-bar" style="width:80px;height:18px;">
+            <div class="progress-fill ${status}" style="width:${item.actualProgress || 0}%">${item.actualProgress || 0}%</div>
+          </div>
+        </td>
+        <td><span class="badge badge-${status}">${getStatusLabel(status)}</span></td>
+        <td>
+          <button class="btn btn-sm btn-primary" onclick="editWorkItem('${item.id}')">Sửa</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteWorkItem('${item.id}')">Xóa</button>
+        </td>
+      </tr>
+    `;
+  });
+
+  html += '</tbody></table></div>';
+  return html;
+}
+
+function renderDiaryEntries(entries) {
+  if (entries.length === 0) {
+    return '<div class="empty-state" style="padding:20px;"><p>Chưa có nhật ký. Bấm "+ Nhật Ký" để ghi nhận hoạt động.</p></div>';
+  }
+
+  let html = '<div style="max-height:400px;overflow-y:auto;">';
+  entries.forEach(entry => {
+    const weatherIcon = WEATHER_ICONS[entry.weather] || '🌤️';
+    html += `
+      <div class="diary-entry">
+        <div class="date">
+          ${weatherIcon} ${formatDate(entry.date)} - ${entry.workers || 0} nhân công
+          ${entry.equipment ? ` | Thiết bị: ${entry.equipment}` : ''}
+        </div>
+        <div class="content">${entry.content}</div>
+        ${entry.issues ? `<div style="color:#dc2626;font-size:13px;"><strong>Vấn đề:</strong> ${entry.issues}</div>` : ''}
+      </div>
+    `;
+  });
+  html += '</div>';
+  return html;
+}
+
+// ==================== WORK ITEM CRUD ====================
+function showAddWorkItemModal() {
+  if (!selectedProjectId) {
+    showToast('Vui lòng chọn dự án trước', 'warning');
+    return;
+  }
+  editingWorkItemId = null;
+  document.getElementById('workItemModalTitle').textContent = 'Thêm Hạng Mục Công Việc';
+  document.getElementById('workItemForm').reset();
+  document.getElementById('workItemOrder').value = workItemsList.length + 1;
+  document.getElementById('workItemModal').classList.add('active');
+}
+
+function closeWorkItemModal() {
+  document.getElementById('workItemModal').classList.remove('active');
+  editingWorkItemId = null;
+}
+
+function editWorkItem(itemId) {
+  const item = workItemsList.find(i => i.id === itemId);
+  if (!item) return;
+
+  editingWorkItemId = itemId;
+  document.getElementById('workItemModalTitle').textContent = 'Chỉnh Sửa Hạng Mục';
+  document.getElementById('workItemName').value = item.name || '';
+  document.getElementById('workItemWeight').value = item.weight || 0;
+  document.getElementById('workItemOrder').value = item.order || 1;
+  document.getElementById('workItemPlanStart').value = item.planStart || '';
+  document.getElementById('workItemPlanEnd').value = item.planEnd || '';
+  document.getElementById('workItemActualStart').value = item.actualStart || '';
+  document.getElementById('workItemActualEnd').value = item.actualEnd || '';
+  document.getElementById('workItemPlanProgress').value = item.planProgress || 0;
+  document.getElementById('workItemActualProgress').value = item.actualProgress || 0;
+  document.getElementById('workItemNote').value = item.note || '';
+  document.getElementById('workItemModal').classList.add('active');
+}
+
+async function saveWorkItem(event) {
+  event.preventDefault();
+
+  const data = {
+    projectId: selectedProjectId,
+    name: document.getElementById('workItemName').value.trim(),
+    weight: parseFloat(document.getElementById('workItemWeight').value) || 0,
+    order: parseInt(document.getElementById('workItemOrder').value) || 1,
+    planStart: document.getElementById('workItemPlanStart').value,
+    planEnd: document.getElementById('workItemPlanEnd').value,
+    actualStart: document.getElementById('workItemActualStart').value || '',
+    actualEnd: document.getElementById('workItemActualEnd').value || '',
+    planProgress: parseFloat(document.getElementById('workItemPlanProgress').value) || 0,
+    actualProgress: parseFloat(document.getElementById('workItemActualProgress').value) || 0,
+    note: document.getElementById('workItemNote').value.trim(),
+    updatedAt: ErpDb.firestore.FieldValue.serverTimestamp()
+  };
+
+  try {
+    if (editingWorkItemId) {
+      await db.collection('project_work_items').doc(editingWorkItemId).update(data);
+      showToast('Đã cập nhật hạng mục!');
+    } else {
+      data.createdAt = ErpDb.firestore.FieldValue.serverTimestamp();
+      await db.collection('project_work_items').add(data);
+      showToast('Đã thêm hạng mục!');
+    }
+    closeWorkItemModal();
+    loadProjectProgress();
+  } catch (error) {
+    console.error('Save work item error:', error);
+    showToast('Lỗi: ' + error.message, 'error');
+  }
+}
+
+async function deleteWorkItem(itemId) {
+  if (!confirm('Xóa hạng mục này?')) return;
+  try {
+    await db.collection('project_work_items').doc(itemId).delete();
+    showToast('Đã xóa hạng mục!');
+    loadProjectProgress();
+  } catch (error) {
+    showToast('Lỗi: ' + error.message, 'error');
+  }
+}
+
+// ==================== DIARY CRUD ====================
+let currentWorkItems = []; // Store work items for dropdown
+
+async function showAddDiaryModal() {
+  if (!selectedProjectId) {
+    showToast('Vui lòng chọn dự án trước', 'warning');
+    return;
+  }
+
+  document.getElementById('diaryForm').reset();
+  document.getElementById('diaryDate').value = new Date().toISOString().split('T')[0];
+
+  // Reset dynamic containers to single row
+  document.getElementById('workTasksContainer').innerHTML = getWorkTaskRowHTML();
+  document.getElementById('workersContainer').innerHTML = getWorkerRowHTML();
+  document.getElementById('equipmentContainer').innerHTML = getEquipmentRowHTML();
+  document.getElementById('materialsContainer').innerHTML = getMaterialRowHTML();
+
+  // Reset checkboxes
+  document.getElementById('shiftMorning').checked = true;
+  document.getElementById('shiftAfternoon').checked = true;
+  document.getElementById('shiftOvertime').checked = false;
+  document.getElementById('safetyMeeting').checked = true;
+  document.getElementById('safetyGear').checked = true;
+  document.getElementById('safetyIncident').checked = false;
+  document.getElementById('safetyIncidentDetail').style.display = 'none';
+  document.getElementById('diaryRainHours').style.display = 'none';
+
+  // Load work items for dropdown
+  await loadWorkItemsDropdown();
+
+  // Update total man days
+  calculateManDays();
+
+  document.getElementById('diaryModal').classList.add('active');
+}
+
+async function loadWorkItemsDropdown() {
+  try {
+    const snapshot = await db.collection('project_work_items')
+      .where('projectId', '==', selectedProjectId)
+      .orderBy('order')
+      .get();
+
+    currentWorkItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // Populate all work item dropdowns
+    document.querySelectorAll('.taskWorkItem').forEach(select => {
+      const currentValue = select.value;
+      select.innerHTML = '<option value="">-- Chọn từ danh sách --</option>' +
+        '<option value="custom">✏️ Nhập tự do</option>' +
+        currentWorkItems.map(item =>
+          `<option value="${item.id}">${item.name}</option>`
+        ).join('');
+      select.value = currentValue;
+    });
+  } catch (error) {
+    console.error('Load work items error:', error);
+  }
+}
+
+function closeDiaryModal() {
+  document.getElementById('diaryModal').classList.remove('active');
+}
+
+// Dynamic row templates
+function getWorkTaskRowHTML() {
+  return `
+    <div class="work-task-row" style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:end;">
+      <div style="flex:2;min-width:200px;">
+        <label style="font-size:12px;">Hạng mục/Công việc</label>
+        <select class="taskWorkItem" style="width:100%;" onchange="handleWorkItemChange(this)">
+          <option value="">-- Chọn từ danh sách --</option>
+          <option value="custom">✏️ Nhập tự do</option>
+          ${currentWorkItems.map(item => `<option value="${item.id}">${item.name}</option>`).join('')}
+        </select>
+        <input type="text" class="taskCustomName" placeholder="Nhập tên công việc..." style="display:none;margin-top:5px;">
+      </div>
+      <div style="flex:1;min-width:100px;">
+        <label style="font-size:12px;">Khối lượng</label>
+        <input type="number" class="taskQuantity" step="0.01" placeholder="0">
+      </div>
+      <div style="flex:1;min-width:80px;">
+        <label style="font-size:12px;">Đơn vị</label>
+        <select class="taskUnit">
+          <option value="m3">m³</option>
+          <option value="m2">m²</option>
+          <option value="md">m.d</option>
+          <option value="kg">kg</option>
+          <option value="tan">tấn</option>
+          <option value="cai">cái</option>
+          <option value="bo">bộ</option>
+          <option value="cong">công</option>
+        </select>
+      </div>
+      <div style="flex:1;min-width:80px;">
+        <label style="font-size:12px;">% HT</label>
+        <input type="number" class="taskProgress" min="0" max="100" placeholder="0">
+      </div>
+      <button type="button" onclick="removeRow(this, 'work-task-row')" style="background:#fee2e2;color:#dc2626;border:none;padding:8px;border-radius:5px;cursor:pointer;">✕</button>
+    </div>
+  `;
+}
+
+function getWorkerRowHTML() {
+  return `
+    <div class="worker-row" style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:end;">
+      <div style="flex:2;min-width:150px;">
+        <label style="font-size:12px;">Tổ đội / Loại thợ</label>
+        <select class="workerType">
+          <option value="tho_xay">Thợ xây</option>
+          <option value="tho_han">Thợ hàn</option>
+          <option value="tho_dien">Thợ điện</option>
+          <option value="tho_nuoc">Thợ nước</option>
+          <option value="tho_son">Thợ sơn</option>
+          <option value="tho_moc">Thợ mộc</option>
+          <option value="phu_ho">Phụ hồ</option>
+          <option value="lai_xe">Lái xe/Máy</option>
+          <option value="ky_su">Kỹ sư/GSCT</option>
+          <option value="khac">Khác</option>
+        </select>
+      </div>
+      <div style="flex:1;min-width:80px;">
+        <label style="font-size:12px;">Số người</label>
+        <input type="number" class="workerCount" min="0" value="0" onchange="calculateManDays()">
+      </div>
+      <div style="flex:1;min-width:80px;">
+        <label style="font-size:12px;">Giờ làm</label>
+        <input type="number" class="workerHours" min="0" max="12" step="0.5" value="8" onchange="calculateManDays()">
+      </div>
+      <div style="flex:1;min-width:80px;">
+        <label style="font-size:12px;">Công quy đổi</label>
+        <input type="text" class="workerManDay" readonly style="background:#e2e8f0;">
+      </div>
+      <button type="button" onclick="removeRow(this, 'worker-row')" style="background:#fee2e2;color:#dc2626;border:none;padding:8px;border-radius:5px;cursor:pointer;">✕</button>
+    </div>
+  `;
+}
+
+function getEquipmentRowHTML() {
+  return `
+    <div class="equipment-row" style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:end;">
+      <div style="flex:2;min-width:150px;">
+        <label style="font-size:12px;">Tên thiết bị</label>
+        <input type="text" class="equipName" placeholder="VD: Cẩu 25T, Máy xúc...">
+      </div>
+      <div style="flex:1;min-width:60px;">
+        <label style="font-size:12px;">SL</label>
+        <input type="number" class="equipQty" min="0" value="1">
+      </div>
+      <div style="flex:1;min-width:80px;">
+        <label style="font-size:12px;">Giờ chạy</label>
+        <input type="number" class="equipHours" min="0" max="24" step="0.5" value="8">
+      </div>
+      <div style="flex:1;min-width:100px;">
+        <label style="font-size:12px;">Tình trạng</label>
+        <select class="equipStatus">
+          <option value="good">✅ Tốt</option>
+          <option value="issue">⚠️ Có vấn đề</option>
+          <option value="broken">❌ Hỏng</option>
+        </select>
+      </div>
+      <button type="button" onclick="removeRow(this, 'equipment-row')" style="background:#fee2e2;color:#dc2626;border:none;padding:8px;border-radius:5px;cursor:pointer;">✕</button>
+    </div>
+  `;
+}
+
+function getMaterialRowHTML() {
+  return `
+    <div class="material-row" style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:end;">
+      <div style="flex:2;min-width:150px;">
+        <label style="font-size:12px;">Tên vật tư</label>
+        <input type="text" class="materialName" placeholder="VD: Xi măng, Cát, Sắt...">
+      </div>
+      <div style="flex:1;min-width:80px;">
+        <label style="font-size:12px;">Số lượng</label>
+        <input type="number" class="materialQty" min="0" step="0.01">
+      </div>
+      <div style="flex:1;min-width:80px;">
+        <label style="font-size:12px;">Đơn vị</label>
+        <select class="materialUnit">
+          <option value="bao">bao</option>
+          <option value="kg">kg</option>
+          <option value="tan">tấn</option>
+          <option value="m3">m³</option>
+          <option value="cay">cây</option>
+          <option value="tam">tấm</option>
+          <option value="cai">cái</option>
+        </select>
+      </div>
+      <button type="button" onclick="removeRow(this, 'material-row')" style="background:#fee2e2;color:#dc2626;border:none;padding:8px;border-radius:5px;cursor:pointer;">✕</button>
+    </div>
+  `;
+}
+
+// Add row functions
+function addWorkTaskRow() {
+  document.getElementById('workTasksContainer').insertAdjacentHTML('beforeend', getWorkTaskRowHTML());
+}
+
+function addWorkerRow() {
+  document.getElementById('workersContainer').insertAdjacentHTML('beforeend', getWorkerRowHTML());
+  calculateManDays();
+}
+
+function addEquipmentRow() {
+  document.getElementById('equipmentContainer').insertAdjacentHTML('beforeend', getEquipmentRowHTML());
+}
+
+function addMaterialRow() {
+  document.getElementById('materialsContainer').insertAdjacentHTML('beforeend', getMaterialRowHTML());
+}
+
+function removeRow(btn, rowClass) {
+  const container = btn.closest('.' + rowClass).parentElement;
+  if (container.querySelectorAll('.' + rowClass).length > 1) {
+    btn.closest('.' + rowClass).remove();
+    calculateManDays();
+  } else {
+    showToast('Phải có ít nhất 1 dòng', 'warning');
+  }
+}
+
+function handleWorkItemChange(select) {
+  const customInput = select.parentElement.querySelector('.taskCustomName');
+  if (select.value === 'custom') {
+    customInput.style.display = 'block';
+    customInput.focus();
+  } else {
+    customInput.style.display = 'none';
+    customInput.value = '';
+  }
+}
+
+// Calculate man-days
+function calculateManDays() {
+  let totalManDays = 0;
+  document.querySelectorAll('.worker-row').forEach(row => {
+    const count = parseFloat(row.querySelector('.workerCount').value) || 0;
+    const hours = parseFloat(row.querySelector('.workerHours').value) || 0;
+    const manDay = (count * hours / 8).toFixed(2);
+    row.querySelector('.workerManDay').value = manDay;
+    totalManDays += parseFloat(manDay);
+  });
+  document.getElementById('totalManDays').textContent = totalManDays.toFixed(2);
+}
+
+// Copy from yesterday
+async function copyFromYesterday() {
+  if (!selectedProjectId) return;
+
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+  try {
+    const snapshot = await db.collection('project_diary')
+      .where('projectId', '==', selectedProjectId)
+      .where('date', '==', yesterdayStr)
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) {
+      showToast('Không tìm thấy nhật ký ngày hôm qua', 'warning');
+      return;
+    }
+
+    const data = snapshot.docs[0].data();
+
+    // Copy basic fields
+    if (data.weather) document.getElementById('diaryWeather').value = data.weather;
+    if (data.content) document.getElementById('diaryContent').value = data.content;
+    if (data.tomorrowPlan) document.getElementById('diaryTomorrowPlan').value = data.tomorrowPlan;
+
+    // Copy shifts
+    if (data.shifts) {
+      document.getElementById('shiftMorning').checked = data.shifts.includes('morning');
+      document.getElementById('shiftAfternoon').checked = data.shifts.includes('afternoon');
+      document.getElementById('shiftOvertime').checked = data.shifts.includes('overtime');
+    }
+
+    // Copy workers
+    if (data.workers && data.workers.length > 0) {
+      document.getElementById('workersContainer').innerHTML = '';
+      data.workers.forEach((w, idx) => {
+        document.getElementById('workersContainer').insertAdjacentHTML('beforeend', getWorkerRowHTML());
+        const rows = document.querySelectorAll('.worker-row');
+        const row = rows[rows.length - 1];
+        row.querySelector('.workerType').value = w.type || 'tho_xay';
+        row.querySelector('.workerCount').value = w.count || 0;
+        row.querySelector('.workerHours').value = w.hours || 8;
+      });
+    }
+
+    // Copy equipment
+    if (data.equipment && data.equipment.length > 0) {
+      document.getElementById('equipmentContainer').innerHTML = '';
+      data.equipment.forEach((e, idx) => {
+        document.getElementById('equipmentContainer').insertAdjacentHTML('beforeend', getEquipmentRowHTML());
+        const rows = document.querySelectorAll('.equipment-row');
+        const row = rows[rows.length - 1];
+        row.querySelector('.equipName').value = e.name || '';
+        row.querySelector('.equipQty').value = e.qty || 1;
+        row.querySelector('.equipHours').value = e.hours || 8;
+        row.querySelector('.equipStatus').value = e.status || 'good';
+      });
+    }
+
+    calculateManDays();
+    showToast('Đã sao chép từ nhật ký hôm qua!');
+
+  } catch (error) {
+    console.error('Copy from yesterday error:', error);
+    showToast('Lỗi khi sao chép: ' + error.message, 'error');
+  }
+}
+
+// Toggle rain hours input
+document.addEventListener('change', function(e) {
+  if (e.target.id === 'diaryRainStop') {
+    document.getElementById('diaryRainHours').style.display = e.target.value === 'yes' ? 'block' : 'none';
+  }
+  if (e.target.id === 'safetyIncident') {
+    document.getElementById('safetyIncidentDetail').style.display = e.target.checked ? 'block' : 'none';
+  }
+});
+
+async function saveDiaryEntry(event) {
+  event.preventDefault();
+
+  // Collect shifts
+  const shifts = [];
+  if (document.getElementById('shiftMorning').checked) shifts.push('morning');
+  if (document.getElementById('shiftAfternoon').checked) shifts.push('afternoon');
+  if (document.getElementById('shiftOvertime').checked) shifts.push('overtime');
+
+  // Collect work tasks
+  const workTasks = [];
+  document.querySelectorAll('.work-task-row').forEach(row => {
+    const workItemId = row.querySelector('.taskWorkItem').value;
+    const customName = row.querySelector('.taskCustomName')?.value || '';
+    const quantity = parseFloat(row.querySelector('.taskQuantity').value) || 0;
+    if (workItemId || customName) {
+      workTasks.push({
+        workItemId: workItemId === 'custom' ? '' : workItemId,
+        customName: workItemId === 'custom' ? customName : '',
+        quantity: quantity,
+        unit: row.querySelector('.taskUnit').value,
+        progress: parseInt(row.querySelector('.taskProgress').value) || 0
+      });
+    }
+  });
+
+  // Collect workers
+  const workers = [];
+  document.querySelectorAll('.worker-row').forEach(row => {
+    const count = parseInt(row.querySelector('.workerCount').value) || 0;
+    if (count > 0) {
+      workers.push({
+        type: row.querySelector('.workerType').value,
+        count: count,
+        hours: parseFloat(row.querySelector('.workerHours').value) || 8,
+        manDay: parseFloat(row.querySelector('.workerManDay').value) || 0
+      });
+    }
+  });
+
+  // Collect equipment
+  const equipment = [];
+  document.querySelectorAll('.equipment-row').forEach(row => {
+    const name = row.querySelector('.equipName').value.trim();
+    if (name) {
+      equipment.push({
+        name: name,
+        qty: parseInt(row.querySelector('.equipQty').value) || 1,
+        hours: parseFloat(row.querySelector('.equipHours').value) || 8,
+        status: row.querySelector('.equipStatus').value
+      });
+    }
+  });
+
+  // Collect materials
+  const materials = [];
+  document.querySelectorAll('.material-row').forEach(row => {
+    const name = row.querySelector('.materialName').value.trim();
+    if (name) {
+      materials.push({
+        name: name,
+        qty: parseFloat(row.querySelector('.materialQty').value) || 0,
+        unit: row.querySelector('.materialUnit').value
+      });
+    }
+  });
+
+  const data = {
+    projectId: selectedProjectId,
+    date: document.getElementById('diaryDate').value,
+    shifts: shifts,
+    weather: document.getElementById('diaryWeather').value,
+    temperature: parseInt(document.getElementById('diaryTemperature').value) || null,
+    rainStop: document.getElementById('diaryRainStop').value === 'yes',
+    rainHours: parseFloat(document.getElementById('diaryRainHours').value) || 0,
+    workTasks: workTasks,
+    content: document.getElementById('diaryContent').value.trim(),
+    workers: workers,
+    totalManDays: parseFloat(document.getElementById('totalManDays').textContent) || 0,
+    equipment: equipment,
+    materials: materials,
+    safety: {
+      meeting: document.getElementById('safetyMeeting').checked,
+      gear: document.getElementById('safetyGear').checked,
+      incident: document.getElementById('safetyIncident').checked,
+      incidentDesc: document.getElementById('safetyIncidentDesc')?.value?.trim() || ''
+    },
+    issues: document.getElementById('diaryIssues').value.trim(),
+    instructions: document.getElementById('diaryInstructions').value.trim(),
+    tomorrowPlan: document.getElementById('diaryTomorrowPlan').value.trim(),
+    tomorrowWorkers: parseInt(document.getElementById('diaryTomorrowWorkers').value) || 0,
+    tomorrowMaterials: document.getElementById('diaryTomorrowMaterials').value.trim(),
+    createdAt: ErpDb.firestore.FieldValue.serverTimestamp(),
+    createdBy: currentUser?.id || ''
+  };
+
+  try {
+    await db.collection('project_diary').add(data);
+    showToast('Đã lưu nhật ký công trình!');
+    closeDiaryModal();
+    loadProjectProgress();
+  } catch (error) {
+    console.error('Save diary error:', error);
+    showToast('Lỗi: ' + error.message, 'error');
+  }
+}
+
+// ==================== COST MANAGEMENT ====================
+function loadProjectCost() {
+  const projectId = document.getElementById('costProject').value;
+  const container = document.getElementById('costContent');
+
+  if (!projectId) {
+    container.innerHTML = '<div class="empty-state"><p style="font-size:48px;margin-bottom:10px;">💰</p><p>Chọn dự án để xem chi phí</p></div>';
+    return;
+  }
+
+  const project = projectsList.find(p => p.id === projectId);
+  if (!project) return;
+
+  const budget = project.budget || 0;
+  const disbursed = project.disbursed || 0;
+  const remaining = budget - disbursed;
+  const percent = budget > 0 ? Math.round((disbursed / budget) * 100) : 0;
+
+  container.innerHTML = `
+    <div class="summary-grid">
+      <div class="summary-card">
+        <h3>${formatCurrency(budget)}</h3>
+        <p>Tổng mức đầu tư (tr.đ)</p>
+      </div>
+      <div class="summary-card success">
+        <h3>${formatCurrency(disbursed)}</h3>
+        <p>Đã giải ngân</p>
+      </div>
+      <div class="summary-card warning">
+        <h3>${formatCurrency(remaining)}</h3>
+        <p>Còn lại</p>
+      </div>
+      <div class="summary-card">
+        <h3>${percent}%</h3>
+        <p>Tỷ lệ giải ngân</p>
+      </div>
+    </div>
+    <div style="margin:25px 0;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+        <span style="font-weight:600;">Tiến độ giải ngân</span>
+        <span>${percent}%</span>
+      </div>
+      <div class="progress-bar" style="height:25px;">
+        <div class="progress-fill on-track" style="width:${percent}%">${percent}%</div>
+      </div>
+    </div>
+    <p style="text-align:center;color:#64748b;">Tính năng chi tiết chi phí theo hạng mục đang phát triển...</p>
+  `;
+}
+
+// ==================== SETTLEMENT ====================
+async function loadSettlements() {
+  const tbody = document.getElementById('settlementBody');
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;">Đang tải...</td></tr>';
+
+  try {
+    const snapshot = await db.collection('investment_projects')
+      .where('status', '==', 'completed')
+      .limit(50)
+      .get();
+
+    if (snapshot.empty) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#64748b;">Chưa có dự án hoàn thành</td></tr>';
+      return;
+    }
+
+    let html = '';
+    snapshot.forEach(doc => {
+      const p = doc.data();
+      const budget = p.budget || 0;
+      const settlement = p.settlementValue || budget;
+      const diff = settlement - budget;
+
+      html += `<tr>
+        <td><strong>${p.code || '-'}</strong></td>
+        <td>${p.name || '-'}</td>
+        <td style="text-align:right">${formatCurrency(budget)}</td>
+        <td style="text-align:right">${formatCurrency(settlement)}</td>
+        <td style="text-align:right;color:${diff > 0 ? '#dc2626' : '#059669'}">${diff > 0 ? '+' : ''}${formatCurrency(diff)}</td>
+        <td><span class="badge badge-approved">Hoàn thành</span></td>
+      </tr>`;
+    });
+
+    tbody.innerHTML = html;
+  } catch (error) {
+    console.error('Load settlements error:', error);
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#dc2626;">Lỗi tải dữ liệu</td></tr>';
+  }
+}
+
+// ==================== REPORTS ====================
+async function loadReportSummary() {
+  try {
+    const snapshot = await db.collection('investment_projects').get();
+    let totalProjects = 0, totalBudget = 0, totalDisbursed = 0, totalProgress = 0;
+
+    snapshot.forEach(doc => {
+      const p = doc.data();
+      totalProjects++;
+      totalBudget += p.budget || 0;
+      totalDisbursed += p.disbursed || 0;
+      totalProgress += p.progress || 0;
+    });
+
+    const avgProgress = totalProjects > 0 ? Math.round(totalProgress / totalProjects) : 0;
+
+    document.getElementById('reportTotalProjects').textContent = totalProjects;
+    document.getElementById('reportTotalBudget').textContent = formatCurrency(totalBudget);
+    document.getElementById('reportTotalDisbursed').textContent = formatCurrency(totalDisbursed);
+    document.getElementById('reportAvgProgress').textContent = avgProgress + '%';
+  } catch (error) {
+    console.error('Load report summary error:', error);
+  }
+}
+
+function generateReport() {
+  showToast('Tính năng xuất báo cáo đang phát triển', 'warning');
+}
+
+// ==================== PROCESS TAB SWITCHING ====================
+function showProcess(processName) {
+  // Hide all process contents
+  document.querySelectorAll('.process-content').forEach(el => el.style.display = 'none');
+  // Remove active class from all tabs
+  document.querySelectorAll('.process-tab').forEach(el => {
+    el.style.background = '#fff';
+    el.style.color = '#475569';
+    el.style.borderColor = '#e2e8f0';
+  });
+
+  // Show selected process
+  const processId = 'process' + processName.charAt(0).toUpperCase() + processName.slice(1);
+  document.getElementById(processId).style.display = 'block';
+
+  // Activate selected tab
+  const tabId = 'tab' + processName.charAt(0).toUpperCase() + processName.slice(1);
+  const colors = {
+    chidinh: '#3b82f6',
+    chaohang: '#059669',
+    dauthau: '#7c3aed',
+    muasam: '#dc2626'
+  };
+  const tab = document.getElementById(tabId);
+  tab.style.background = colors[processName];
+  tab.style.color = '#fff';
+  tab.style.borderColor = colors[processName];
+}
+
+// ==================== DOCUMENT PROGRESS ====================
+function showDocProgressModal() {
+  if (!selectedProjectId) {
+    showToast('Vui lòng chọn dự án trước', 'error');
+    return;
+  }
+
+  const project = projectsList.find(p => p.id === selectedProjectId);
+  if (project && project.documents) {
+    const docs = project.documents;
+    document.getElementById('docToTrinh').value = docs.toTrinh?.number || '';
+    document.getElementById('docToTrinhDate').value = docs.toTrinh?.date || '';
+    document.getElementById('docQDKHLCNT').value = docs.qdKHLCNT?.number || '';
+    document.getElementById('docQDKHLCNTDate').value = docs.qdKHLCNT?.date || '';
+    document.getElementById('docQDKQLCNT').value = docs.qdKQLCNT?.number || '';
+    document.getElementById('docQDKQLCNTDate').value = docs.qdKQLCNT?.date || '';
+    document.getElementById('docHopDong').value = docs.hopDong?.number || '';
+    document.getElementById('docHopDongDate').value = docs.hopDong?.date || '';
+    document.getElementById('docBBNT').value = docs.bbNT?.number || '';
+    document.getElementById('docBBNTDate').value = docs.bbNT?.date || '';
+    document.getElementById('docQDQT').value = docs.qdQT?.number || '';
+    document.getElementById('docQDQTDate').value = docs.qdQT?.date || '';
+  } else {
+    document.getElementById('docProgressForm').reset();
+  }
+
+  document.getElementById('docProgressModal').classList.add('active');
+}
+
+function closeDocProgressModal() {
+  document.getElementById('docProgressModal').classList.remove('active');
+}
+
+async function saveDocProgress(event) {
+  event.preventDefault();
+
+  const documents = {
+    toTrinh: {
+      number: document.getElementById('docToTrinh').value.trim(),
+      date: document.getElementById('docToTrinhDate').value
+    },
+    qdKHLCNT: {
+      number: document.getElementById('docQDKHLCNT').value.trim(),
+      date: document.getElementById('docQDKHLCNTDate').value
+    },
+    qdKQLCNT: {
+      number: document.getElementById('docQDKQLCNT').value.trim(),
+      date: document.getElementById('docQDKQLCNTDate').value
+    },
+    hopDong: {
+      number: document.getElementById('docHopDong').value.trim(),
+      date: document.getElementById('docHopDongDate').value
+    },
+    bbNT: {
+      number: document.getElementById('docBBNT').value.trim(),
+      date: document.getElementById('docBBNTDate').value
+    },
+    qdQT: {
+      number: document.getElementById('docQDQT').value.trim(),
+      date: document.getElementById('docQDQTDate').value
+    }
+  };
+
+  try {
+    await db.collection('investment_projects').doc(selectedProjectId).update({
+      documents: documents,
+      updatedAt: ErpDb.firestore.FieldValue.serverTimestamp()
+    });
+    showToast('Đã cập nhật tiến độ văn bản!');
+    closeDocProgressModal();
+    loadProjectProgress();
+  } catch (error) {
+    showToast('Lỗi: ' + error.message, 'error');
+  }
+}
+
+// ==================== TEMPLATE MODAL ====================
+function showTemplateModal(templateType) {
+  const titles = {
+    toTrinh: 'Tạo Tờ Trình',
+    quyetDinh: 'Tạo Quyết Định',
+    bbNghiemThu: 'Tạo Biên Bản Nghiệm Thu',
+    quyetToan: 'Tạo Báo Cáo Quyết Toán',
+    bbThanhLy: 'Tạo Biên Bản Thanh Lý HĐ',
+    hopDong: 'Tạo Hợp Đồng'
+  };
+
+  document.getElementById('templateModalTitle').textContent = titles[templateType] || 'Tạo Văn Bản';
+
+  // Generate form based on template type
+  let formHtml = getTemplateForm(templateType);
+  document.getElementById('templateFormContainer').innerHTML = formHtml;
+
+  document.getElementById('templateModal').classList.add('active');
+}
+
+function closeTemplateModal() {
+  document.getElementById('templateModal').classList.remove('active');
+}
+
+function getTemplateForm(type) {
+  const today = new Date().toISOString().split('T')[0];
+  const currentYear = new Date().getFullYear();
+
+  const projectOptions = projectsList.map(p => `<option value="${p.id}">${p.code} - ${p.name}</option>`).join('');
+
+  switch(type) {
+    case 'toTrinh':
+      return `
+        <form id="templateForm" onsubmit="generateTemplate(event, 'toTrinh')" style="padding:20px;">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Số tờ trình</label>
+              <input type="text" id="tplNumber" required placeholder="VD: 123/TTr-CTCP">
+            </div>
+            <div class="form-group">
+              <label>Ngày</label>
+              <input type="date" id="tplDate" required value="${today}">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Chọn dự án liên quan</label>
+            <select id="tplProject"><option value="">-- Không liên kết --</option>${projectOptions}</select>
+          </div>
+          <div class="form-group">
+            <label>Kính gửi</label>
+            <input type="text" id="tplKinhGui" value="Tổng Giám đốc Công ty" placeholder="Người/Đơn vị nhận">
+          </div>
+          <div class="form-group">
+            <label>Trích yếu nội dung *</label>
+            <input type="text" id="tplTrichYeu" required placeholder="VD: V/v đề nghị phê duyệt kế hoạch lựa chọn nhà thầu...">
+          </div>
+          <div class="form-group">
+            <label>Căn cứ pháp lý</label>
+            <textarea id="tplCanCu" rows="3" placeholder="Liệt kê các căn cứ pháp lý, quy định..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Nội dung đề xuất *</label>
+            <textarea id="tplNoiDung" rows="5" required placeholder="Nội dung chi tiết đề xuất..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Kiến nghị</label>
+            <textarea id="tplKienNghi" rows="2" placeholder="Kính đề nghị..."></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Người trình</label>
+              <input type="text" id="tplNguoiTrinh" value="${currentUser?.name || ''}" placeholder="Họ tên">
+            </div>
+            <div class="form-group">
+              <label>Chức vụ</label>
+              <input type="text" id="tplChucVu" placeholder="Chức vụ người trình">
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn" onclick="closeTemplateModal()" style="background:#e2e8f0;color:#475569">Hủy</button>
+            <button type="button" class="btn" onclick="previewTemplate('toTrinh')" style="background:#f59e0b;color:#fff;">Xem trước</button>
+            <button type="submit" class="btn btn-primary">Tạo & Tải về</button>
+          </div>
+        </form>`;
+
+    case 'quyetDinh':
+      return `
+        <form id="templateForm" onsubmit="generateTemplate(event, 'quyetDinh')" style="padding:20px;">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Số quyết định</label>
+              <input type="text" id="tplNumber" required placeholder="VD: 45/QĐ-CTCP">
+            </div>
+            <div class="form-group">
+              <label>Ngày</label>
+              <input type="date" id="tplDate" required value="${today}">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Chọn dự án liên quan</label>
+            <select id="tplProject"><option value="">-- Không liên kết --</option>${projectOptions}</select>
+          </div>
+          <div class="form-group">
+            <label>Loại quyết định</label>
+            <select id="tplLoaiQD">
+              <option value="pheduyet_khlcnt">Phê duyệt KHLCNT</option>
+              <option value="pheduyet_kqlcnt">Phê duyệt kết quả LCNT</option>
+              <option value="pheduyet_duan">Phê duyệt dự án đầu tư</option>
+              <option value="pheduyet_quytoan">Phê duyệt quyết toán</option>
+              <option value="khac">Khác</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Trích yếu *</label>
+            <input type="text" id="tplTrichYeu" required placeholder="VD: V/v phê duyệt kết quả lựa chọn nhà thầu gói thầu...">
+          </div>
+          <div class="form-group">
+            <label>Căn cứ</label>
+            <textarea id="tplCanCu" rows="3" placeholder="Liệt kê các căn cứ ban hành quyết định..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Nội dung quyết định (các Điều) *</label>
+            <textarea id="tplNoiDung" rows="6" required placeholder="Điều 1. ...&#10;Điều 2. ...&#10;Điều 3. ..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Nơi nhận</label>
+            <textarea id="tplNoiNhan" rows="2" placeholder="- Như Điều 3;&#10;- Lưu: VT, ĐTXD."></textarea>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn" onclick="closeTemplateModal()" style="background:#e2e8f0;color:#475569">Hủy</button>
+            <button type="button" class="btn" onclick="previewTemplate('quyetDinh')" style="background:#f59e0b;color:#fff;">Xem trước</button>
+            <button type="submit" class="btn btn-primary">Tạo & Tải về</button>
+          </div>
+        </form>`;
+
+    case 'bbNghiemThu':
+      return `
+        <form id="templateForm" onsubmit="generateTemplate(event, 'bbNghiemThu')" style="padding:20px;">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Số biên bản</label>
+              <input type="text" id="tplNumber" required placeholder="VD: 12/BBNT-2024">
+            </div>
+            <div class="form-group">
+              <label>Ngày nghiệm thu</label>
+              <input type="date" id="tplDate" required value="${today}">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Chọn dự án *</label>
+            <select id="tplProject" required><option value="">-- Chọn dự án --</option>${projectOptions}</select>
+          </div>
+          <div class="form-group">
+            <label>Loại nghiệm thu</label>
+            <select id="tplLoaiNT">
+              <option value="giaidoan">Nghiệm thu giai đoạn</option>
+              <option value="hoanthanh">Nghiệm thu hoàn thành</option>
+              <option value="banhanoi">Nghiệm thu bàn giao</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Tên công trình/Hạng mục *</label>
+            <input type="text" id="tplTenCongTrinh" required placeholder="Tên công trình hoặc hạng mục nghiệm thu">
+          </div>
+          <div class="form-group">
+            <label>Đại diện Chủ đầu tư</label>
+            <input type="text" id="tplChuDauTu" value="Công ty CP Cao su RRIV">
+          </div>
+          <div class="form-group">
+            <label>Đại diện Nhà thầu</label>
+            <input type="text" id="tplNhaThau" placeholder="Tên công ty nhà thầu">
+          </div>
+          <div class="form-group">
+            <label>Nội dung nghiệm thu *</label>
+            <textarea id="tplNoiDung" rows="4" required placeholder="Mô tả khối lượng, chất lượng công việc..."></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Giá trị nghiệm thu (đồng)</label>
+              <input type="number" id="tplGiaTri" placeholder="0">
+            </div>
+            <div class="form-group">
+              <label>Kết luận</label>
+              <select id="tplKetLuan">
+                <option value="dat">Đạt yêu cầu</option>
+                <option value="khongdat">Không đạt yêu cầu</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn" onclick="closeTemplateModal()" style="background:#e2e8f0;color:#475569">Hủy</button>
+            <button type="button" class="btn" onclick="previewTemplate('bbNghiemThu')" style="background:#f59e0b;color:#fff;">Xem trước</button>
+            <button type="submit" class="btn btn-primary">Tạo & Tải về</button>
+          </div>
+        </form>`;
+
+    case 'quyetToan':
+      return `
+        <form id="templateForm" onsubmit="generateTemplate(event, 'quyetToan')" style="padding:20px;">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Số báo cáo</label>
+              <input type="text" id="tplNumber" required placeholder="VD: BC-QT/2024">
+            </div>
+            <div class="form-group">
+              <label>Ngày lập</label>
+              <input type="date" id="tplDate" required value="${today}">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Chọn dự án *</label>
+            <select id="tplProject" required onchange="loadProjectDataForTemplate()"><option value="">-- Chọn dự án --</option>${projectOptions}</select>
+          </div>
+          <div class="form-group">
+            <label>Tên công trình *</label>
+            <input type="text" id="tplTenCongTrinh" required placeholder="Tên đầy đủ công trình">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Tổng mức đầu tư (đồng)</label>
+              <input type="number" id="tplTongMucDT" placeholder="0">
+            </div>
+            <div class="form-group">
+              <label>Giá trị quyết toán (đồng)</label>
+              <input type="number" id="tplGiaTriQT" placeholder="0">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Chi tiết các khoản mục</label>
+            <textarea id="tplChiTiet" rows="5" placeholder="1. Chi phí xây dựng: ...&#10;2. Chi phí thiết bị: ...&#10;3. Chi phí quản lý: ...&#10;4. Chi phí tư vấn: ...&#10;5. Chi phí khác: ..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Chênh lệch và giải trình</label>
+            <textarea id="tplGiaiTrinh" rows="3" placeholder="Giải trình chênh lệch giữa dự toán và quyết toán..."></textarea>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn" onclick="closeTemplateModal()" style="background:#e2e8f0;color:#475569">Hủy</button>
+            <button type="button" class="btn" onclick="previewTemplate('quyetToan')" style="background:#f59e0b;color:#fff;">Xem trước</button>
+            <button type="submit" class="btn btn-primary">Tạo & Tải về</button>
+          </div>
+        </form>`;
+
+    default:
+      return `<div style="padding:20px;text-align:center;color:#64748b;">Biểu mẫu đang được phát triển...</div>`;
+  }
+}
+
+function previewTemplate(type) {
+  const content = generateTemplateContent(type);
+  const previewWindow = window.open('', '_blank', 'width=800,height=600');
+  previewWindow.document.write(`
+    <html>
+    <head>
+      <title>Xem trước văn bản</title>
+      <style>
+        body { font-family: 'Times New Roman', serif; padding: 40px; max-width: 800px; margin: 0 auto; line-height: 1.6; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .header-top { display: flex; justify-content: space-between; margin-bottom: 10px; }
+        .header-left { text-align: left; font-size: 13px; }
+        .header-right { text-align: center; font-size: 13px; }
+        .doc-number { font-size: 14px; margin: 10px 0; }
+        .doc-title { font-size: 16px; font-weight: bold; text-transform: uppercase; margin: 20px 0; }
+        .doc-subtitle { font-size: 14px; font-style: italic; margin-bottom: 20px; }
+        .content { text-align: justify; }
+        .signature { margin-top: 40px; display: flex; justify-content: space-between; }
+        .signature-left, .signature-right { text-align: center; width: 45%; }
+        .signature-title { font-weight: bold; margin-bottom: 60px; }
+        @media print { body { padding: 0; } }
+      </style>
+    </head>
+    <body>
+      ${content}
+      <div style="margin-top:20px;text-align:center;">
+        <button onclick="window.print()" style="padding:10px 30px;background:#3b82f6;color:#fff;border:none;border-radius:5px;cursor:pointer;">In văn bản</button>
+      </div>
+    </body>
+    </html>
+  `);
+}
+
+function generateTemplateContent(type) {
+  const today = new Date();
+  const dateStr = document.getElementById('tplDate')?.value || today.toISOString().split('T')[0];
+  const formattedDate = new Date(dateStr).toLocaleDateString('vi-VN', { day: 'numeric', month: 'numeric', year: 'numeric' });
+
+  switch(type) {
+    case 'toTrinh':
+      return `
+        <div class="header">
+          <div class="header-top">
+            <div class="header-left">
+              <strong>CÔNG TY CP CAO SU RRIV</strong><br>
+              <strong>PHÒNG ĐẦU TƯ - XDCB</strong><br>
+              <hr style="width:50px;margin:5px 0;">
+              <span>Số: ${document.getElementById('tplNumber')?.value || '....'}/TTr-ĐTXD</span>
+            </div>
+            <div class="header-right">
+              <strong>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</strong><br>
+              <strong>Độc lập - Tự do - Hạnh phúc</strong><br>
+              <hr style="width:100px;margin:5px auto;">
+              <em>Phước Hòa, ngày ${formattedDate}</em>
+            </div>
+          </div>
+        </div>
+        <div class="doc-title">TỜ TRÌNH</div>
+        <div class="doc-subtitle">${document.getElementById('tplTrichYeu')?.value || 'V/v ...'}</div>
+        <div class="content">
+          <p><strong>Kính gửi:</strong> ${document.getElementById('tplKinhGui')?.value || 'Tổng Giám đốc Công ty'}</p>
+          <p><strong>Căn cứ:</strong></p>
+          <p>${(document.getElementById('tplCanCu')?.value || '').replace(/\n/g, '<br>')}</p>
+          <p><strong>Nội dung:</strong></p>
+          <p>${(document.getElementById('tplNoiDung')?.value || '').replace(/\n/g, '<br>')}</p>
+          <p><strong>Kiến nghị:</strong></p>
+          <p>${(document.getElementById('tplKienNghi')?.value || 'Kính đề nghị lãnh đạo xem xét, phê duyệt.').replace(/\n/g, '<br>')}</p>
+        </div>
+        <div class="signature">
+          <div class="signature-left"></div>
+          <div class="signature-right">
+            <div class="signature-title">NGƯỜI TRÌNH</div>
+            <p>${document.getElementById('tplNguoiTrinh')?.value || ''}</p>
+          </div>
+        </div>`;
+
+    case 'quyetDinh':
+      return `
+        <div class="header">
+          <div class="header-top">
+            <div class="header-left">
+              <strong>CÔNG TY CP CAO SU RRIV</strong><br>
+              <hr style="width:50px;margin:5px 0;">
+              <span>Số: ${document.getElementById('tplNumber')?.value || '....'}/QĐ-CTCP</span>
+            </div>
+            <div class="header-right">
+              <strong>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</strong><br>
+              <strong>Độc lập - Tự do - Hạnh phúc</strong><br>
+              <hr style="width:100px;margin:5px auto;">
+              <em>Phước Hòa, ngày ${formattedDate}</em>
+            </div>
+          </div>
+        </div>
+        <div class="doc-title">QUYẾT ĐỊNH</div>
+        <div class="doc-subtitle">${document.getElementById('tplTrichYeu')?.value || 'V/v ...'}</div>
+        <div style="text-align:center;margin-bottom:20px;"><strong>TỔNG GIÁM ĐỐC CÔNG TY CỔ PHẦN CAO SU RRIV</strong></div>
+        <div class="content">
+          <p><strong>Căn cứ:</strong></p>
+          <p>${(document.getElementById('tplCanCu')?.value || '').replace(/\n/g, '<br>')}</p>
+          <p style="text-align:center;font-weight:bold;margin:20px 0;">QUYẾT ĐỊNH:</p>
+          <p>${(document.getElementById('tplNoiDung')?.value || '').replace(/\n/g, '<br>')}</p>
+        </div>
+        <div class="signature">
+          <div class="signature-left">
+            <p><strong>Nơi nhận:</strong></p>
+            <p style="font-size:12px;">${(document.getElementById('tplNoiNhan')?.value || '- Như Điều 3;\n- Lưu: VT.').replace(/\n/g, '<br>')}</p>
+          </div>
+          <div class="signature-right">
+            <div class="signature-title">TỔNG GIÁM ĐỐC</div>
+            <p></p>
+          </div>
+        </div>`;
+
+    default:
+      return '<p>Không có dữ liệu xem trước</p>';
+  }
+}
+
+function generateTemplate(event, type) {
+  event.preventDefault();
+  const content = generateTemplateContent(type);
+
+  // Create a downloadable HTML file
+  const blob = new Blob([`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Văn bản</title>
+      <style>
+        body { font-family: 'Times New Roman', serif; padding: 40px; max-width: 800px; margin: 0 auto; line-height: 1.6; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .header-top { display: flex; justify-content: space-between; margin-bottom: 10px; }
+        .header-left { text-align: left; font-size: 13px; }
+        .header-right { text-align: center; font-size: 13px; }
+        .doc-title { font-size: 16px; font-weight: bold; text-transform: uppercase; margin: 20px 0; text-align: center; }
+        .doc-subtitle { font-size: 14px; font-style: italic; margin-bottom: 20px; text-align: center; }
+        .content { text-align: justify; }
+        .signature { margin-top: 40px; display: flex; justify-content: space-between; }
+        .signature-left, .signature-right { text-align: center; width: 45%; }
+        .signature-title { font-weight: bold; margin-bottom: 60px; }
+      </style>
+    </head>
+    <body>${content}</body>
+    </html>
+  `], { type: 'text/html' });
+
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${type}_${new Date().toISOString().split('T')[0]}.html`;
+  link.click();
+
+  showToast('Đã tạo văn bản!');
+  closeTemplateModal();
+}
+
+// ==================== WEEKLY TASKS (LỊCH CÔNG TÁC) ====================
+let currentWeekStart = null;
+let currentWeekEnd = null;
+let weeklyTasks = [];
+let personnelList = [];
+
+// Get Monday of current week
+function getMonday(d) {
+  d = new Date(d);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  return new Date(d.setDate(diff));
+}
+
+// Format date as dd/mm/yyyy
+function formatDateVN(date) {
+  const d = new Date(date);
+  return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+// Format date for Firestore (yyyy-mm-dd)
+function formatDateFS(date) {
+  const d = new Date(date);
+  return d.toISOString().split('T')[0];
+}
+
+// Initialize week display
+function initWeekDisplay() {
+  const today = new Date();
+  currentWeekStart = getMonday(today);
+  currentWeekEnd = new Date(currentWeekStart);
+  currentWeekEnd.setDate(currentWeekEnd.getDate() + 6);
+  updateWeekDisplay();
+}
+
+// Update week display
+function updateWeekDisplay() {
+  const display = document.getElementById('currentWeekDisplay');
+  if (display) {
+    display.textContent = `${formatDateVN(currentWeekStart)} - ${formatDateVN(currentWeekEnd)}`;
+  }
+}
+
+// Change week
+function changeWeek(direction) {
+  currentWeekStart.setDate(currentWeekStart.getDate() + (direction * 7));
+  currentWeekEnd.setDate(currentWeekEnd.getDate() + (direction * 7));
+  updateWeekDisplay();
+  loadWeeklyTasks();
+}
+
+// Go to current week
+function goToCurrentWeek() {
+  initWeekDisplay();
+  loadWeeklyTasks();
+}
+
+// Load personnel for assignee dropdown - Chỉ phòng PT&QLKCN
+async function loadPersonnelList() {
+  try {
+    // Bước 1: Tìm ID của phòng PT&QLKCN từ categoryDepartments
+    const deptSnapshot = await db.collection('categoryDepartments').get();
+    const deptPTQLKCN = deptSnapshot.docs.find(doc => {
+      const data = doc.data();
+      const code = (data.code || '').toUpperCase();
+      const name = (data.name || '').toLowerCase();
+      return code === 'PT&QLKCN' ||
+             name.includes('pt&qlkcn') ||
+             (name.includes('phát triển') && name.includes('khu công nghiệp'));
+    });
+
+    if (!deptPTQLKCN) {
+      console.warn('Không tìm thấy phòng PT&QLKCN trong categoryDepartments');
+      console.log('Available departments:', deptSnapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+      return;
+    }
+
+    const deptId = deptPTQLKCN.id;
+    console.log('Found PT&QLKCN department ID:', deptId);
+
+    // Bước 2: Lấy nhân sự thuộc phòng đó
+    const personnelSnapshot = await db.collection('categoryPersonnel').get();
+
+    personnelList = personnelSnapshot.docs
+      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .filter(p => {
+        const isActive = p.status === 'active' || !p.status;
+        const inDept = p.department === deptId;
+        return isActive && inDept;
+      })
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+    // Populate assignee dropdown
+    const select = document.getElementById('taskAssignee');
+    if (select) {
+      select.innerHTML = '<option value="">-- Chọn người thực hiện --</option>' +
+        personnelList.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    }
+
+    console.log('Loaded', personnelList.length, 'personnel from PT&QLKCN');
+  } catch (error) {
+    console.error('Error loading personnel:', error);
+  }
+}
+
+// Load weekly tasks from Firestore
+async function loadWeeklyTasks() {
+  const tbody = document.getElementById('tasksBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;"><div class="loading"><div class="spinner"></div><p style="margin-top:10px;">Đang tải...</p></div></td></tr>';
+
+  try {
+    const weekKey = formatDateFS(currentWeekStart);
+
+    const snapshot = await db.collection('weeklyTasks')
+      .where('weekStart', '==', weekKey)
+      .orderBy('createdAt', 'asc')
+      .get();
+
+    weeklyTasks = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    renderTasksTable();
+    updateTaskSummary();
+  } catch (error) {
+    console.error('Error loading tasks:', error);
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:#ef4444;">Lỗi tải dữ liệu</td></tr>';
+  }
+}
+
+// Render tasks table
+function renderTasksTable() {
+  const tbody = document.getElementById('tasksBody');
+  if (!tbody) return;
+
+  if (weeklyTasks.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:#64748b;">
+      <p style="font-size:48px;margin-bottom:10px;">📋</p>
+      <p>Chưa có công việc trong tuần này</p>
+    </td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = weeklyTasks.map((task, index) => {
+    const statusBadge = getStatusBadge(task.status);
+    const progressBar = getProgressBar(task.progress || 0, task.status);
+    const assigneeName = task.assigneeName || 'Chưa phân công';
+
+    // Format thời gian
+    const startDate = task.startDate ? formatDateVN(new Date(task.startDate)) : '';
+    const endDate = task.endDate ? formatDateVN(new Date(task.endDate)) : '';
+    const timeRange = startDate && endDate ? `${startDate}<br>→ ${endDate}` : '-';
+
+    return `
+      <tr>
+        <td style="text-align:center;">${index + 1}</td>
+        <td>
+          <div style="font-weight:500;">${task.content}</div>
+          ${task.note ? `<div style="font-size:12px;color:#64748b;margin-top:4px;">📝 ${task.note}</div>` : ''}
+        </td>
+        <td style="font-size:12px;text-align:center;">${timeRange}</td>
+        <td>${assigneeName}</td>
+        <td>${progressBar}</td>
+        <td>${statusBadge}</td>
+        <td>
+          <div style="display:flex;gap:5px;">
+            <button class="btn btn-sm" onclick="editTask('${task.id}')" style="background:#3b82f6;color:#fff;" title="Sửa">✏️</button>
+            <button class="btn btn-sm" onclick="deleteTask('${task.id}')" style="background:#ef4444;color:#fff;" title="Xóa">🗑️</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// Get status badge HTML
+function getStatusBadge(status) {
+  const badges = {
+    'pending': '<span class="badge badge-pending">Chưa bắt đầu</span>',
+    'in_progress': '<span class="badge badge-delayed">Đang thực hiện</span>',
+    'completed': '<span class="badge badge-approved">Hoàn thành</span>'
+  };
+  return badges[status] || badges['pending'];
+}
+
+// Get progress bar HTML
+function getProgressBar(progress, status) {
+  let colorClass = 'on-track';
+  if (status === 'completed') colorClass = 'on-track';
+  else if (progress < 50) colorClass = 'critical';
+  else if (progress < 80) colorClass = 'delayed';
+
+  return `
+    <div class="progress-bar">
+      <div class="progress-fill ${colorClass}" style="width:${progress}%">${progress}%</div>
+    </div>
+  `;
+}
+
+// Update task summary cards
+function updateTaskSummary() {
+  const total = weeklyTasks.length;
+  const completed = weeklyTasks.filter(t => t.status === 'completed').length;
+  const inProgress = weeklyTasks.filter(t => t.status === 'in_progress').length;
+  const pending = weeklyTasks.filter(t => t.status === 'pending').length;
+
+  document.getElementById('totalTasks').textContent = total;
+  document.getElementById('completedTasks').textContent = completed;
+  document.getElementById('inProgressTasks').textContent = inProgress;
+  document.getElementById('pendingTasks').textContent = pending;
+}
+
+// Show add task modal
+function showAddTaskModal() {
+  document.getElementById('taskModalTitle').textContent = 'Thêm Công Việc';
+  document.getElementById('taskForm').reset();
+  document.getElementById('taskId').value = '';
+  document.getElementById('taskProgress').value = 0;
+  // Set default dates = tuần hiện tại
+  document.getElementById('taskStartDate').value = formatDateFS(currentWeekStart);
+  document.getElementById('taskEndDate').value = formatDateFS(currentWeekEnd);
+  document.getElementById('taskModal').classList.add('active');
+}
+
+// Close task modal
+function closeTaskModal() {
+  document.getElementById('taskModal').classList.remove('active');
+}
+
+// Edit task
+function editTask(taskId) {
+  const task = weeklyTasks.find(t => t.id === taskId);
+  if (!task) return;
+
+  document.getElementById('taskModalTitle').textContent = 'Sửa Công Việc';
+  document.getElementById('taskId').value = task.id;
+  document.getElementById('taskContent').value = task.content || '';
+  document.getElementById('taskAssignee').value = task.assigneeId || '';
+  document.getElementById('taskStatus').value = task.status || 'pending';
+  document.getElementById('taskProgress').value = task.progress || 0;
+  document.getElementById('taskNote').value = task.note || '';
+  document.getElementById('taskStartDate').value = task.startDate || formatDateFS(currentWeekStart);
+  document.getElementById('taskEndDate').value = task.endDate || formatDateFS(currentWeekEnd);
+
+  document.getElementById('taskModal').classList.add('active');
+}
+
+// Save task
+async function saveTask(event) {
+  event.preventDefault();
+
+  const taskId = document.getElementById('taskId').value;
+  const content = document.getElementById('taskContent').value.trim();
+  const assigneeId = document.getElementById('taskAssignee').value;
+  const status = document.getElementById('taskStatus').value;
+  const progress = parseInt(document.getElementById('taskProgress').value) || 0;
+  const note = document.getElementById('taskNote').value.trim();
+  const startDate = document.getElementById('taskStartDate').value;
+  const endDate = document.getElementById('taskEndDate').value;
+
+  if (!content) {
+    showToast('Vui lòng nhập nội dung công việc', 'error');
+    return;
+  }
+
+  if (!startDate || !endDate) {
+    showToast('Vui lòng chọn thời gian thực hiện', 'error');
+    return;
+  }
+
+  if (startDate > endDate) {
+    showToast('Ngày bắt đầu phải trước ngày kết thúc', 'error');
+    return;
+  }
+
+  // Get assignee name
+  const assignee = personnelList.find(p => p.id === assigneeId);
+  const assigneeName = assignee ? assignee.name : '';
+
+  const taskData = {
+    content,
+    assigneeId,
+    assigneeName,
+    status,
+    progress: status === 'completed' ? 100 : progress,
+    note,
+    startDate,
+    endDate,
+    weekStart: formatDateFS(currentWeekStart),
+    weekEnd: formatDateFS(currentWeekEnd),
+    updatedAt: ErpDb.firestore.FieldValue.serverTimestamp(),
+    updatedBy: currentUser?.id || null
+  };
+
+  try {
+    if (taskId) {
+      // Update existing
+      await db.collection('weeklyTasks').doc(taskId).update(taskData);
+      showToast('Đã cập nhật công việc!');
+    } else {
+      // Create new
+      taskData.createdAt = ErpDb.firestore.FieldValue.serverTimestamp();
+      taskData.createdBy = currentUser?.id || null;
+      await db.collection('weeklyTasks').add(taskData);
+      showToast('Đã thêm công việc mới!');
+    }
+
+    closeTaskModal();
+    loadWeeklyTasks();
+  } catch (error) {
+    console.error('Error saving task:', error);
+    showToast('Lỗi lưu công việc: ' + error.message, 'error');
+  }
+}
+
+// Delete task
+async function deleteTask(taskId) {
+  if (!confirm('Bạn có chắc muốn xóa công việc này?')) return;
+
+  try {
+    await db.collection('weeklyTasks').doc(taskId).delete();
+    showToast('Đã xóa công việc!');
+    loadWeeklyTasks();
+  } catch (error) {
+    console.error('Error deleting task:', error);
+    showToast('Lỗi xóa công việc: ' + error.message, 'error');
+  }
+}
+
+// Export weekly report to Excel
+function exportWeeklyReport() {
+  if (weeklyTasks.length === 0) {
+    showToast('Không có dữ liệu để xuất', 'warning');
+    return;
+  }
+
+  const weekRange = `${formatDateVN(currentWeekStart)} - ${formatDateVN(currentWeekEnd)}`;
+
+  let html = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+    <head><meta charset="UTF-8">
+    <style>
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #000; padding: 8px; }
+      th { background: #1e40af; color: #fff; font-weight: bold; }
+      .header { font-size: 14px; font-weight: bold; margin-bottom: 10px; }
+      .subheader { font-size: 12px; margin-bottom: 20px; }
+      .completed { color: #059669; }
+      .in-progress { color: #d97706; }
+      .pending { color: #dc2626; }
+    </style>
+    </head>
+    <body>
+    <div class="header">VIỆN NGHIÊN CỨU CAO SU VIỆT NAM</div>
+    <div class="subheader">Phòng PT&QLKCN</div>
+    <h2 style="text-align:center;">KẾT QUẢ CÔNG VIỆC TRONG TUẦN</h2>
+    <p style="text-align:center;">(Từ ngày ${formatDateVN(currentWeekStart)} đến ngày ${formatDateVN(currentWeekEnd)})</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Ngày</th>
+          <th>Nội dung công việc trong tuần</th>
+          <th>Người thực hiện</th>
+          <th>Trạng thái</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  weeklyTasks.forEach((task, index) => {
+    const statusText = task.status === 'completed' ? 'Hoàn thành' :
+                       task.status === 'in_progress' ? `${task.progress || 0}%` : 'Chưa bắt đầu';
+    const statusClass = task.status === 'completed' ? 'completed' :
+                        task.status === 'in_progress' ? 'in-progress' : 'pending';
+
+    // Format thời gian cho Excel
+    const startDate = task.startDate ? formatDateVN(new Date(task.startDate)) : '';
+    const endDate = task.endDate ? formatDateVN(new Date(task.endDate)) : '';
+    const timeRange = startDate && endDate && startDate !== endDate
+      ? `Từ ${startDate} đến ${endDate}`
+      : (startDate || `${formatDateVN(currentWeekStart)} - ${formatDateVN(currentWeekEnd)}`);
+
+    html += `
+      <tr>
+        <td style="text-align:center;">${timeRange}</td>
+        <td>${task.content}${task.note ? '<br><i>' + task.note + '</i>' : ''}</td>
+        <td>${task.assigneeName || ''}</td>
+        <td class="${statusClass}" style="text-align:center;">${statusText}</td>
+      </tr>
+    `;
+  });
+
+  html += `</tbody></table></body></html>`;
+
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `Lich_cong_tac_${formatDateFS(currentWeekStart)}.xls`;
+  link.click();
+
+  showToast('Đã xuất báo cáo Excel!');
+}
+
+// ==================== INITIALIZATION ====================
+function initYearFilters() {
+  const currentYear = new Date().getFullYear();
+  const years = [];
+  for (let y = currentYear; y >= currentYear - 5; y--) {
+    years.push(`<option value="${y}">${y}</option>`);
+  }
+  const filterYear = document.getElementById('filterYear');
+  const reportYear = document.getElementById('reportYear');
+  if (filterYear) filterYear.innerHTML = '<option value="">Tất cả năm</option>' + years.join('');
+  if (reportYear) reportYear.innerHTML = years.join('');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initYearFilters();
+
+  auth.onAuthStateChanged(async (user) => {
+    if (user) {
+      const storedUser = localStorage.getItem('currentUser');
+      if (storedUser) {
+        currentUser = JSON.parse(storedUser);
+      } else {
+        const email = user.email;
+        const username = email.split('@')[0];
+        const query = await db.collection('categoryPersonnel')
+          .where('username', '==', username)
+          .limit(1)
+          .get();
+
+        if (!query.empty) {
+          const doc = query.docs[0];
+          currentUser = { id: doc.id, ...doc.data() };
+          localStorage.setItem('currentUser', JSON.stringify(currentUser));
+        }
+      }
+
+      if (currentUser) {
+        document.getElementById('userName').textContent = currentUser.name || currentUser.username;
+        document.getElementById('userAvatar').textContent = (currentUser.name || 'U')[0].toUpperCase();
+        loadProjects();
+      }
+    } else {
+      window.location.href = 'index.html';
+    }
+  });
+});
+</script>
+
+</body>
+</html>

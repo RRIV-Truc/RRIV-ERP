@@ -1,0 +1,250 @@
+ 
+
+/* ====================================================
+   1. CẤU TRÚC TỔNG THỂ & MÀN HÌNH ĐĂNG NHẬP
+   ==================================================== */
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #2b3a54;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.auth-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+}
+
+.main-container { 
+    width: 90%; 
+    max-width: 430px; 
+    box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.3); 
+    border-radius: 25px; 
+    overflow: hidden; 
+    position: relative; 
+    background: white; 
+}
+
+.card-header-custom { background: linear-gradient(180deg, #00b050 0%, #008037 100%); padding: 30px 20px; text-align: center; }
+.logo-box { background: white; width: 90px; height: 90px; border-radius: 20px; display: flex; justify-content: center; align-items: center; margin: 0 auto 15px; }
+.logo-box img { width: 75px; height: 75px; object-fit: contain; }
+.system-title { background: rgba(255, 255, 255, 0.2); color: white; padding: 8px 20px; border-radius: 20px; font-size: 16px; font-weight: 600; display: inline-block; border: 1px solid rgba(255, 255, 255, 0.3); }
+.card-body-custom { background: white; padding: 35px 35px 25px; }
+.form-title { color: #006629; font-weight: 700; font-size: 24px; text-align: center; margin-bottom: 25px; }
+.form-label { color: #005623; font-weight: 600; font-size: 15px; }
+.form-control { border: 2px solid #e0e0e0; border-radius: 12px; padding: 12px 15px; width: 100%; margin-top: 5px; }
+.btn-submit { background-color: #008037; color: white; border: none; border-radius: 12px; padding: 12px; font-size: 17px; font-weight: 600; width: 100%; margin-top: 15px; cursor: pointer; }
+.btn-submit:hover { background-color: #006629; }
+
+.screen { display: none; }
+.loading-screen {
+    display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+    background: rgba(255, 255, 255, 0.95); z-index: 100; 
+    flex-direction: column; justify-content: center; align-items: center;
+}
+.loading-spinner { width: 45px; height: 45px; border: 4px solid #f3f3f3; border-top: 4px solid #008037; border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* ====================================================
+   2. GIAO DIỆN DASHBOARD (ĐÃ TỐI ƯU LOGO & HEADER)
+   ==================================================== */
+.main-dashboard {
+    background: #0f172a; 
+    min-height: 100vh;
+    padding: 40px 20px;
+    color: #ffffff;
+    width: 100%;
+}
+.vrg-container { max-width: 1200px; margin: 0 auto; }
+
+/* Header & Logo */
+.vrg-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 20px;
+    margin-bottom: 30px;
+}
+.vrg-logo-area { display: flex; align-items: center; gap: 15px; }
+.vrg-logo-img {
+    width: 65px !important; 
+    height: 65px !important;
+    object-fit: contain;
+    background: white;
+    border-radius: 12px;
+    padding: 5px;
+}
+.vrg-main-title { margin: 0; font-size: 28px; font-weight: 800; line-height: 1; }
+.vrg-subtitle { font-size: 14px; opacity: 0.8; margin-top: 4px; }
+.vrg-welcome-bar { font-size: 16px; color: #94a3b8; }
+#welcomeUser { color: #fff; font-weight: 600; }
+
+.vrg-apps-grid {
+    display: grid;
+    /* Giảm minmax từ 340px xuống 240px hoặc 260px */
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); 
+    gap: 16px; /* Giảm gap một chút cho khít */
+    margin-top: 20px;
+}
+.vrg-app-card {
+    border-radius: 20px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 180px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+    transition: 0.3s;
+}
+.vrg-app-card:hover { transform: translateY(-6px); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); }
+.footer-logo-text {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px; /* Khoảng cách giữa logo và chữ */
+    margin-top: 20px;
+    font-size: 13px;
+    color: #666;
+}
+
+.footer-logo {
+    width: 30px !important; /* Logo footer thường cần nhỏ hơn logo chính */
+    height: 30px !important;
+    object-fit: contain;
+}
+
+#installAppBanner {
+    background: linear-gradient(135deg, #00c853 0%, #00796b 100%);
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 20px 30px;
+    margin-bottom: 25px;
+    cursor: pointer;
+    transition: 0.3s ease;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+    display: flex;
+    align-items: center;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+}
+
+#installAppBanner:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
+#installAppBanner[aria-busy="true"] {
+    cursor: wait;
+}
+
+.rriv-pwa-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.rriv-pwa-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 400px;
+    width: 100%;
+    font-family: system-ui, -apple-system, sans-serif;
+    color: #0f172a;
+    line-height: 1.5;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.rriv-pwa-card h3 {
+    margin: 0 0 12px;
+    font-size: 1.15rem;
+}
+
+.rriv-pwa-steps {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.rriv-pwa-steps li {
+    margin-bottom: 8px;
+}
+
+.rriv-pwa-note {
+    margin: 12px 0 0;
+    font-size: 0.9rem;
+    color: #64748b;
+}
+
+.rriv-pwa-primary {
+    margin-top: 16px;
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    background: #009245;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.rriv-pwa-primary:hover {
+    background: #007a3a;
+}
+
+/* Định dạng nội dung bên trong để nó căn chỉnh đẹp */
+.install-app-content {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    gap: 20px;
+}
+
+.install-app-icon {
+    font-size: 2rem;
+}
+
+.install-app-text {
+    flex-grow: 1; /* Đẩy mũi tên sang phải */
+}
+
+.install-app-arrow {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+
+/* Màu sắc Card */
+.card-blue { background: linear-gradient(135deg, #1d68e1 0%, #10439c 100%); }
+.card-purple { background: linear-gradient(135deg, #8a3ff3 0%, #5118a6 100%); }
+.card-green { background: linear-gradient(135deg, #00b050 0%, #00602b 100%); }
+.card-cyan { background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); }
+.card-amber { background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%); }
+/* Các class còn thiếu để đồng bộ giao diện */
+.card-indigo { background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%); }
+.card-emerald { background: linear-gradient(135deg, #10b981 0%, #065f46 100%); }
+.card-orange { background: linear-gradient(135deg, #f97316 0%, #c2410c 100%); }
+.card-teal { background: linear-gradient(135deg, #2dd4bf 0%, #0f766e 100%); }
+.card-lime { background: linear-gradient(135deg, #a3e635 0%, #4d7c0f 100%); }
+.card-sky { background: linear-gradient(135deg, #38bdf8 0%, #0369a1 100%); }
+
+/* Responsive cho thiết bị di động */
+@media (max-width: 768px) {
+    .vrg-header { flex-direction: column; text-align: center; gap: 15px; }
+}

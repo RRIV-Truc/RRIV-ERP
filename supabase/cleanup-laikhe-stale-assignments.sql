@@ -1,0 +1,2 @@
+-- ĐÃ GỘP VÀO: reset-laikhe-assign-2026-06-21-22.sql
+-- File này giữ lại để tham chiếu; không cần chạy riêng.

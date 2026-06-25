@@ -1,0 +1,4 @@
+-- DEPRECATED — đã thay bằng dữ liệu thật Tổ SX Lai Khê.
+-- Không chạy lại file này.
+--   seed-laikhe-workforce.sql
+--   cleanup-demo-workers-cn001-020.sql (xóa CN001–CN020 nếu còn trong DB)

@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Hệ thống Quản Trị RRIV — Viện Nghiên Cứu Cao Su Việt Nam">
+    <title>Hệ Thống Quản Lý RRIV</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#009245">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="RRIV ERP">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="/static/js/utils/pwa.js" defer></script>
+</head>
+<body>
+
+    <div class="auth-wrapper">
+    <div id="authContainer" class="main-container">
+        
+        <div id="loadingScreen" class="loading-screen">
+            <div class="loading-spinner"></div>
+            <div style="margin-top: 12px; color: #008037; font-weight: 600; font-size: 15px;">
+                Đang xử lý hệ thống...
+            </div>
+        </div>
+
+        <div class="card-header-custom">
+            <div class="logo-box"><img src="{{ url_for('static', filename='logo.png') }}" alt="Logo"></div>
+            <div class="system-title">📋 Hệ Thống Quản Lý RRIV</div>
+        </div>
+
+        <div id="loginScreen">
+            <div class="card-body-custom">
+                <h2 class="form-title">🔐 Đăng Nhập</h2>
+                <form id="loginForm">
+                    <div class="mb-3">
+                        <label class="form-label">👤 Tài khoản</label>
+                        <input type="text" id="username" class="form-control" placeholder="Nhập tên đăng nhập" required autocomplete="off">
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label">🔑 Mật khẩu</label>
+                        <input type="password" id="password" class="form-control" placeholder="••••••••••" required>
+                    </div>
+                    <button type="submit" class="btn-submit">🚀 Đăng Nhập Hệ Thống</button>
+                    <a href="#" class="link-otp" onclick="switchToOtpMode()">🔑 Quên mật khẩu? Đăng nhập nhanh bằng OTP Email</a>
+                    <a href="#" class="link-otp" style="display:block;margin-top:10px;" onclick="installPWA(event); return false;">📲 Cài RRIV ERP lên điện thoại / máy tính</a>
+                </form>
+                <div class="footer-logo-text">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Icon" class="footer-logo">
+                 Viện nghiên cứu cao su Việt Nam
+            </div>
+            </div>
+        </div>
+
+        <div id="otpScreen" class="screen otp-screen-box">
+            <h2 class="form-title" style="margin-bottom: 15px;">📱 Xác thực OTP</h2>
+            <p class="text-center text-muted small mb-1">Mã đăng nhập khẩn cấp đã được gửi tới địa chỉ Email:</p>
+            <p class="otp-phone" id="otpEmailView">ni***@rriv.org.vn</p>
+
+            <div class="mb-4">
+                <input type="text" id="otpInput" class="form-control otp-input" maxlength="6" placeholder="000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+            </div>
+
+            <button onclick="verifyOtp()" class="btn-submit m-0">✅ Xác nhận & Đăng nhập</button>
+            <button onclick="cancelOtp()" class="btn btn-light w-100 mt-3" style="border-radius: 12px; padding: 10px; font-weight: 500;">❌ Quay về nhập mật khẩu</button>
+        </div>
+    </div>
+
+   <div id="dashboardScreen" class="screen main-dashboard">
+        <div class="vrg-container">
+            
+            <div class="vrg-header">
+                <div class="vrg-logo-area">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="VRG Logo" class="vrg-logo-img">
+                <div class="text-start">
+                    <h1 class="vrg-main-title">RRIV</h1>
+                    <div class="vrg-subtitle">Hệ thống Quản lý RRIV</div>
+                </div>
+            </div>
+                <p class="vrg-welcome-bar">Xin chào, <span id="welcomeUser">......</span>! Chọn ứng dụng để bắt đầu</p>
+            </div>
+        <button type="button" id="installAppBanner" class="install-app-banner" onclick="installPWA(event)" aria-label="Cài đặt ứng dụng RRIV ERP lên thiết bị">
+            <div class="install-app-content">
+                <div class="install-app-icon">📲</div>
+                <div class="install-app-text">
+                    <div style="font-size: 1.1rem; margin-bottom: 4px;"><strong>Cài đặt App lên điện thoại</strong></div>
+                    <div style="font-size: 0.85rem; opacity: 0.9;">Truy cập nhanh hơn, hoạt động offline</div>
+                </div>
+                <div class="install-app-arrow">→</div>
+            </div>
+        </button>
+
+            <div class="vrg-apps-grid">
+
+                <div class="vrg-app-card card-blue" onclick="navigateToApp('vanphongpham')" style="cursor:pointer;">
+                    <div>
+                        <div class="vrg-card-icon">📦</div>
+                        <div class="vrg-card-title">Quản Lý Văn Phòng Phẩm</div>
+                        <div class="vrg-card-desc">Đăng ký, duyệt, xuất kho văn phòng phẩm. Quản lý tồn kho và đơn hàng.</div>
+                        <div class="vrg-badge-list">
+                            <span class="vrg-mini-badge">📝 Đăng ký VPP</span>
+                            <span class="vrg-mini-badge">✅ Duyệt đơn</span>
+                            <span class="vrg-mini-badge">📊 Thống kê</span>
+                        </div>
+                    </div>
+                    <div class="vrg-card-link">Truy cập ngay →</div>
+                </div>
+
+                <div class="vrg-app-card card-purple" onclick="navigateToApp('doanhnghiep')" style="cursor:pointer;">
+                    <div>
+                        <div class="vrg-card-icon">📊</div>
+                        <div class="vrg-card-title">Quản Trị Doanh Nghiệp</div>
+                        <div class="vrg-card-desc">Phân tích dữ liệu, báo cáo tổng hợp, dashboard trực quan và AI insights.</div>
+                        <div class="vrg-badge-list">
+                            <span class="vrg-mini-badge">📈 Dashboard</span>
+                            <span class="vrg-mini-badge">🤖 AI Insights</span>
+                            <span class="vrg-mini-badge">📋 Báo cáo</span>
+                        </div>
+                    </div>
+                    <div class="vrg-card-link">Truy cập ngay →</div>
+                </div>
+
+                <div class="vrg-app-card card-green" onclick="navigateToApp('dieuhanhxe')" style="cursor:pointer;">
+                    <div>
+                        <div class="vrg-card-icon">🚗</div>
+                        <div class="vrg-card-title">Điều Hành Xe</div>
+                        <div class="vrg-card-desc">Đăng ký xe công tác, phê duyệt, điều phối xe và theo dõi lộ trình.</div>
+                        <div class="vrg-badge-list">
+                            <span class="vrg-mini-badge">🚙 Đăng ký xe</span>
+                            <span class="vrg-mini-badge">✅ Phê duyệt</span>
+                            <span class="vrg-mini-badge">📍 Lộ trình</span>
+                        </div>
+                    </div>
+                    <div class="vrg-card-link">Truy cập ngay →</div>
+                </div>
+
+                <div class="vrg-app-card card-indigo" onclick="navigateToApp('vanbannoibo')" style="cursor:pointer;">
+                    <div>
+                        <div class="vrg-card-icon">📋</div>
+                        <div class="vrg-card-title">Văn Bản Nội Bộ</div>
+                        <div class="vrg-card-desc">Quản lý văn bản, công văn nội bộ. Quy trình duyệt và ban hành văn bản.</div>
+                        <div class="vrg-badge-list">
+                            <span class="vrg-mini-badge">📝 Tạo văn bản</span>
+                            <span class="vrg-mini-badge">✅ Phê duyệt</span>
+                            <span class="vrg-mini-badge">📁 Lưu trữ</span>
+                        </div>
+                    </div>
+                    <div class="vrg-card-link">Truy cập ngay →</div>
+                </div>
+
+                <div class="vrg-app-card card-cyan" onclick="navigateToApp('nhansu')" style="cursor:pointer;">
+                    <div>
+                        <div class="vrg-card-icon">👥</div>
+                        <div class="vrg-card-title">Quản Lý Nhân Sự</div>
+                        <div class="vrg-card-desc">Quản lý thông tin nhân sự tập trung. Các app khác lấy dữ liệu từ đây.</div>
+                        <div class="vrg-badge-list">
+                            <span class="vrg-mini-badge">👤 Nhân sự</span>
+                            <span class="vrg-mini-badge">🏢 Phòng ban</span>
+                            <span class="vrg-mini-badge">💼 Chức vụ</span>
+                        </div>
+                    </div>
+                    <div class="vrg-card-link">Truy cập ngay →</div>
+                </div>
+
+                <div class="vrg-app-card card-emerald" onclick="navigateToApp('dautu')" style="cursor:pointer;">
+                    <div>
+                        <div class="vrg-card-icon">🏗️</div>
+                        <div class="vrg-card-title">Quản Lý Đầu Tư XDCB</div>
+                        <div class="vrg-card-desc">Quản lý danh mục dự án, theo dõi tiến độ, chi phí đầu tư xây dựng cơ bản.</div>
+                        <div class="vrg-badge-list">
+                            <span class="vrg-mini-badge">📋 Dự án</span>
+                            <span class="vrg-mini-badge">📊 Tiến độ</span>
+                            <span class="vrg-mini-badge">💰 Chi phí</span>
+                        </div>
+                    </div>
+                    <div class="vrg-card-link">Truy cập ngay →</div>
+                </div>
+
+                <div class="vrg-app-card card-orange" onclick="navigateToApp('diemdanh')" style="cursor:pointer;">
+                    <div>
+                        <div class="vrg-card-icon">👤</div>
+                        <div class="vrg-card-title">Điểm Danh & Kiểm Soát</div>
+                        <div class="vrg-card-desc">Điểm danh công nhân bằng Face ID, kiểm tra đột xuất, quản lý chấm công thông minh.</div>
+                        <div class="vrg-badge-list">
+                            <span class="vrg-mini-badge">📷 Face ID</span>
+                            <span class="vrg-mini-badge">📍 GPS</span>
+                            <span class="vrg-mini-badge">🔍 Kiểm tra</span>
+                        </div>
+                    </div>
+                    <div class="vrg-card-link">Truy cập ngay →</div>
+                </div>
+
+                <div class="vrg-app-card card-teal" onclick="navigateToApp('vuoncay')" style="cursor:pointer;">
+                    <div>
+                        <div class="vrg-card-icon">🌿</div>
+                        <div class="vrg-card-title">Quản Lý Vườn Cây</div>
+                        <div class="vrg-card-desc">Quản lý vườn cao su, bản đồ GIS, theo dõi sản lượng và năng suất theo lô.</div>
+                        <div class="vrg-badge-list">
+                            <span class="vrg-mini-badge">🗺️ Bản đồ GIS</span>
+                            <span class="vrg-mini-badge">📊 Sản lượng</span>
+                            <span class="vrg-mini-badge">🌳 Lô cao su</span>
+                        </div>
+                    </div>
+                    <div class="vrg-card-link">Truy cập ngay →</div>
+                </div>
+
+                <div class="vrg-app-card card-lime" onclick="navigateToApp('sanxuat')" style="cursor:pointer;">
+                    <div>
+                        <div class="vrg-card-icon">🏭</div>
+                        <div class="vrg-card-title">Quản Lý Sản Xuất</div>
+                        <div class="vrg-card-desc">Quản lý vườn cây EUDR, tiếp nhận nguyên liệu, chế biến MES, KCS/Lab, đóng gói kho.</div>
+                        <div class="vrg-badge-list">
+                            <span class="vrg-mini-badge">🌿 EUDR</span>
+                            <span class="vrg-mini-badge">⚖️ Cân/DRC</span>
+                            <span class="vrg-mini-badge">🔬 KCS</span>
+                        </div>
+                    </div>
+                    <div class="vrg-card-link">Truy cập ngay →</div>
+                </div>
+
+                <div class="vrg-app-card card-cyan" onclick="navigateToApp('chatluong')" style="cursor:pointer;">
+                    <div>
+                        <div class="vrg-card-icon">🔬</div>
+                        <div class="vrg-card-title">Quản Lý Chất Lượng</div>
+                        <div class="vrg-card-desc">Kiểm nghiệm mủ cao su ISO 17025. SVR theo TCCS 112, Latex theo TCCS 114, thiết bị đo.</div>
+                        <div class="vrg-badge-list">
+                            <span class="vrg-mini-badge">🧪 ISO 17025</span>
+                            <span class="vrg-mini-badge">📦 SVR</span>
+                            <span class="vrg-mini-badge">💧 Latex</span>
+                        </div>
+                    </div>
+                    <div class="vrg-card-link">Truy cập ngay →</div>
+                </div>
+
+                <div class="vrg-app-card card-sky" onclick="navigateToApp('thoitiet')" style="cursor:pointer;">
+                    <div>
+                        <div class="vrg-card-icon">🌤️</div>
+                        <div class="vrg-card-title">Dự Báo Thời Tiết</div>
+                        <div class="vrg-card-desc">Dự báo thời tiết ECMWF cho 17.000 ha cao su. Cảnh báo mưa, gió để bảo vệ mủ.</div>
+                        <div class="vrg-badge-list">
+                            <span class="vrg-mini-badge">🌧️ Cảnh báo mưa</span>
+                            <span class="vrg-mini-badge">🗺️ Bản đồ</span>
+                            <span class="vrg-mini-badge">📊 Dự báo 7 ngày</span>
+                        </div>
+                    </div>
+                    <div class="vrg-card-link">Truy cập ngay →</div>
+                </div>
+
+                <div class="vrg-app-card card-blue" onclick="navigateToApp('baocao')" style="cursor:pointer;">
+                    <div>
+                        <div class="vrg-card-icon">📈</div>
+                        <div class="vrg-card-title">Báo Cáo Thông Minh</div>
+                        <div class="vrg-card-desc">Nhập liệu báo cáo từ Excel, dashboard trực quan, tổng hợp số liệu ngày/tuần/tháng.</div>
+                        <div class="vrg-badge-list">
+                            <span class="vrg-mini-badge">📥 Nhập Excel</span>
+                            <span class="vrg-mini-badge">📊 Dashboard</span>
+                            <span class="vrg-mini-badge">📋 Báo cáo</span>
+                        </div>
+                    </div>
+                    <div class="vrg-card-link">Truy cập ngay →</div>
+                </div>
+
+                <div class="vrg-app-card card-amber" onclick="navigateToApp('thongbao')" style="cursor:pointer;">
+                    <div>
+                        <div class="vrg-card-icon">🔔</div>
+                        <div class="vrg-card-title">Quản Lý Thông Báo</div>
+                        <div class="vrg-card-desc">Gửi thông báo đến nhân viên, cài đặt nhắc nhở, quản lý thông báo hệ thống.</div>
+                        <div class="vrg-badge-list">
+                            <span class="vrg-mini-badge">📢 Gửi thông báo</span>
+                            <span class="vrg-mini-badge">⚙️ Cài đặt</span>
+                            <span class="vrg-mini-badge">📊 Lịch sử</span>
+                        </div>
+                    </div>
+                    <div class="vrg-card-link">Truy cập ngay →</div>
+                </div>
+
+                <div class="vrg-app-card card-purple" onclick="navigateToApp('phanquyen')" style="cursor:pointer;">
+                    <div>
+                        <div class="vrg-card-icon">🔐</div>
+                        <div class="vrg-card-title">Quản Lý Phân Quyền</div>
+                        <div class="vrg-card-desc">Gán quyền cho users theo từng ứng dụng, quản lý role definitions, phân quyền đa cấp.</div>
+                        <div class="vrg-badge-list">
+                            <span class="vrg-mini-badge">👥 Users</span>
+                            <span class="vrg-mini-badge">🎭 Roles</span>
+                            <span class="vrg-mini-badge">🏢 Scopes</span>
+                        </div>
+                    </div>
+                    <div class="vrg-card-link">Truy cập ngay →</div>
+                </div>
+
+            </div> <div class="logout-section">
+                <button class="change-pwd-btn" onclick="alert('Tính năng đổi mật khẩu sẽ cấu hình sau!')">🔑 Đổi mật khẩu</button>
+                <button class="logout-btn" onclick="Auth.logout()">🚪 Đăng xuất</button>
+            </div>
+
+            <div class="selector-footer">
+                <p>Copyright © 2026 by RRIV</p>
+            </div>
+
+        </div>
+    </div>
+    <div id="footerCopyright" class="copyright">Copyright © 2025 by RRIV</div>
+
+    <script src="{{ url_for('static', filename='js/utils/config.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/services/SupabaseService.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/services/FirestoreService.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/modules/auth.js') }}"></script>
+    <script>
+        let currentActiveUsername = "";
+        let currentUser = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const restored = Auth.restoreSession();
+            if (restored) {
+                currentUser = restored;
+                showFinalDashboard({ user: restored });
+            }
+        });
+
+        // CHẠY CÁCH 1: GỬI THÔNG TIN ĐĂNG NHẬP THẲNG QUA MẬT KHẨU KHÔNG CẦN OTP
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+
+            document.getElementById('loadingScreen').style.display = 'flex';
+
+            try {
+                const response = await fetch('/api/login-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const result = await response.json();
+
+                setTimeout(() => {
+                    document.getElementById('loadingScreen').style.display = 'none';
+                    if (response.ok && result.success) {
+                        currentUser = {
+                            id: result.user.id || result.user.username,
+                            uid: result.user.id || result.user.username,
+                            username: result.user.username,
+                            name: result.user.name,
+                            role: result.user.role || 'user',
+                            department: result.user.department || '',
+                            email: result.user.email || '',
+                            systemRoles: result.user.systemRoles || [],
+                            isSuperAdmin: result.user.isSuperAdmin || false,
+                            appRolesCache: result.user.appRolesCache || {}
+                        };
+                        localStorage.setItem('userSession', JSON.stringify({ user: currentUser, loginAt: Date.now() }));
+                        localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                        showFinalDashboard(result);
+                    } else {
+                        alert("❌ Đăng nhập thất bại: " + result.message);
+                    }
+                }, 800);
+            } catch (err) {
+                document.getElementById('loadingScreen').style.display = 'none';
+                alert("❌ Lỗi mạng: Không thể kết nối với server Flask!");
+            }
+        });
+
+        // CHẠY CÁCH 2 - BƯỚC 1: QUÊN MẬT KHẨU -> GỌI SERVER KIỂM TRA BẢNG EMPLOYEE & PHÁT EMAIL
+        async function switchToOtpMode() {
+            const username = document.getElementById('username').value.trim();
+            if (!username) {
+                alert("⚠️ Vui lòng điền tên Tài khoản vào ô trống trước để hệ thống dò tìm hòm thư!");
+                return;
+            }
+
+            document.getElementById('loadingScreen').style.display = 'flex';
+
+            try {
+                const response = await fetch('/api/request-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username })
+                });
+                const result = await response.json();
+
+                setTimeout(() => {
+                    document.getElementById('loadingScreen').style.display = 'none';
+                    if (response.ok && result.success) {
+                        currentActiveUsername = result.username;
+                        document.getElementById('otpEmailView').textContent = result.email;
+                        
+                        // Chuyển đổi trạng thái màn hình sang Form nhập mã 6 số
+                        document.getElementById('loginScreen').style.display = 'none';
+                        document.getElementById('otpScreen').style.display = 'block';
+                    } else {
+                        alert("❌ " + result.message);
+                    }
+                }, 800);
+            } catch (err) {
+                document.getElementById('loadingScreen').style.display = 'none';
+                alert("❌ Gặp lỗi trong quá trình kích hoạt tổng đài gửi mã OTP!");
+            }
+        }
+
+        // CHẠY CÁCH 2 - BƯỚC 2: GÕ MÃ TỪ EMAIL GỬI VỀ ĐỂ ĐƯỢC DUYỆT VÀO LUÔN
+        async function verifyOtp() {
+            const otpCode = document.getElementById('otpInput').value.trim();
+            if (otpCode.length !== 6) { 
+                alert("❌ Vui lòng điền đầy đủ 6 chữ số của mã xác nhận OTP!"); 
+                return; 
+            }
+
+            document.getElementById('loadingScreen').style.display = 'flex';
+
+            try {
+                const response = await fetch('/api/verify-login-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: currentActiveUsername, otpCode })
+                });
+                const result = await response.json();
+
+                setTimeout(() => {
+                    document.getElementById('loadingScreen').style.display = 'none';
+                    if (response.ok && result.success) {
+                        currentUser = {
+                            id: result.user.id || result.user.username,
+                            uid: result.user.id || result.user.username,
+                            username: result.user.username,
+                            name: result.user.name,
+                            role: result.user.role || 'user',
+                            department: result.user.department || '',
+                            email: result.user.email || '',
+                            systemRoles: result.user.systemRoles || [],
+                            isSuperAdmin: result.user.isSuperAdmin || false,
+                            appRolesCache: result.user.appRolesCache || {}
+                        };
+                        localStorage.setItem('userSession', JSON.stringify({ user: currentUser, loginAt: Date.now() }));
+                        localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                        showFinalDashboard(result);
+                    } else {
+                        alert("❌ Xác thực thất bại: " + result.message);
+                    }
+                }, 800);
+            } catch (err) {
+                document.getElementById('loadingScreen').style.display = 'none';
+                alert("❌ Lỗi đường truyền kết nối xác thực mã!");
+            }
+        }
+
+        function showFinalDashboard(result) {
+    // Ẩn khung đăng nhập
+    document.getElementById('authContainer').style.display = 'none';
+    if(document.getElementById('footerCopyright')) {
+        document.getElementById('footerCopyright').style.display = 'none';
+    }
+    
+    // Gán tên nhân viên động từ database vào dòng chào mừng
+    document.getElementById('welcomeUser').textContent = result.user.name;
+
+    // Bật màn hình Dashboard chính vừa tạo ở trên lên
+    document.getElementById('dashboardScreen').style.display = 'block';
+
+    if (typeof RrivPWA !== 'undefined') {
+        RrivPWA.showInstallBanner();
+    }
+}
+
+        function cancelOtp() {
+            document.getElementById('otpInput').value = '';
+            document.getElementById('otpScreen').style.display = 'none';
+            document.getElementById('loginScreen').style.display = 'block';
+            currentActiveUsername = "";
+        }
+
+function navigateToApp(appName) {
+    if (!currentUser && !Auth.restoreSession()) {
+        alert('Vui lòng đăng nhập trước!');
+        return;
+    }
+    const route = (Config.APP_ROUTES && Config.APP_ROUTES[appName]) || ('/app/' + appName);
+    window.location.href = route;
+}
+
+    </script>
+</body>
+</html>

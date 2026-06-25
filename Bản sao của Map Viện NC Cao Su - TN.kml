@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Bản sao của Map Viện NC Cao Su - TN</name>
+    <description>bản đồ hiện trang tơi thơi điêm 5/2025</description>
+    <NetworkLink>
+      <name>Bản sao của Map Viện NC Cao Su - TN</name>
+      <Link>
+        <href><![CDATA[https://www.google.com/maps/d/u/0/kml?forcekml=1&mid=1ntvA9UbDSfu9WlbBYfqe98hxkzcy3pQ]]></href>
+      </Link>
+    </NetworkLink>
+  </Document>
+</kml>

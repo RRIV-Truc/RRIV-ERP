@@ -1,0 +1,3 @@
+-- Đã gộp vào seed-demo-harvest.sql (20 CN + 18 phần cạo)
+-- Chạy file đó trong Supabase SQL Editor:
+--   supabase/seed-demo-harvest.sql

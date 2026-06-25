@@ -1,0 +1,20 @@
+{
+  "name": "Quản lý Vườn Cây - RRIV",
+  "short_name": "Vườn Cây RRIV",
+  "description": "Hệ thống quản lý vườn cao su RRIV",
+  "start_url": "/app/vuoncay",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#22c55e",
+  "icons": [
+    {
+      "src": "/static/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "lang": "vi",
+  "scope": "/"
+}

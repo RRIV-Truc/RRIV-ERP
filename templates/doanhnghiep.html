@@ -1,0 +1,2968 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+{% include 'includes/rriv_core.html' %}
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Quản trị doanh nghiệp - RRIV</title>
+<meta name="theme-color" content="#7c3aed">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/logo.png">
+
+<!-- Chart.js with fallback -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+if (typeof Chart === 'undefined') {
+  document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"><\/script>');
+}
+</script>
+
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  min-height: 100vh;
+  color: #e2e8f0;
+}
+
+/* Header */
+.app-header {
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(124,58,237,0.3);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.app-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.app-title .icon {
+  font-size: 28px;
+}
+.app-title h1 {
+  font-size: 24px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0;
+}
+.app-subtitle {
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+  margin-top: 4px;
+}
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, #1e3a5f, #2d4a6f);
+  padding: 10px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(124,58,237,0.2);
+}
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.user-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.user-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: #fff;
+}
+.user-position {
+  font-size: 10px;
+  color: #93c5fd;
+}
+.user-department {
+  font-size: 10px;
+  color: rgba(255,255,255,0.6);
+}
+.user-concurrent {
+  font-size: 9px;
+  color: #fbbf24;
+  font-style: italic;
+}
+.btn-home {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  border: none;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+.btn-home:hover {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  transform: translateY(-1px);
+}
+
+/* Content */
+.app-content {
+  padding: 16px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.stat-card {
+  border: none;
+  border-radius: 12px;
+  padding: 12px;
+  position: relative;
+  overflow: hidden;
+}
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+  pointer-events: none;
+}
+.stat-card.purple {
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  box-shadow: 0 4px 15px rgba(139,92,246,0.3);
+}
+.stat-card.blue {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  box-shadow: 0 4px 15px rgba(59,130,246,0.3);
+}
+.stat-card.green {
+  background: linear-gradient(135deg, #22c55e, #15803d);
+  box-shadow: 0 4px 15px rgba(34,197,94,0.3);
+}
+.stat-card.orange {
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  box-shadow: 0 4px 15px rgba(249,115,22,0.3);
+}
+.stat-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+.stat-card.purple .stat-icon { background: rgba(255,255,255,0.2); }
+.stat-card.blue .stat-icon { background: rgba(255,255,255,0.2); }
+.stat-card.green .stat-icon { background: rgba(255,255,255,0.2); }
+.stat-card.orange .stat-icon { background: rgba(255,255,255,0.2); }
+.stat-card h3 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #f8fafc;
+  margin-bottom: 2px;
+}
+.stat-card p {
+  color: rgba(255,255,255,0.85);
+  font-size: 11px;
+}
+.stat-trend {
+  font-size: 10px;
+  margin-top: 6px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  display: inline-block;
+}
+.stat-trend.up { background: rgba(255,255,255,0.2); color: #bbf7d0; }
+.stat-trend.down { background: rgba(255,255,255,0.2); color: #fecaca; }
+
+/* Stat Card Extended */
+.stat-card.extended {
+  padding: 10px 12px;
+}
+.stat-card.extended h3 {
+  font-size: 24px;
+  margin-bottom: 1px;
+}
+.stat-sub {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255,255,255,0.2);
+}
+.stat-sub-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  margin-bottom: 2px;
+  color: rgba(255,255,255,0.85);
+}
+.stat-sub-row:last-child { margin-bottom: 0; }
+.stat-sub-value { font-weight: 600; color: #fff; }
+.stat-sub-value.green { color: #bbf7d0; }
+.stat-sub-value.red { color: #fecaca; }
+.stat-sub-value.blue { color: #bfdbfe; }
+.stat-sub-value.pink { color: #fbcfe8; }
+.stat-sub-value.yellow { color: #fef08a; }
+.stat-expand {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px dashed rgba(255,255,255,0.25);
+}
+.stat-expand-title {
+  font-size: 8px;
+  color: rgba(255,255,255,0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 3px;
+}
+
+/* Section Title */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 24px 0 16px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+.section-title .icon {
+  font-size: 20px;
+}
+
+/* KPI Cards Grid */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.kpi-card {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  border: none;
+  border-radius: 14px;
+  padding: 12px 14px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(59,130,246,0.3);
+}
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+  pointer-events: none;
+}
+.kpi-card.green {
+  background: linear-gradient(135deg, #22c55e, #15803d);
+  box-shadow: 0 4px 15px rgba(34,197,94,0.3);
+}
+.kpi-card.purple {
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  box-shadow: 0 4px 15px rgba(139,92,246,0.3);
+}
+.kpi-card.orange {
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  box-shadow: 0 4px 15px rgba(249,115,22,0.3);
+}
+.kpi-card.red {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  box-shadow: 0 4px 15px rgba(239,68,68,0.3);
+}
+.kpi-label {
+  font-size: 11px;
+  color: rgba(255,255,255,0.85);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+}
+.kpi-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.1;
+}
+.kpi-detail {
+  font-size: 10px;
+  color: rgba(255,255,255,0.7);
+  margin-top: 2px;
+}
+.kpi-sub {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.2);
+}
+.kpi-sub-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  margin-bottom: 3px;
+}
+.kpi-sub-label { color: rgba(255,255,255,0.7); }
+.kpi-sub-value { font-weight: 600; color: #fff; }
+.kpi-sub-value.green { color: #bbf7d0; }
+.kpi-sub-value.yellow { color: #fef08a; }
+.kpi-sub-value.cyan { color: #67e8f9; }
+.kpi-sub-value.red { color: #fca5a5; }
+
+/* AI Prediction Section */
+.ai-prediction-section {
+  margin-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  padding-top: 8px;
+}
+.ai-prediction-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  padding: 6px 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #a78bfa;
+  transition: color 0.2s;
+}
+.ai-prediction-header:hover {
+  color: #c4b5fd;
+}
+.ai-toggle-icon {
+  font-size: 10px;
+  transition: transform 0.2s;
+}
+.ai-toggle-icon.open {
+  transform: rotate(180deg);
+}
+.ai-prediction-content {
+  padding: 8px 0;
+}
+.ai-prediction-result {
+  background: rgba(124,58,237,0.15);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.ai-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #a78bfa;
+}
+.spinner-small {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(167,139,250,0.3);
+  border-top-color: #a78bfa;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.ai-metric {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.ai-metric:last-child { border-bottom: none; }
+.ai-metric-label { color: rgba(255,255,255,0.7); }
+.ai-metric-value { font-weight: 600; }
+.ai-metric-value.high { color: #4ade80; }
+.ai-metric-value.medium { color: #fbbf24; }
+.ai-metric-value.low { color: #f87171; }
+.ai-summary {
+  margin-top: 8px;
+  padding: 8px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 6px;
+  font-size: 10px;
+  color: rgba(255,255,255,0.8);
+}
+
+@media (max-width: 1024px) {
+  .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 640px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .kpi-value { font-size: 20px; }
+  .kpi-card { padding: 10px 12px; }
+}
+
+/* Charts Grid */
+.charts-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.chart-card {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px;
+  padding: 20px;
+}
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.chart-title {
+  color: #f8fafc;
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chart-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.select-filter {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+  padding: 6px 12px;
+  color: #e2e8f0;
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+}
+.select-filter:hover, .select-filter:focus {
+  border-color: rgba(124,58,237,0.5);
+}
+.select-filter option {
+  background: #1e293b;
+  color: #e2e8f0;
+}
+.year-label {
+  font-size: 11px;
+  color: #94a3b8;
+  background: rgba(124,58,237,0.15);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+.chart-container {
+  position: relative;
+  height: 300px;
+}
+
+/* Chart Analysis */
+.chart-analysis {
+  margin-top: 16px;
+  padding: 14px;
+  background: rgba(124,58,237,0.1);
+  border-radius: 12px;
+  border: 1px solid rgba(124,58,237,0.2);
+}
+.analysis-title {
+  font-weight: 600;
+  color: #a855f7;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.analysis-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+.analysis-icon {
+  width: 18px;
+  text-align: center;
+  font-size: 14px;
+}
+.highlight-info { color: #60a5fa; font-weight: 600; }
+.highlight-good { color: #22c55e; font-weight: 600; }
+.highlight-bad { color: #ef4444; font-weight: 600; }
+
+/* Activity Card */
+.activity-card {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px;
+  padding: 20px;
+}
+.activity-card h3 {
+  color: #f8fafc;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.activity-list {
+  max-height: 350px;
+  overflow-y: auto;
+}
+.activity-list::-webkit-scrollbar {
+  width: 4px;
+}
+.activity-list::-webkit-scrollbar-track {
+  background: rgba(255,255,255,0.05);
+  border-radius: 4px;
+}
+.activity-list::-webkit-scrollbar-thumb {
+  background: rgba(124,58,237,0.3);
+  border-radius: 4px;
+}
+.activity-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.05);
+  transition: all 0.2s;
+}
+.activity-item:hover {
+  background: rgba(124,58,237,0.1);
+  border-color: rgba(124,58,237,0.2);
+}
+.activity-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.activity-icon.vpp { background: rgba(59,130,246,0.2); }
+.activity-icon.dieuxe { background: rgba(16,185,129,0.2); }
+.activity-icon.vanban { background: rgba(124,58,237,0.2); }
+.activity-content {
+  flex: 1;
+  min-width: 0;
+}
+.activity-content h4 {
+  font-size: 13px;
+  color: #f1f5f9;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.activity-content p {
+  font-size: 11px;
+  color: #64748b;
+}
+.activity-time {
+  font-size: 10px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+/* Loading */
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 150px;
+}
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(124,58,237,0.2);
+  border-top-color: #a855f7;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text {
+  margin-top: 12px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 14px 20px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 13px;
+  z-index: 10000;
+  animation: slideIn 0.3s ease;
+}
+.toast.success { background: linear-gradient(135deg, #059669, #10b981); }
+.toast.error { background: linear-gradient(135deg, #dc2626, #ef4444); }
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* Modal */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+}
+.modal-content {
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  border: 1px solid rgba(124,58,237,0.3);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 750px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #f8fafc;
+}
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.close-btn:hover {
+  color: #f8fafc;
+}
+.modal-body {
+  padding: 20px;
+}
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 20px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+}
+.btn-cancel {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  padding: 10px 20px;
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-cancel:hover {
+  background: rgba(255,255,255,0.15);
+  color: #f8fafc;
+}
+.btn-save {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-save:hover {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  transform: translateY(-1px);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .app-header {
+    padding: 12px 16px;
+  }
+  .app-title h1 {
+    font-size: 16px;
+  }
+  .user-info {
+    display: none;
+  }
+  .app-content {
+    padding: 12px;
+  }
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .stat-card {
+    padding: 14px;
+  }
+  .stat-card h3 {
+    font-size: 22px;
+  }
+  .stat-card p {
+    font-size: 11px;
+  }
+  .chart-card {
+    padding: 14px;
+  }
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .chart-container {
+    height: 250px;
+  }
+  .activity-card {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .stat-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 18px;
+  }
+  .stat-card h3 {
+    font-size: 20px;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="app-header">
+  <div class="app-title">
+    <span class="icon">📊</span>
+    <div>
+      <h1>Quản trị doanh nghiệp</h1>
+      <p class="app-subtitle">Dashboard Analytics - RRIV</p>
+    </div>
+  </div>
+  <div class="user-info">
+    <div class="user-avatar" id="userAvatar">?</div>
+    <div class="user-details">
+      <span class="user-name" id="userName">Đang tải...</span>
+      <span class="user-position" id="userPosition">--</span>
+      <span class="user-concurrent" id="userConcurrent" style="display:none"></span>
+      <span class="user-department" id="userDepartment">--</span>
+    </div>
+    <button class="btn-home" onclick="goBack()">Quay về trang chủ</button>
+  </div>
+</header>
+
+<!-- Content -->
+<div class="app-content">
+  <!-- Stats Overview -->
+  <div class="stats-grid">
+    <div class="stat-card purple extended">
+      <div class="stat-icon">👥</div>
+      <h3 id="statPersonnel">0</h3>
+      <p>Tổng nhân sự</p>
+      <div class="stat-sub">
+        <div class="stat-sub-row">
+          <span>✅ Đang làm:</span>
+          <span class="stat-sub-value green" id="statActive">0</span>
+        </div>
+        <div class="stat-sub-row">
+          <span>⛔ Nghỉ việc:</span>
+          <span class="stat-sub-value red" id="statInactive">0</span>
+        </div>
+        <div class="stat-sub-row">
+          <span>👨 Nam / 👩 Nữ:</span>
+          <span class="stat-sub-value"><span class="blue" id="statMale">0</span> / <span class="pink" id="statFemale">0</span></span>
+        </div>
+      </div>
+      <div class="stat-expand">
+        <div class="stat-expand-title">📅 12 tháng gần nhất</div>
+        <div class="stat-sub-row">
+          <span>🆕 Tuyển mới:</span>
+          <span class="stat-sub-value green" id="statNewHires">0</span>
+        </div>
+        <div class="stat-sub-row">
+          <span>📤 Nghỉ việc:</span>
+          <span class="stat-sub-value red" id="statResigned">0</span>
+        </div>
+        <div class="stat-sub-row">
+          <span>📊 Turnover:</span>
+          <span class="stat-sub-value yellow" id="statTurnover">0%</span>
+        </div>
+      </div>
+    </div>
+    <div class="stat-card blue extended">
+      <div class="stat-icon">📦</div>
+      <h3 id="statVpp">0</h3>
+      <p>Đơn VPP tháng này</p>
+      <div class="stat-sub">
+        <div class="stat-sub-row">
+          <span>⏳ Chờ duyệt:</span>
+          <span class="stat-sub-value yellow" id="vppPending">0</span>
+        </div>
+        <div class="stat-sub-row">
+          <span>✅ Đã duyệt:</span>
+          <span class="stat-sub-value green" id="vppApproved">0</span>
+        </div>
+        <div class="stat-sub-row">
+          <span>📤 Đã xuất kho:</span>
+          <span class="stat-sub-value blue" id="vppIssued">0</span>
+        </div>
+      </div>
+      <div class="stat-expand">
+        <div class="stat-expand-title">📅 12 tháng gần nhất</div>
+        <div class="stat-sub-row">
+          <span>📊 Tổng đơn:</span>
+          <span class="stat-sub-value" id="vppYearTotal">0</span>
+        </div>
+        <div class="stat-sub-row">
+          <span>✅ Tỷ lệ duyệt:</span>
+          <span class="stat-sub-value green" id="vppApprovalRate">0%</span>
+        </div>
+        <div class="stat-sub-row">
+          <span>📈 TB/tháng:</span>
+          <span class="stat-sub-value yellow" id="vppAvgMonth">0</span>
+        </div>
+      </div>
+    </div>
+    <div class="stat-card green extended">
+      <div class="stat-icon">🚗</div>
+      <h3 id="statVehicle">0</h3>
+      <p>Lượt điều xe tháng này</p>
+      <div class="stat-sub">
+        <div class="stat-sub-row">
+          <span>⏳ Chờ duyệt:</span>
+          <span class="stat-sub-value yellow" id="vehiclePending">0</span>
+        </div>
+        <div class="stat-sub-row">
+          <span>✅ Đã duyệt:</span>
+          <span class="stat-sub-value green" id="vehicleApproved">0</span>
+        </div>
+        <div class="stat-sub-row">
+          <span>🏁 Hoàn thành:</span>
+          <span class="stat-sub-value blue" id="vehicleCompleted">0</span>
+        </div>
+      </div>
+      <div class="stat-expand">
+        <div class="stat-expand-title">📅 12 tháng gần nhất</div>
+        <div class="stat-sub-row">
+          <span>📊 Tổng lượt:</span>
+          <span class="stat-sub-value" id="vehicleYearTotal">0</span>
+        </div>
+        <div class="stat-sub-row">
+          <span>✅ Tỷ lệ duyệt:</span>
+          <span class="stat-sub-value green" id="vehicleApprovalRate">0%</span>
+        </div>
+        <div class="stat-sub-row">
+          <span>📈 TB/tháng:</span>
+          <span class="stat-sub-value yellow" id="vehicleAvgMonth">0</span>
+        </div>
+      </div>
+    </div>
+    <div class="stat-card orange">
+      <div class="stat-icon">📋</div>
+      <h3 id="statDocument">0</h3>
+      <p>Văn bản mới</p>
+      <span class="stat-trend up" id="docTrend">+0%</span>
+    </div>
+  </div>
+
+  <!-- Vườn cây KPIs -->
+  <div class="section-title">
+    <span class="icon">🌳</span>
+    <span>Thống kê Vườn cây</span>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">🏞️ Diện tích</div>
+      <div class="kpi-value" id="vcTotalArea">0</div>
+      <div class="kpi-detail">ha vườn cây</div>
+      <div class="kpi-sub">
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">🌿 KD:</span>
+          <span class="kpi-sub-value green" id="vcKdArea">0 ha</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">🌱 KTCB:</span>
+          <span class="kpi-sub-value yellow" id="vcKtcbArea">0 ha</span>
+        </div>
+      </div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">📍 Số lô</div>
+      <div class="kpi-value" id="vcTotalLots">0</div>
+      <div class="kpi-detail">tổng số lô</div>
+      <div class="kpi-sub">
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">🌿 KD:</span>
+          <span class="kpi-sub-value green" id="vcKdLots">0</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">🌱 KTCB:</span>
+          <span class="kpi-sub-value yellow" id="vcKtcbLots">0</span>
+        </div>
+      </div>
+    </div>
+    <div class="kpi-card purple">
+      <div class="kpi-label">📊 Năng suất BQ <span id="vcYieldMonth" style="font-size:10px;color:#a5b4fc"></span></div>
+      <div class="kpi-value" id="vcAvgYield">0.00</div>
+      <div class="kpi-detail">kg/ha/ngày</div>
+      <div class="kpi-sub">
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">🏆 Cao nhất:</span>
+          <span class="kpi-sub-value green" id="vcHighestYield">--</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">📉 Thấp nhất:</span>
+          <span class="kpi-sub-value yellow" id="vcLowestYield">--</span>
+        </div>
+      </div>
+    </div>
+    <div class="kpi-card orange">
+      <div class="kpi-label">🧪 DRC BQ</div>
+      <div class="kpi-value" id="vcAvgDrc">0%</div>
+      <div class="kpi-detail">TB năm</div>
+      <div class="kpi-sub">
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">🏆 Cao nhất:</span>
+          <span class="kpi-sub-value green" id="vcHighestDrc">--</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">📉 Thấp nhất:</span>
+          <span class="kpi-sub-value yellow" id="vcLowestDrc">--</span>
+        </div>
+      </div>
+    </div>
+    <div class="kpi-card red">
+      <div class="kpi-label">⚠️ Cảnh báo</div>
+      <div class="kpi-value" id="vcTotalAlerts">0</div>
+      <div class="kpi-detail">cần xử lý</div>
+      <div class="kpi-sub">
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">🕐 Lâu nhất:</span>
+          <span class="kpi-sub-value yellow" id="vcOldestAlert">--</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">🆕 Mới nhất:</span>
+          <span class="kpi-sub-value green" id="vcNewestAlert">--</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI Cards bổ sung -->
+  <div class="section-title">
+    <span class="icon">📈</span>
+    <span>Chỉ số bổ sung</span>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">💰 Doanh thu</div>
+      <div class="kpi-value" id="kpiRevenue">--</div>
+      <div class="kpi-detail">triệu đồng</div>
+      <div class="kpi-sub">
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">📅 Tháng trước:</span>
+          <span class="kpi-sub-value" id="kpiRevenuePrev">--</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">📊 Tăng/Giảm:</span>
+          <span class="kpi-sub-value green" id="kpiRevenueChange">--</span>
+        </div>
+      </div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">📦 Tồn kho</div>
+      <div class="kpi-value" id="kpiInventory">--</div>
+      <div class="kpi-detail">sản phẩm</div>
+      <div class="kpi-sub">
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">🔺 Nhập:</span>
+          <span class="kpi-sub-value green" id="kpiInvIn">--</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">🔻 Xuất:</span>
+          <span class="kpi-sub-value yellow" id="kpiInvOut">--</span>
+        </div>
+      </div>
+    </div>
+    <div class="kpi-card purple">
+      <div class="kpi-label">📝 Hợp đồng</div>
+      <div class="kpi-value" id="kpiContracts">--</div>
+      <div class="kpi-detail">hợp đồng</div>
+      <div class="kpi-sub">
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">✅ Hoàn thành:</span>
+          <span class="kpi-sub-value green" id="kpiContractDone">--</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">⏳ Đang thực hiện:</span>
+          <span class="kpi-sub-value yellow" id="kpiContractPending">--</span>
+        </div>
+      </div>
+    </div>
+    <div class="kpi-card orange">
+      <div class="kpi-label">🎯 KPI đạt</div>
+      <div class="kpi-value" id="kpiAchieved">--</div>
+      <div class="kpi-detail">% hoàn thành</div>
+      <div class="kpi-sub">
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">🏆 Mục tiêu:</span>
+          <span class="kpi-sub-value" id="kpiTarget">--</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">📊 Thực hiện:</span>
+          <span class="kpi-sub-value green" id="kpiActual">--</span>
+        </div>
+      </div>
+    </div>
+    <div class="kpi-card red">
+      <div class="kpi-label">🔔 Công việc</div>
+      <div class="kpi-value" id="kpiTasks">--</div>
+      <div class="kpi-detail">việc cần làm</div>
+      <div class="kpi-sub">
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">⚡ Ưu tiên cao:</span>
+          <span class="kpi-sub-value yellow" id="kpiTaskHigh">--</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">⏰ Quá hạn:</span>
+          <span class="kpi-sub-value" id="kpiTaskOverdue">--</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Kế hoạch thực hiện -->
+  <div class="section-title">
+    <span class="icon">📋</span>
+    <span>Kế hoạch thực hiện</span>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi-card extended">
+      <div class="kpi-label">🌿 Kế hoạch sản lượng khai thác</div>
+      <div class="kpi-value" id="planProduction">--</div>
+      <div class="kpi-detail">tấn mủ (lũy kế năm)</div>
+      <div class="kpi-sub">
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">🏢 KH Tập đoàn:</span>
+          <span class="kpi-sub-value" id="planCorporateTarget">--</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">📊 % Hoàn thành:</span>
+          <span class="kpi-sub-value green" id="planCorporatePercent">--</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">📈 TB %/ngày:</span>
+          <span class="kpi-sub-value cyan" id="planAvgPerDay">--</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">📅 SL ngày gần nhất:</span>
+          <span class="kpi-sub-value" id="planLastDayProduction">--</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">🔺 Đội cao nhất:</span>
+          <span class="kpi-sub-value green" id="planTopTeam">--</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">🔻 Đội thấp nhất:</span>
+          <span class="kpi-sub-value red" id="planBottomTeam">--</span>
+        </div>
+      </div>
+      <!-- AI Prediction Section -->
+      <div class="ai-prediction-section">
+        <div class="ai-prediction-header" onclick="toggleAIPrediction()">
+          <span>🤖 Dự báo AI</span>
+          <span class="ai-toggle-icon" id="aiToggleIcon">▼</span>
+        </div>
+        <div class="ai-prediction-content" id="aiPredictionContent" style="display:none;">
+          <div class="ai-prediction-result" id="aiPredictionResult">
+            <div class="ai-loading">
+              <div class="spinner-small"></div>
+              <span>Đang phân tích...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">👥 Kế hoạch nhân sự</div>
+      <div class="kpi-value" id="planHR">--</div>
+      <div class="kpi-detail">nhân viên</div>
+      <div class="kpi-sub">
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">📥 Tuyển dụng:</span>
+          <span class="kpi-sub-value green" id="planHRHire">--</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">📤 Điều chuyển:</span>
+          <span class="kpi-sub-value yellow" id="planHRTransfer">--</span>
+        </div>
+      </div>
+    </div>
+    <div class="kpi-card purple">
+      <div class="kpi-label">💵 Kế hoạch tài chính</div>
+      <div class="kpi-value" id="planFinance">--</div>
+      <div class="kpi-detail">triệu đồng</div>
+      <div class="kpi-sub">
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">📊 Ngân sách:</span>
+          <span class="kpi-sub-value" id="planFinanceBudget">--</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">💰 Đã chi:</span>
+          <span class="kpi-sub-value yellow" id="planFinanceSpent">--</span>
+        </div>
+      </div>
+    </div>
+    <div class="kpi-card orange">
+      <div class="kpi-label">🏗️ Kế hoạch đầu tư</div>
+      <div class="kpi-value" id="planInvest">--</div>
+      <div class="kpi-detail">dự án</div>
+      <div class="kpi-sub">
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">✅ Hoàn thành:</span>
+          <span class="kpi-sub-value green" id="planInvestDone">--</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">⏳ Đang triển khai:</span>
+          <span class="kpi-sub-value yellow" id="planInvestOngoing">--</span>
+        </div>
+      </div>
+    </div>
+    <div class="kpi-card red">
+      <div class="kpi-label">🚀 Kế hoạch phát triển</div>
+      <div class="kpi-value" id="planDev">--</div>
+      <div class="kpi-detail">mục tiêu</div>
+      <div class="kpi-sub">
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">🎯 Đạt được:</span>
+          <span class="kpi-sub-value green" id="planDevAchieved">--</span>
+        </div>
+        <div class="kpi-sub-row">
+          <span class="kpi-sub-label">⏰ Còn lại:</span>
+          <span class="kpi-sub-value" id="planDevRemaining">--</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title">📊 So sánh Sản lượng 3 năm (Tấn)</span>
+        <div class="chart-filters">
+          <select id="yearCompareTeam" class="select-filter" onchange="renderYearCompareChart()">
+            <option value="ALL">Tất cả đội</option>
+          </select>
+          <select id="yearCompareMonth" class="select-filter" onchange="renderYearCompareChart()">
+            <option value="ALL">Cả năm</option>
+            <option value="1">Tháng 1</option>
+            <option value="2">Tháng 2</option>
+            <option value="3">Tháng 3</option>
+            <option value="4">Tháng 4</option>
+            <option value="5">Tháng 5</option>
+            <option value="6">Tháng 6</option>
+            <option value="7">Tháng 7</option>
+            <option value="8">Tháng 8</option>
+            <option value="9">Tháng 9</option>
+            <option value="10">Tháng 10</option>
+            <option value="11">Tháng 11</option>
+            <option value="12">Tháng 12</option>
+          </select>
+          <span id="yearCompareLabel" class="year-label">2024 - 2025 - 2026</span>
+        </div>
+      </div>
+      <div class="chart-container" style="height: 320px;">
+        <canvas id="yearCompareChart"></canvas>
+      </div>
+      <div id="yearCompareAnalysis" class="chart-analysis" style="display:none"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title">🥧 Tỷ lệ sản lượng theo đội</span>
+        <div class="chart-filters">
+          <select id="yieldSourceMonth" class="select-filter" onchange="renderYieldSourceChart()">
+            <option value="ALL">Cả năm</option>
+            <option value="1">Tháng 1</option>
+            <option value="2">Tháng 2</option>
+            <option value="3">Tháng 3</option>
+            <option value="4">Tháng 4</option>
+            <option value="5">Tháng 5</option>
+            <option value="6">Tháng 6</option>
+            <option value="7">Tháng 7</option>
+            <option value="8">Tháng 8</option>
+            <option value="9">Tháng 9</option>
+            <option value="10">Tháng 10</option>
+            <option value="11">Tháng 11</option>
+            <option value="12">Tháng 12</option>
+          </select>
+          <select id="yieldSourceYear" class="select-filter" onchange="renderYieldSourceChart()">
+          </select>
+        </div>
+      </div>
+      <div class="chart-container">
+        <canvas id="pieChart"></canvas>
+      </div>
+      <div id="yieldSourceAnalysis" class="chart-analysis" style="display:none"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Firebase Config
+const erpDbConfig = {
+  apiKey: "AIzaSyBCpPDhOKofImy_K8xiV2Mhut_3gbdB1vY",
+  authDomain: "rriv-erp.firebaseapp.com",
+  projectId: "rriv-erp",
+  storageBucket: "rriv-erp.firebasestorage.app",
+  messagingSenderId: "1024381876052",
+  appId: "1:1024381876052:web:150ee86fc411bd14733ac1"
+};
+
+ErpDb.initializeApp(erpDbConfig);
+const auth = ErpDb.auth();
+const db = ErpDb.firestore();
+
+auth.setPersistence(ErpDb.auth.Auth.Persistence.LOCAL);
+
+let currentUser = null;
+let yearCompareChart = null;
+let pieChart = null;
+
+// Màu sắc cho biểu đồ 3 năm
+const YEAR_COLORS = {
+  2024: { bg: 'rgba(59, 130, 246, 0.8)', border: '#3b82f6' },
+  2025: { bg: 'rgba(34, 197, 94, 0.8)', border: '#22c55e' },
+  2026: { bg: 'rgba(249, 115, 22, 0.8)', border: '#f97316' }
+};
+
+function goBack() {
+  if (typeof goBackHome === 'function') goBackHome();
+  else window.location.href = '/';
+}
+
+// Load Personnel Stats (Realtime + 12 tháng gần nhất)
+async function loadPersonnelStats() {
+  try {
+    const now = new Date();
+    const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+
+    // Load tất cả nhân sự
+    const allSnapshot = await db.collection('categoryPersonnel').get();
+
+    let total = 0, active = 0, inactive = 0;
+    let male = 0, female = 0;
+    let newHires = 0, resigned = 0;
+
+    allSnapshot.forEach(doc => {
+      const data = doc.data();
+      total++;
+
+      // Trạng thái
+      const isActive = !data.disabled && data.status !== 'inactive' && data.status !== 'resigned';
+      if (isActive) {
+        active++;
+      } else {
+        inactive++;
+      }
+
+      // Giới tính
+      if (data.gender === 'male') male++;
+      else if (data.gender === 'female') female++;
+
+      // Tuyển mới trong 12 tháng (dựa trên createdAt hoặc ngayVaoLam)
+      const hireDate = data.ngayVaoLam?.toDate?.() || data.createdAt?.toDate?.() || null;
+      if (hireDate && hireDate >= oneYearAgo && isActive) {
+        newHires++;
+      }
+
+      // Nghỉ việc trong 12 tháng (dựa trên updatedAt khi status = inactive/resigned)
+      if (!isActive) {
+        const resignDate = data.ngayNghiViec?.toDate?.() || data.updatedAt?.toDate?.() || null;
+        if (resignDate && resignDate >= oneYearAgo) {
+          resigned++;
+        }
+      }
+    });
+
+    // Tính turnover rate (nghỉ việc / trung bình nhân sự * 100)
+    const avgPersonnel = (total + active) / 2;
+    const turnover = avgPersonnel > 0 ? ((resigned / avgPersonnel) * 100).toFixed(1) : 0;
+
+    // Cập nhật UI
+    document.getElementById('statPersonnel').textContent = total;
+    document.getElementById('statActive').textContent = active;
+    document.getElementById('statInactive').textContent = inactive;
+    document.getElementById('statMale').textContent = male;
+    document.getElementById('statFemale').textContent = female;
+    document.getElementById('statNewHires').textContent = newHires;
+    document.getElementById('statResigned').textContent = resigned;
+    document.getElementById('statTurnover').textContent = turnover + '%';
+
+  } catch (error) {
+    console.error('Error loading personnel stats:', error);
+    document.getElementById('statPersonnel').textContent = '-';
+  }
+}
+
+// Load VPP Stats (Realtime + 12 tháng gần nhất)
+async function loadVppStats() {
+  try {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+
+    // Load tất cả đơn VPP trong 12 tháng
+    const allSnapshot = await db.collection('vppRequests')
+      .where('createdAt', '>=', oneYearAgo)
+      .get();
+
+    let monthTotal = 0, monthPending = 0, monthApproved = 0, monthIssued = 0;
+    let yearTotal = 0, yearApproved = 0, yearIssued = 0;
+
+    allSnapshot.forEach(doc => {
+      const data = doc.data();
+      const createdAt = data.createdAt?.toDate?.() || new Date(data.createdAt);
+      const status = (data.status || '').toLowerCase();
+
+      yearTotal++;
+
+      // Check status - có thể là 'approved', 'duyệt', 'Duyệt', 'Đã duyệt', etc.
+      const isApproved = status.includes('duyệt') || status.includes('approved') ||
+                         status === 'chờ xuất kho' || status === 'đã xuất kho';
+      const isIssued = status.includes('xuất kho') || status.includes('issued') || status === 'đã xuất kho';
+
+      if (isApproved) yearApproved++;
+      if (isIssued) yearIssued++;
+
+      // Thống kê tháng này
+      if (createdAt >= startOfMonth) {
+        monthTotal++;
+
+        const isPending = status.includes('chờ') && !status.includes('xuất kho');
+        if (isPending) monthPending++;
+        if (isApproved && !isIssued) monthApproved++;
+        if (isIssued) monthIssued++;
+      }
+    });
+
+    // Tính tỷ lệ duyệt và trung bình/tháng
+    const approvalRate = yearTotal > 0 ? ((yearApproved / yearTotal) * 100).toFixed(0) : 0;
+    const avgPerMonth = yearTotal > 0 ? (yearTotal / 12).toFixed(1) : 0;
+
+    // Cập nhật UI
+    document.getElementById('statVpp').textContent = monthTotal;
+    document.getElementById('vppPending').textContent = monthPending;
+    document.getElementById('vppApproved').textContent = monthApproved;
+    document.getElementById('vppIssued').textContent = monthIssued;
+    document.getElementById('vppYearTotal').textContent = yearTotal;
+    document.getElementById('vppApprovalRate').textContent = approvalRate + '%';
+    document.getElementById('vppAvgMonth').textContent = avgPerMonth;
+
+  } catch (error) {
+    console.error('Error loading VPP stats:', error);
+    document.getElementById('statVpp').textContent = '-';
+  }
+}
+
+// Load Vehicle Stats (Realtime + 12 tháng gần nhất)
+async function loadVehicleStats() {
+  try {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+
+    // Load tất cả yêu cầu điều xe trong 12 tháng
+    const allSnapshot = await db.collection('dieuxe_requests')
+      .where('createdAt', '>=', oneYearAgo)
+      .get();
+
+    let monthTotal = 0, monthPending = 0, monthApproved = 0, monthCompleted = 0;
+    let yearTotal = 0, yearApproved = 0;
+
+    allSnapshot.forEach(doc => {
+      const data = doc.data();
+      const createdAt = data.createdAt?.toDate?.() || new Date(data.createdAt);
+      const status = (data.status || '').toLowerCase();
+
+      yearTotal++;
+
+      // Check status
+      const isApproved = status.includes('duyệt') || status.includes('approved') ||
+                         status.includes('confirmed') || status.includes('xác nhận') ||
+                         status.includes('hoàn thành') || status.includes('completed');
+      const isCompleted = status.includes('hoàn thành') || status.includes('completed') ||
+                          status.includes('done') || status.includes('finished');
+
+      if (isApproved) yearApproved++;
+
+      // Thống kê tháng này
+      if (createdAt >= startOfMonth) {
+        monthTotal++;
+
+        const isPending = status.includes('chờ') || status.includes('pending') ||
+                          status === '' || status === 'new' || status === 'mới';
+        if (isPending) monthPending++;
+        if (isApproved && !isCompleted) monthApproved++;
+        if (isCompleted) monthCompleted++;
+      }
+    });
+
+    // Tính tỷ lệ duyệt và trung bình/tháng
+    const approvalRate = yearTotal > 0 ? ((yearApproved / yearTotal) * 100).toFixed(0) : 0;
+    const avgPerMonth = yearTotal > 0 ? (yearTotal / 12).toFixed(1) : 0;
+
+    // Cập nhật UI
+    document.getElementById('statVehicle').textContent = monthTotal;
+    document.getElementById('vehiclePending').textContent = monthPending;
+    document.getElementById('vehicleApproved').textContent = monthApproved;
+    document.getElementById('vehicleCompleted').textContent = monthCompleted;
+    document.getElementById('vehicleYearTotal').textContent = yearTotal;
+    document.getElementById('vehicleApprovalRate').textContent = approvalRate + '%';
+    document.getElementById('vehicleAvgMonth').textContent = avgPerMonth;
+
+  } catch (error) {
+    console.error('Error loading vehicle stats:', error);
+    document.getElementById('statVehicle').textContent = '-';
+  }
+}
+
+// Load dashboard stats
+async function loadDashboardStats() {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  try {
+    // Load Personnel Stats riêng
+    loadPersonnelStats();
+
+    // Load VPP Stats riêng
+    loadVppStats();
+
+    // Load Vehicle Stats riêng
+    loadVehicleStats();
+
+    try {
+      const docSnapshot = await db.collection('documents')
+        .where('createdAt', '>=', startOfMonth)
+        .get();
+      document.getElementById('statDocument').textContent = docSnapshot.size;
+    } catch (e) {
+      document.getElementById('statDocument').textContent = '-';
+    }
+  } catch (error) {
+    console.error('Load stats error:', error);
+  }
+}
+
+// Load Garden KPIs từ Firestore và GeoJSON
+async function loadGardenKPIs() {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+
+  try {
+    // 1. Load GeoJSON để tính diện tích và số lô
+    let geoJsonData = null;
+    try {
+      const geoDoc = await db.collection('app_settings').doc('gardenGeoJson').get();
+      if (geoDoc.exists && geoDoc.data().data) {
+        geoJsonData = JSON.parse(geoDoc.data().data);
+      }
+    } catch (e) {
+      console.log('GeoJSON not available');
+    }
+
+    // Tính từ GeoJSON
+    let totalArea = 0, kdArea = 0, ktcbArea = 0;
+    let totalLots = 0, kdLots = 0, ktcbLots = 0;
+
+    if (geoJsonData && geoJsonData.features) {
+      geoJsonData.features.forEach(feature => {
+        const props = feature.properties || {};
+        const area = parseFloat(props.Dientich || props.dientich || props.area || 0);
+        const lotType = (props.Hientrangvuoncay || props.type || props.loai || '').toUpperCase();
+
+        totalArea += area;
+        totalLots++;
+
+        const isKTCB = lotType.includes('KTCB') || lotType.includes('KIEN THIET') || lotType.includes('KIẾN THIẾT');
+        if (isKTCB) {
+          ktcbArea += area;
+          ktcbLots++;
+        } else {
+          kdArea += area;
+          kdLots++;
+        }
+      });
+    }
+
+    document.getElementById('vcTotalArea').textContent = totalArea.toFixed(1);
+    document.getElementById('vcKdArea').textContent = kdArea.toFixed(1) + ' ha';
+    document.getElementById('vcKtcbArea').textContent = ktcbArea.toFixed(1) + ' ha';
+    document.getElementById('vcTotalLots').textContent = totalLots;
+    document.getElementById('vcKdLots').textContent = kdLots;
+    document.getElementById('vcKtcbLots').textContent = ktcbLots;
+
+    // 2. Load Năng suất BQ tháng hiện tại
+    const monthStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+    document.getElementById('vcYieldMonth').textContent = `T${currentMonth}/${currentYear}`;
+
+    const harvestSnapshot = await db.collection('harvestData')
+      .where('month', '==', monthStr)
+      .get();
+
+    // Tính năng suất theo đội
+    const teamYieldData = {};
+    const teamDaysSet = {};
+    const teamAreaKD = {};
+
+    // Lấy diện tích KD từ GeoJSON
+    if (geoJsonData && geoJsonData.features) {
+      geoJsonData.features.forEach(feature => {
+        const props = feature.properties || {};
+        const team = (props.Nongtruong || props.nongtruong || 'Chưa phân').toUpperCase().trim();
+        const area = parseFloat(props.Dientich || props.dientich || 0);
+        const lotType = (props.Hientrangvuoncay || props.type || '').toUpperCase();
+
+        if (!teamAreaKD[team]) teamAreaKD[team] = 0;
+        const isKTCB = lotType.includes('KTCB') || lotType.includes('KIEN THIET') || lotType.includes('KIẾN THIẾT');
+        if (!isKTCB) {
+          teamAreaKD[team] += area;
+        }
+      });
+    }
+
+    harvestSnapshot.forEach(doc => {
+      const data = doc.data();
+      if (!data.tongQKho || data.tongQKho === 0) return;
+      if (!data.importDate) return;
+
+      const team = (data.donVi || 'Khác').trim();
+      if (!teamYieldData[team]) {
+        teamYieldData[team] = 0;
+        teamDaysSet[team] = new Set();
+      }
+      teamYieldData[team] += parseFloat(data.tongQKho) || 0;
+      teamDaysSet[team].add(data.importDate);
+    });
+
+    // Mapping tên đội
+    const teamNameMapping = {
+      'BL': 'BỐ LÁ', 'HH': 'HƯNG HÒA', 'HN': 'HỘI NGHĨA',
+      'TH': 'TÂN HƯNG', 'LU': 'LAI UYÊN', 'NN': 'NHÀ NAI',
+      'BỐ LÁ': 'BL', 'HƯNG HÒA': 'HH', 'HỘI NGHĨA': 'HN',
+      'TÂN HƯNG': 'TH', 'LAI UYÊN': 'LU', 'NHÀ NAI': 'NN'
+    };
+
+    const getAreaKD = (teamName) => {
+      const normalized = teamName.toUpperCase().trim();
+      if (teamAreaKD[normalized] > 0) return teamAreaKD[normalized];
+      const mapped = teamNameMapping[normalized];
+      if (mapped && teamAreaKD[mapped] > 0) return teamAreaKD[mapped];
+      for (const key of Object.keys(teamAreaKD)) {
+        if (key.includes(normalized) || normalized.includes(key)) return teamAreaKD[key];
+      }
+      return 0;
+    };
+
+    const teamYields = [];
+    Object.keys(teamYieldData).forEach(team => {
+      const totalQKho = teamYieldData[team];
+      const numDays = teamDaysSet[team]?.size || 1;
+      const areaKD = getAreaKD(team);
+      const avgPerDay = totalQKho / numDays;
+      const yieldPerHa = areaKD > 0 ? avgPerDay / areaKD : 0;
+      teamYields.push({ team, yield: yieldPerHa });
+    });
+
+    if (teamYields.length > 0) {
+      teamYields.sort((a, b) => b.yield - a.yield);
+      const avgYield = teamYields.reduce((sum, t) => sum + t.yield, 0) / teamYields.length;
+      document.getElementById('vcAvgYield').textContent = avgYield.toFixed(2);
+      document.getElementById('vcHighestYield').textContent = `${teamYields[0].team} (${teamYields[0].yield.toFixed(1)})`;
+      document.getElementById('vcLowestYield').textContent = `${teamYields[teamYields.length - 1].team} (${teamYields[teamYields.length - 1].yield.toFixed(1)})`;
+    }
+
+    // 3. Load DRC BQ năm hiện tại
+    const months = [];
+    for (let m = 1; m <= 12; m++) {
+      months.push(`${currentYear}-${String(m).padStart(2, '0')}`);
+    }
+
+    const drcSnapshot = await db.collection('harvestData')
+      .where('month', 'in', months)
+      .get();
+
+    const teamDrcData = {};
+    drcSnapshot.forEach(doc => {
+      const data = doc.data();
+      if (!data.drc || data.drc === 0) return;
+      const team = (data.donVi || 'Khác').trim();
+      if (!teamDrcData[team]) teamDrcData[team] = { totalDrc: 0, count: 0 };
+      teamDrcData[team].totalDrc += parseFloat(data.drc);
+      teamDrcData[team].count++;
+    });
+
+    const teamAvgDrc = [];
+    Object.entries(teamDrcData).forEach(([team, data]) => {
+      if (data.count > 0) {
+        teamAvgDrc.push({ team, avgDrc: data.totalDrc / data.count });
+      }
+    });
+
+    if (teamAvgDrc.length > 0) {
+      teamAvgDrc.sort((a, b) => b.avgDrc - a.avgDrc);
+      const totalAvgDrc = teamAvgDrc.reduce((sum, t) => sum + t.avgDrc, 0) / teamAvgDrc.length;
+      document.getElementById('vcAvgDrc').textContent = totalAvgDrc.toFixed(1) + '%';
+      document.getElementById('vcHighestDrc').textContent = `${teamAvgDrc[0].team} (${teamAvgDrc[0].avgDrc.toFixed(1)}%)`;
+      document.getElementById('vcLowestDrc').textContent = `${teamAvgDrc[teamAvgDrc.length - 1].team} (${teamAvgDrc[teamAvgDrc.length - 1].avgDrc.toFixed(1)}%)`;
+    }
+
+    // 4. Load Cảnh báo - query cả active và assigned (giống app-vuoncay)
+    const alertsSnapshot = await db.collection('garden_alerts')
+      .where('status', 'in', ['active', 'assigned'])
+      .get();
+
+    let oldestDate = null, newestDate = null;
+    let oldestLot = '--', newestLot = '--';
+
+    alertsSnapshot.forEach(doc => {
+      const data = doc.data();
+      const lotId = data.lotId || data.malo;
+      const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+      if (!oldestDate || createdAt < oldestDate) {
+        oldestDate = createdAt;
+        oldestLot = lotId || '--';
+      }
+      if (!newestDate || createdAt > newestDate) {
+        newestDate = createdAt;
+        newestLot = lotId || '--';
+      }
+    });
+
+    // Đếm số cảnh báo (documents)
+    const alertCount = alertsSnapshot.size;
+    document.getElementById('vcTotalAlerts').textContent = alertCount;
+    document.getElementById('vcOldestAlert').textContent = oldestLot;
+    document.getElementById('vcNewestAlert').textContent = newestLot;
+
+  } catch (error) {
+    console.error('Error loading garden KPIs:', error);
+  }
+}
+
+// Load Production Plan Card - Kế hoạch sản lượng khai thác
+async function loadProductionPlanCard() {
+  try {
+    const currentYear = new Date().getFullYear();
+    const today = new Date();
+    const startOfYear = `${currentYear}-01-01`;
+    const todayStr = today.toISOString().split('T')[0];
+
+    // Helper to normalize team name
+    const normalizeTeamName = (name) => {
+      return (name || '')
+        .toUpperCase()
+        .replace(/^(ĐỘI SẢN XUẤT |ĐỘI |NÔNG TRƯỜNG )/i, '')
+        .trim();
+    };
+
+    // 1. Load corporate plan for current year
+    let corporatePlan = 0;
+    const corpSnapshot = await db.collection('harvestPlans')
+      .where('type', '==', 'corporate')
+      .where('year', '==', currentYear)
+      .limit(1)
+      .get();
+    if (!corpSnapshot.empty) {
+      corporatePlan = corpSnapshot.docs[0].data().khTapDoan || 0;
+    }
+
+    // 2. Load yearly plans per team
+    const teamPlansMap = new Map();
+    const yearlySnapshot = await db.collection('harvestPlans')
+      .where('type', '==', 'yearly')
+      .where('year', '==', currentYear)
+      .get();
+    yearlySnapshot.forEach(doc => {
+      const p = doc.data();
+      const normalized = normalizeTeamName(p.donVi);
+      teamPlansMap.set(normalized, p.khNam || 0);
+    });
+
+    // 3. Load harvest data YTD (from Jan 1 to today)
+    const harvestSnapshot = await db.collection('harvestData')
+      .where('importDate', '>=', startOfYear)
+      .where('importDate', '<=', todayStr)
+      .get();
+
+    // Group by team and calculate totals
+    const teamTotals = new Map();
+    let totalYTD = 0;
+    let lastDate = '';
+    let lastDayTotal = 0;
+    const dailyTotals = new Map();
+
+    harvestSnapshot.forEach(doc => {
+      const data = doc.data();
+      const donViRaw = (data.donVi || '').trim();
+      const donVi = normalizeTeamName(donViRaw);
+      const qkho = data.tongQKho || 0;
+      const importDate = data.importDate || '';
+
+      // Loại trừ nhà máy - chỉ tính đội sản xuất
+      const donViLower = donViRaw.toLowerCase();
+      if (donViLower.includes('nhà máy') || donViLower.includes('nha may') ||
+          donViLower.startsWith('nm ') || donViRaw.startsWith('NM ')) {
+        return; // Skip factory units
+      }
+
+      totalYTD += qkho;
+
+      // Track per team
+      teamTotals.set(donVi, (teamTotals.get(donVi) || 0) + qkho);
+
+      // Track per day (for last day and average)
+      dailyTotals.set(importDate, (dailyTotals.get(importDate) || 0) + qkho);
+
+      // Find latest date
+      if (importDate > lastDate) {
+        lastDate = importDate;
+      }
+    });
+
+    // Get last day production
+    if (lastDate) {
+      lastDayTotal = dailyTotals.get(lastDate) || 0;
+    }
+
+    // Calculate % for each team
+    const teamPercentages = [];
+    teamTotals.forEach((total, team) => {
+      const plan = teamPlansMap.get(team) || 0;
+      const pct = plan > 0 ? (total / (plan * 1000) * 100) : 0;
+      if (plan > 0) {
+        teamPercentages.push({ team, total, plan, pct });
+      }
+    });
+
+    // Sort to find top and bottom
+    teamPercentages.sort((a, b) => b.pct - a.pct);
+    const topTeam = teamPercentages[0] || null;
+    const bottomTeam = teamPercentages[teamPercentages.length - 1] || null;
+
+    // Calculate average %/day from start of current month
+    const startOfMonth = `${currentYear}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+    let monthDays = 0;
+    let monthTotal = 0;
+    dailyTotals.forEach((total, date) => {
+      if (date >= startOfMonth && date <= todayStr) {
+        monthDays++;
+        monthTotal += total;
+      }
+    });
+
+    // Calculate overall % vs corporate plan
+    const corpPercent = corporatePlan > 0 ? (totalYTD / (corporatePlan * 1000) * 100) : 0;
+    const avgPerDay = monthDays > 0 ? (corpPercent / monthDays) : 0;
+
+    // Convert to Tấn for display
+    const totalYTDTan = (totalYTD / 1000).toFixed(2);
+    const lastDayTan = (lastDayTotal / 1000).toFixed(2);
+
+    // Update UI
+    document.getElementById('planProduction').textContent = totalYTDTan;
+    document.getElementById('planCorporateTarget').textContent = corporatePlan > 0 ? `${corporatePlan} tấn` : '--';
+    document.getElementById('planCorporatePercent').textContent = corpPercent > 0 ? `${corpPercent.toFixed(2)}%` : '--';
+    document.getElementById('planAvgPerDay').textContent = avgPerDay > 0 ? `${avgPerDay.toFixed(3)}%` : '--';
+    document.getElementById('planLastDayProduction').textContent = lastDayTotal > 0 ? `${lastDayTan} tấn` : '--';
+
+    if (topTeam) {
+      document.getElementById('planTopTeam').textContent = `${topTeam.team} (${topTeam.pct.toFixed(1)}%)`;
+    }
+    if (bottomTeam && bottomTeam !== topTeam) {
+      document.getElementById('planBottomTeam').textContent = `${bottomTeam.team} (${bottomTeam.pct.toFixed(1)}%)`;
+    }
+
+  } catch (error) {
+    console.error('Error loading production plan card:', error);
+  }
+}
+
+// Toggle AI Prediction section
+let aiPredictionLoaded = false;
+function toggleAIPrediction() {
+  const content = document.getElementById('aiPredictionContent');
+  const icon = document.getElementById('aiToggleIcon');
+
+  if (content.style.display === 'none') {
+    content.style.display = 'block';
+    icon.classList.add('open');
+
+    // Load AI prediction on first open
+    if (!aiPredictionLoaded) {
+      analyzeProductionWithAI();
+      aiPredictionLoaded = true;
+    }
+  } else {
+    content.style.display = 'none';
+    icon.classList.remove('open');
+  }
+}
+
+// AI Analysis for Production Plan - Dựa trên mùa vụ cao su RRIV
+async function analyzeProductionWithAI() {
+  const resultDiv = document.getElementById('aiPredictionResult');
+
+  try {
+    const currentYear = new Date().getFullYear();
+    const year1 = currentYear - 1; // Năm trước
+    const year2 = currentYear - 2; // 2 năm trước
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1;
+    const currentDay = today.getDate();
+
+    // Mùa vụ cao su RRIV:
+    const SEASONAL_FACTORS = {
+      1: 0.03, 2: 0.00, 3: 0.00, 4: 0.06,
+      5: 0.12, 6: 0.14, 7: 0.14, 8: 0.13,
+      9: 0.12, 10: 0.11, 11: 0.09, 12: 0.06
+    };
+
+    // Load corporate plan
+    let corporatePlan = 0;
+    const corpSnapshot = await db.collection('harvestPlans')
+      .where('type', '==', 'corporate')
+      .where('year', '==', currentYear)
+      .limit(1)
+      .get();
+    if (!corpSnapshot.empty) {
+      corporatePlan = corpSnapshot.docs[0].data().khTapDoan || 0;
+    }
+
+    if (corporatePlan === 0) {
+      resultDiv.innerHTML = '<div style="color:#fbbf24">⚠️ Chưa có kế hoạch Tập đoàn giao cho năm nay</div>';
+      return;
+    }
+
+    // === LOAD DỮ LIỆU 2 NĂM TRƯỚC ===
+    // Năm trước (year1)
+    let year1Total = 0;
+    let year1SamePeriod = 0;
+    const year1Snapshot = await db.collection('harvestData')
+      .where('importDate', '>=', `${year1}-01-01`)
+      .where('importDate', '<=', `${year1}-12-31`)
+      .get();
+    year1Snapshot.forEach(doc => {
+      const data = doc.data();
+      // Loại trừ nhà máy - chỉ tính đội sản xuất
+      const donVi = (data.donVi || '').trim().toLowerCase();
+      if (donVi.includes('nhà máy') || donVi.includes('nha may') ||
+          donVi.startsWith('nm ') || (data.donVi || '').startsWith('NM ')) {
+        return;
+      }
+      year1Total += data.tongQKho || 0;
+      const docMonth = parseInt((data.importDate || '').split('-')[1]) || 0;
+      const docDay = parseInt((data.importDate || '').split('-')[2]) || 0;
+      if (docMonth < currentMonth || (docMonth === currentMonth && docDay <= currentDay)) {
+        year1SamePeriod += data.tongQKho || 0;
+      }
+    });
+    year1Total = year1Total / 1000;
+    year1SamePeriod = year1SamePeriod / 1000;
+
+    // 2 năm trước (year2)
+    let year2Total = 0;
+    let year2SamePeriod = 0;
+    const year2Snapshot = await db.collection('harvestData')
+      .where('importDate', '>=', `${year2}-01-01`)
+      .where('importDate', '<=', `${year2}-12-31`)
+      .get();
+    year2Snapshot.forEach(doc => {
+      const data = doc.data();
+      // Loại trừ nhà máy - chỉ tính đội sản xuất
+      const donVi = (data.donVi || '').trim().toLowerCase();
+      if (donVi.includes('nhà máy') || donVi.includes('nha may') ||
+          donVi.startsWith('nm ') || (data.donVi || '').startsWith('NM ')) {
+        return;
+      }
+      year2Total += data.tongQKho || 0;
+      const docMonth = parseInt((data.importDate || '').split('-')[1]) || 0;
+      const docDay = parseInt((data.importDate || '').split('-')[2]) || 0;
+      if (docMonth < currentMonth || (docMonth === currentMonth && docDay <= currentDay)) {
+        year2SamePeriod += data.tongQKho || 0;
+      }
+    });
+    year2Total = year2Total / 1000;
+    year2SamePeriod = year2SamePeriod / 1000;
+
+    // Năm hiện tại YTD
+    let totalYTD = 0;
+    const todayStr = today.toISOString().split('T')[0];
+    const currentYearSnapshot = await db.collection('harvestData')
+      .where('importDate', '>=', `${currentYear}-01-01`)
+      .where('importDate', '<=', todayStr)
+      .get();
+    currentYearSnapshot.forEach(doc => {
+      const data = doc.data();
+      // Loại trừ nhà máy - chỉ tính đội sản xuất
+      const donVi = (data.donVi || '').trim().toLowerCase();
+      if (donVi.includes('nhà máy') || donVi.includes('nha may') ||
+          donVi.startsWith('nm ') || (data.donVi || '').startsWith('NM ')) {
+        return;
+      }
+      totalYTD += data.tongQKho || 0;
+    });
+    totalYTD = totalYTD / 1000;
+
+    // === PHÂN TÍCH XU HƯỚNG 2 NĂM ===
+    // Tỷ lệ tăng/giảm giữa năm trước và 2 năm trước
+    let historicalGrowthRate = 0;
+    let hasHistoricalTrend = false;
+    if (year2Total > 0 && year1Total > 0) {
+      historicalGrowthRate = (year1Total - year2Total) / year2Total;
+      hasHistoricalTrend = true;
+    }
+
+    // Tỷ lệ tăng/giảm cùng kỳ năm trước vs 2 năm trước
+    let samePeriodGrowthY1Y2 = 0;
+    if (year2SamePeriod > 0 && year1SamePeriod > 0) {
+      samePeriodGrowthY1Y2 = (year1SamePeriod - year2SamePeriod) / year2SamePeriod;
+    }
+
+    // Tỷ lệ so với cùng kỳ năm trước
+    let currentVsYear1 = 0;
+    if (year1SamePeriod > 0 && totalYTD > 0) {
+      currentVsYear1 = (totalYTD - year1SamePeriod) / year1SamePeriod;
+    }
+
+    // Calculate expected YTD factor based on season
+    let expectedYTDFactor = 0;
+    for (let m = 1; m <= currentMonth; m++) {
+      expectedYTDFactor += SEASONAL_FACTORS[m];
+    }
+
+    // === DỰ BÁO KHOA HỌC ===
+    let projections = [];
+    let projectionDetails = [];
+
+    // Method 1: Xu hướng lịch sử (dựa vào tỷ lệ tăng/giảm 2 năm trước)
+    if (hasHistoricalTrend && year1Total > 0) {
+      const proj1 = year1Total * (1 + historicalGrowthRate);
+      projections.push({ value: proj1, weight: 30, method: 'trend' });
+      projectionDetails.push(`Xu hướng lịch sử: ${year2Total.toFixed(0)}T → ${year1Total.toFixed(0)}T (${historicalGrowthRate >= 0 ? '+' : ''}${(historicalGrowthRate * 100).toFixed(1)}%) → ${proj1.toFixed(0)}T`);
+    }
+
+    // Method 2: Ngoại suy theo mùa vụ (nếu đã có dữ liệu đáng kể)
+    if (expectedYTDFactor > 0.05 && totalYTD > 0) {
+      const proj2 = totalYTD / expectedYTDFactor;
+      const weight2 = currentMonth >= 6 ? 40 : (currentMonth >= 4 ? 25 : 15);
+      projections.push({ value: proj2, weight: weight2, method: 'seasonal' });
+      projectionDetails.push(`Ngoại suy mùa vụ: ${totalYTD.toFixed(0)}T ÷ ${(expectedYTDFactor * 100).toFixed(1)}% = ${proj2.toFixed(0)}T`);
+    }
+
+    // Method 3: So sánh cùng kỳ + áp dụng xu hướng
+    if (year1SamePeriod > 0 && totalYTD > 0 && year1Total > 0) {
+      // Tính tỷ lệ hiện tại so với cùng kỳ năm trước
+      const currentRatio = totalYTD / year1SamePeriod;
+      const proj3 = year1Total * currentRatio;
+      const weight3 = currentMonth <= 3 ? 35 : 25;
+      projections.push({ value: proj3, weight: weight3, method: 'ratio' });
+      projectionDetails.push(`Tỷ lệ cùng kỳ: ${year1Total.toFixed(0)}T × ${(currentRatio * 100).toFixed(1)}% = ${proj3.toFixed(0)}T`);
+    }
+
+    // Method 4: Trung bình có trọng số của năm trước + xu hướng
+    if (year1Total > 0) {
+      // Kết hợp xu hướng lịch sử và xu hướng hiện tại
+      let combinedGrowth = 0;
+      if (hasHistoricalTrend && currentVsYear1 !== 0) {
+        // Trung bình có trọng số: xu hướng lịch sử 40%, xu hướng hiện tại 60%
+        combinedGrowth = historicalGrowthRate * 0.4 + currentVsYear1 * 0.6;
+      } else if (hasHistoricalTrend) {
+        combinedGrowth = historicalGrowthRate;
+      } else if (currentVsYear1 !== 0) {
+        combinedGrowth = currentVsYear1;
+      }
+
+      if (combinedGrowth !== 0 || !hasHistoricalTrend) {
+        const proj4 = year1Total * (1 + combinedGrowth);
+        projections.push({ value: proj4, weight: 30, method: 'combined' });
+        projectionDetails.push(`Kết hợp xu hướng: ${year1Total.toFixed(0)}T × (1 + ${(combinedGrowth * 100).toFixed(1)}%) = ${proj4.toFixed(0)}T`);
+      }
+    }
+
+    // Tính dự báo cuối cùng (weighted average)
+    let finalProjection = 0;
+    let totalWeight = 0;
+    projections.forEach(p => {
+      finalProjection += p.value * p.weight;
+      totalWeight += p.weight;
+    });
+    if (totalWeight > 0) {
+      finalProjection = finalProjection / totalWeight;
+    } else if (year1Total > 0) {
+      finalProjection = year1Total;
+    }
+
+    // Trend so với cùng kỳ năm trước
+    let trend = 'stable';
+    let trendPercent = currentVsYear1 * 100;
+    trend = trendPercent > 5 ? 'up' : trendPercent < -5 ? 'down' : 'stable';
+
+    const predictedPercent = corporatePlan > 0 ? (finalProjection / corporatePlan) * 100 : 0;
+
+    // Confidence - tăng nếu có đủ dữ liệu lịch sử
+    let confidence = 40;
+    if (currentMonth >= 4) confidence = 55;
+    if (currentMonth >= 6) confidence = 70;
+    if (currentMonth >= 9) confidence = 85;
+    if (hasHistoricalTrend) confidence += 15; // Có dữ liệu 2 năm
+    if (year1Total > 0) confidence += 5;
+    confidence = Math.min(95, confidence);
+
+    // Status
+    let statusClass = 'medium';
+    let statusText = 'Cần theo dõi';
+    if (predictedPercent >= 100) {
+      statusClass = 'high';
+      statusText = 'Khả thi cao';
+    } else if (predictedPercent >= 90) {
+      statusClass = 'medium';
+      statusText = 'Khả thi';
+    } else if (predictedPercent >= 70) {
+      statusClass = 'medium';
+      statusText = 'Cần nỗ lực';
+    } else {
+      statusClass = 'low';
+      statusText = 'Thách thức';
+    }
+
+    // Gap analysis
+    const gap = corporatePlan - finalProjection;
+    let workingDaysRemaining = 0;
+    for (let m = currentMonth + 1; m <= 12; m++) {
+      if (m !== 2 && m !== 3) workingDaysRemaining += 25;
+    }
+    const dailyRequired = workingDaysRemaining > 0 ? gap / workingDaysRemaining : 0;
+
+    // Seasonal note
+    let seasonNote = '';
+    if (currentMonth === 1) seasonNote = 'Tháng 1 - Cuối vụ cạo';
+    else if (currentMonth === 2 || currentMonth === 3) seasonNote = `Tháng ${currentMonth} - Nghỉ vụ đông`;
+    else if (currentMonth === 4) seasonNote = 'Tháng 4 - Bắt đầu vụ mới';
+    else if (currentMonth >= 5 && currentMonth <= 10) seasonNote = `Tháng ${currentMonth} - Vụ chính`;
+    else seasonNote = `Tháng ${currentMonth} - Cuối vụ`;
+
+    // Build result HTML
+    resultDiv.innerHTML = `
+      <div class="ai-metric">
+        <span class="ai-metric-label">📊 Dự báo cuối năm:</span>
+        <span class="ai-metric-value ${statusClass}">${finalProjection.toFixed(0)} tấn</span>
+      </div>
+      <div class="ai-metric">
+        <span class="ai-metric-label">🎯 % KH Tập đoàn:</span>
+        <span class="ai-metric-value ${statusClass}">${predictedPercent.toFixed(1)}%</span>
+      </div>
+      <div class="ai-metric">
+        <span class="ai-metric-label">📈 So cùng kỳ ${year1}:</span>
+        <span class="ai-metric-value ${trend === 'up' ? 'high' : trend === 'down' ? 'low' : ''}">${trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→'} ${trendPercent > 0 ? '+' : ''}${trendPercent.toFixed(1)}%</span>
+      </div>
+      <div class="ai-metric">
+        <span class="ai-metric-label">📅 Năm ${year1}:</span>
+        <span class="ai-metric-value">${year1Total > 0 ? year1Total.toFixed(0) + ' tấn' : 'N/A'}</span>
+      </div>
+      <div class="ai-metric">
+        <span class="ai-metric-label">📅 Năm ${year2}:</span>
+        <span class="ai-metric-value">${year2Total > 0 ? year2Total.toFixed(0) + ' tấn' : 'N/A'}</span>
+      </div>
+      ${hasHistoricalTrend ? `
+      <div class="ai-metric">
+        <span class="ai-metric-label">📉 Xu hướng ${year2}→${year1}:</span>
+        <span class="ai-metric-value ${historicalGrowthRate >= 0 ? 'high' : 'low'}">${historicalGrowthRate >= 0 ? '↑' : '↓'} ${historicalGrowthRate >= 0 ? '+' : ''}${(historicalGrowthRate * 100).toFixed(1)}%</span>
+      </div>
+      ` : ''}
+      <div class="ai-metric">
+        <span class="ai-metric-label">🌿 Mùa vụ:</span>
+        <span class="ai-metric-value" style="font-size:10px">${seasonNote}</span>
+      </div>
+      <div class="ai-metric">
+        <span class="ai-metric-label">🔮 Độ tin cậy:</span>
+        <span class="ai-metric-value">${confidence}%</span>
+      </div>
+      <div class="ai-summary">
+        <strong style="color:${statusClass === 'high' ? '#4ade80' : statusClass === 'medium' ? '#fbbf24' : '#f87171'}">
+          ${statusText}
+        </strong><br>
+        <div style="font-size:9px; margin-top:4px; opacity:0.9;">
+          ${projectionDetails.slice(0, 2).join('<br>')}
+        </div>
+        <div style="margin-top:6px;">
+        ${gap > 0
+          ? `Còn thiếu <strong>${gap.toFixed(0)} tấn</strong>. ${workingDaysRemaining > 0 ? `Cần ~<strong>${dailyRequired.toFixed(1)} tấn/ngày</strong> (${workingDaysRemaining} ngày cạo).` : ''}`
+          : `Dự kiến <strong>vượt ${Math.abs(gap).toFixed(0)} tấn</strong>.`
+        }
+        </div>
+      </div>
+    `;
+
+  } catch (error) {
+    console.error('AI analysis error:', error);
+    resultDiv.innerHTML = '<div style="color:#f87171">❌ Lỗi phân tích: ' + error.message + '</div>';
+  }
+}
+
+// Yield Source Chart - Tỷ lệ sản lượng theo đội sản xuất
+async function renderYieldSourceChart() {
+  if (typeof Chart === 'undefined') {
+    console.warn('Chart.js not loaded yet');
+    return;
+  }
+  const canvas = document.getElementById('pieChart');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  const yearSelect = document.getElementById('yieldSourceYear');
+  const monthSelect = document.getElementById('yieldSourceMonth');
+  const selectedYear = yearSelect?.value || new Date().getFullYear();
+  const selectedMonth = monthSelect?.value || 'ALL';
+  const analysisDiv = document.getElementById('yieldSourceAnalysis');
+
+  // Destroy existing chart
+  if (pieChart) {
+    pieChart.destroy();
+    pieChart = null;
+  }
+
+  try {
+    // Load data from harvestData grouped by team (donVi)
+    const harvestMonths = [];
+    if (selectedMonth === 'ALL') {
+      for (let m = 1; m <= 12; m++) {
+        harvestMonths.push(`${selectedYear}-${String(m).padStart(2, '0')}`);
+      }
+    } else {
+      harvestMonths.push(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}`);
+    }
+
+    const teamData = {};
+    let totalYield = 0;
+
+    const harvestSnapshot = await db.collection('harvestData')
+      .where('month', 'in', harvestMonths)
+      .get();
+
+    harvestSnapshot.forEach(doc => {
+      const data = doc.data();
+      const team = (data.donVi || 'Không xác định').trim();
+      const qKho = data.tongQKho || 0;
+
+      // Loại trừ nhà máy - chỉ tính đội sản xuất
+      const teamLower = team.toLowerCase();
+      if (teamLower.includes('nhà máy') || teamLower.includes('nha may') ||
+          teamLower.startsWith('nm ') || team.startsWith('NM ')) {
+        return; // Skip factory units
+      }
+
+      if (!teamData[team]) {
+        teamData[team] = 0;
+      }
+      teamData[team] += qKho;
+      totalYield += qKho;
+    });
+
+    // Sort teams by yield (descending), but put "TẬN THU" at the end
+    const sortedTeams = Object.entries(teamData)
+      .sort((a, b) => {
+        if (a[0].includes('TẬN THU')) return 1;
+        if (b[0].includes('TẬN THU')) return -1;
+        return b[1] - a[1]; // Sort by yield descending
+      });
+
+    // Create chart data
+    const labels = [];
+    const dataValues = [];
+    const colors = [];
+
+    // Color palette for teams
+    const TEAM_COLORS = [
+      'rgba(59, 130, 246, 0.8)',   // Blue
+      'rgba(16, 185, 129, 0.8)',   // Green
+      'rgba(249, 115, 22, 0.8)',   // Orange
+      'rgba(124, 58, 237, 0.8)',   // Purple
+      'rgba(236, 72, 153, 0.8)',   // Pink
+      'rgba(34, 197, 94, 0.8)',    // Emerald
+      'rgba(14, 165, 233, 0.8)',   // Sky
+      'rgba(245, 158, 11, 0.8)',   // Amber
+      'rgba(139, 92, 246, 0.8)',   // Violet
+      'rgba(20, 184, 166, 0.8)',   // Teal
+      'rgba(239, 68, 68, 0.8)',    // Red
+      'rgba(168, 85, 247, 0.8)',   // Fuchsia
+    ];
+
+    sortedTeams.forEach(([team, yield_kg], index) => {
+      const yieldTons = yield_kg / 1000;
+      const percentage = totalYield > 0 ? (yield_kg / totalYield * 100) : 0;
+
+      labels.push(`${team} (${percentage.toFixed(1)}%)`);
+      dataValues.push(yieldTons);
+      colors.push(TEAM_COLORS[index % TEAM_COLORS.length]);
+    });
+
+    // If no data, show placeholder
+    if (dataValues.length === 0 || dataValues.every(v => v === 0)) {
+      labels.push('Chưa có dữ liệu');
+      dataValues.push(1);
+      colors.push('rgba(148, 163, 184, 0.5)');
+    }
+
+    pieChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: dataValues,
+          backgroundColor: colors,
+          borderWidth: 2,
+          borderColor: 'rgba(15, 23, 42, 0.8)'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: {
+              color: '#94a3b8',
+              font: { size: 10 },
+              padding: 8,
+              boxWidth: 12
+            }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            titleColor: '#f8fafc',
+            bodyColor: '#e2e8f0',
+            borderColor: '#334155',
+            borderWidth: 1,
+            padding: 10,
+            callbacks: {
+              label: function(context) {
+                const value = context.parsed;
+                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                return `${value.toLocaleString('vi-VN', {maximumFractionDigits: 1})} Tấn (${percentage}%)`;
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // Generate AI analysis
+    generateYieldSourceAnalysis(selectedYear, sortedTeams, totalYield);
+
+  } catch (err) {
+    console.error('Yield Source Chart error:', err);
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#ef4444';
+    ctx.textAlign = 'center';
+    ctx.fillText('Lỗi tải dữ liệu', canvas.width / 2, canvas.height / 2);
+  }
+}
+
+// AI Analysis for Yield Source by Team
+function generateYieldSourceAnalysis(year, sortedTeams, totalYield) {
+  const analysisDiv = document.getElementById('yieldSourceAnalysis');
+  if (!analysisDiv) return;
+
+  const totalTons = totalYield / 1000;
+  const teamCount = sortedTeams.length;
+
+  let html = `<div class="analysis-title">🤖 AI Phân tích sản lượng theo đội ${year}</div>`;
+
+  // Tổng quan
+  html += `
+    <div class="analysis-item">
+      <span class="analysis-icon">📊</span>
+      <span>Tổng sản lượng: <span class="highlight-info">${totalTons.toLocaleString('vi-VN', {maximumFractionDigits: 1})} Tấn</span> từ <span class="highlight-info">${teamCount}</span> đội sản xuất</span>
+    </div>`;
+
+  if (sortedTeams.length === 0) {
+    html += `
+    <div class="analysis-item">
+      <span class="analysis-icon">ℹ️</span>
+      <span>Chưa có dữ liệu sản lượng cho năm ${year}.</span>
+    </div>`;
+    analysisDiv.innerHTML = html;
+    analysisDiv.style.display = 'block';
+    return;
+  }
+
+  // Đội dẫn đầu (không tính Tận Thu)
+  const productionTeams = sortedTeams.filter(([team]) => !team.includes('TẬN THU'));
+  if (productionTeams.length > 0) {
+    const [topTeam, topYield] = productionTeams[0];
+    const topTons = topYield / 1000;
+    const topPercent = totalYield > 0 ? (topYield / totalYield * 100) : 0;
+    html += `
+    <div class="analysis-item">
+      <span class="analysis-icon">🏆</span>
+      <span>Đội dẫn đầu: <span class="highlight-good">${topTeam}</span> - ${topTons.toLocaleString('vi-VN', {maximumFractionDigits: 1})} Tấn (${topPercent.toFixed(1)}%)</span>
+    </div>`;
+  }
+
+  // Tận Thu (nếu có)
+  const tanThuTeam = sortedTeams.find(([team]) => team.includes('TẬN THU'));
+  if (tanThuTeam) {
+    const [team, yield_kg] = tanThuTeam;
+    const tons = yield_kg / 1000;
+    const percent = totalYield > 0 ? (yield_kg / totalYield * 100) : 0;
+    html += `
+    <div class="analysis-item">
+      <span class="analysis-icon">🌿</span>
+      <span>Tận thu: <span class="highlight-info">${tons.toLocaleString('vi-VN', {maximumFractionDigits: 1})} Tấn</span> (${percent.toFixed(1)}% tổng SL)</span>
+    </div>`;
+  }
+
+  // Phân tích độ đồng đều
+  if (productionTeams.length >= 3) {
+    const yields = productionTeams.map(([, y]) => y / 1000);
+    const avgYield = yields.reduce((a, b) => a + b, 0) / yields.length;
+    const variance = yields.reduce((sum, y) => sum + Math.pow(y - avgYield, 2), 0) / yields.length;
+    const stdDev = Math.sqrt(variance);
+    const cv = avgYield > 0 ? (stdDev / avgYield * 100) : 0;
+
+    const cvClass = cv < 20 ? 'highlight-good' : (cv < 35 ? 'highlight-info' : 'highlight-bad');
+    const cvIcon = cv < 20 ? '✅' : (cv < 35 ? '📊' : '⚠️');
+    const cvText = cv < 20 ? 'Sản lượng đồng đều giữa các đội' : (cv < 35 ? 'Độ biến động trung bình' : 'Chênh lệch lớn giữa các đội');
+
+    html += `
+    <div class="analysis-item">
+      <span class="analysis-icon">${cvIcon}</span>
+      <span>Độ biến động (CV): <span class="${cvClass}">${cv.toFixed(1)}%</span> - ${cvText}</span>
+    </div>`;
+
+    // Đội thấp nhất
+    if (productionTeams.length > 1) {
+      const [lowTeam, lowYield] = productionTeams[productionTeams.length - 1];
+      const lowTons = lowYield / 1000;
+      const lowPercent = totalYield > 0 ? (lowYield / totalYield * 100) : 0;
+      html += `
+    <div class="analysis-item">
+      <span class="analysis-icon">📉</span>
+      <span>Đội thấp nhất: <span class="highlight-bad">${lowTeam}</span> - ${lowTons.toLocaleString('vi-VN', {maximumFractionDigits: 1})} Tấn (${lowPercent.toFixed(1)}%)</span>
+    </div>`;
+    }
+  }
+
+  // Trung bình mỗi đội (không tính tận thu)
+  if (productionTeams.length > 0) {
+    const totalProductionYield = productionTeams.reduce((sum, [, y]) => sum + y, 0) / 1000;
+    const avgPerTeam = totalProductionYield / productionTeams.length;
+    html += `
+    <div class="analysis-item">
+      <span class="analysis-icon">📈</span>
+      <span>TB mỗi đội: <span class="highlight-info">${avgPerTeam.toLocaleString('vi-VN', {maximumFractionDigits: 1})} Tấn</span>/đội (${productionTeams.length} đội khai thác)</span>
+    </div>`;
+  }
+
+  analysisDiv.innerHTML = html;
+  analysisDiv.style.display = 'block';
+}
+
+// Initialize year selector for yield source chart
+function initYieldSourceYearSelector() {
+  const yearSelect = document.getElementById('yieldSourceYear');
+  if (!yearSelect) return;
+
+  const currentYear = new Date().getFullYear();
+  yearSelect.innerHTML = '';
+
+  // Add years from current year back to 2023
+  for (let y = currentYear; y >= 2023; y--) {
+    const option = document.createElement('option');
+    option.value = y;
+    option.textContent = `Năm ${y}`;
+    if (y === currentYear) option.selected = true;
+    yearSelect.appendChild(option);
+  }
+}
+
+// 3-Year Comparison Chart
+async function renderYearCompareChart() {
+  if (typeof Chart === 'undefined') {
+    console.warn('Chart.js not loaded yet');
+    return;
+  }
+  const canvas = document.getElementById('yearCompareChart');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  const selectedTeam = document.getElementById('yearCompareTeam')?.value || 'ALL';
+  const selectedMonth = document.getElementById('yearCompareMonth')?.value || 'ALL';
+  const analysisDiv = document.getElementById('yearCompareAnalysis');
+
+  if (yearCompareChart) {
+    yearCompareChart.destroy();
+    yearCompareChart = null;
+  }
+
+  try {
+    const currentYear = new Date().getFullYear();
+    const years = [currentYear - 2, currentYear - 1, currentYear];
+
+    const labelEl = document.getElementById('yearCompareLabel');
+    if (selectedMonth === 'ALL') {
+      if (labelEl) labelEl.textContent = years.join(' - ');
+    } else {
+      if (labelEl) labelEl.textContent = `Tháng ${selectedMonth} (${years.join(' - ')})`;
+    }
+
+    const yearData = {};
+    years.forEach(y => yearData[y] = {});
+
+    for (const year of years) {
+      const months = [];
+      if (selectedMonth === 'ALL') {
+        for (let m = 1; m <= 12; m++) {
+          months.push(`${year}-${String(m).padStart(2, '0')}`);
+        }
+      } else {
+        months.push(`${year}-${String(selectedMonth).padStart(2, '0')}`);
+      }
+
+      const snapshot = await db.collection('harvestData')
+        .where('month', 'in', months)
+        .get();
+
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        const donVi = (data.donVi || '').trim();
+        if (!donVi) return;
+
+        // Loại trừ nhà máy - chỉ tính đội sản xuất
+        const donViLower = donVi.toLowerCase();
+        if (donViLower.includes('nhà máy') || donViLower.includes('nha may') ||
+            donViLower.startsWith('nm ') || donVi.startsWith('NM ')) {
+          return; // Skip factory units
+        }
+
+        if (!yearData[year][donVi]) {
+          yearData[year][donVi] = 0;
+        }
+        yearData[year][donVi] += data.tongQKho || 0;
+      });
+    }
+
+    const allTeams = new Set();
+    years.forEach(y => {
+      Object.keys(yearData[y]).forEach(team => allTeams.add(team));
+    });
+    const teams = Array.from(allTeams).sort((a, b) => {
+      if (a.includes('TẬN THU')) return 1;
+      if (b.includes('TẬN THU')) return -1;
+      return a.localeCompare(b, 'vi');
+    });
+
+    const teamSelect = document.getElementById('yearCompareTeam');
+    if (teamSelect && teamSelect.options.length <= 1) {
+      teams.forEach(team => {
+        const option = document.createElement('option');
+        option.value = team;
+        option.textContent = team;
+        teamSelect.appendChild(option);
+      });
+    }
+
+    const displayTeams = selectedTeam === 'ALL' ? teams : [selectedTeam];
+
+    if (displayTeams.length === 0) {
+      ctx.font = '14px Arial';
+      ctx.fillStyle = '#64748b';
+      ctx.textAlign = 'center';
+      ctx.fillText('Không có dữ liệu', canvas.width / 2, canvas.height / 2);
+      return;
+    }
+
+    const datasets = years.map(year => ({
+      label: String(year),
+      data: displayTeams.map(team => {
+        const kg = yearData[year][team] || 0;
+        return Math.round(kg / 1000 * 100) / 100;
+      }),
+      backgroundColor: YEAR_COLORS[year]?.bg || 'rgba(156, 163, 175, 0.8)',
+      borderColor: YEAR_COLORS[year]?.border || '#9ca3af',
+      borderWidth: 1,
+      borderRadius: 4,
+      barPercentage: 0.8,
+      categoryPercentage: 0.85
+    }));
+
+    yearCompareChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: displayTeams,
+        datasets: datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            labels: {
+              color: '#94a3b8',
+              font: { size: 11 },
+              boxWidth: 12,
+              padding: 15
+            }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            titleColor: '#f8fafc',
+            bodyColor: '#e2e8f0',
+            borderColor: '#334155',
+            borderWidth: 1,
+            padding: 10,
+            callbacks: {
+              label: function(context) {
+                const value = context.parsed.y;
+                return `${context.dataset.label}: ${value.toLocaleString('vi-VN')} Tấn`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: 'rgba(148, 163, 184, 0.1)' },
+            ticks: {
+              color: '#64748b',
+              font: { size: 10 },
+              maxRotation: 45,
+              minRotation: 0
+            }
+          },
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(148, 163, 184, 0.1)' },
+            ticks: {
+              color: '#64748b',
+              font: { size: 10 },
+              callback: function(value) {
+                return value.toLocaleString('vi-VN') + ' T';
+              }
+            },
+            title: {
+              display: true,
+              text: 'Sản lượng (Tấn)',
+              color: '#64748b',
+              font: { size: 10 }
+            }
+          }
+        }
+      }
+    });
+
+    generateYearCompareAnalysis(years, yearData, displayTeams);
+
+  } catch (err) {
+    console.error('Year Compare Chart error:', err);
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#ef4444';
+    ctx.textAlign = 'center';
+    ctx.fillText('Lỗi tải dữ liệu', canvas.width / 2, canvas.height / 2);
+  }
+}
+
+function generateYearCompareAnalysis(years, yearData, teams) {
+  const analysisDiv = document.getElementById('yearCompareAnalysis');
+  if (!analysisDiv || teams.length === 0) return;
+
+  const yearTotals = {};
+  years.forEach(y => {
+    yearTotals[y] = 0;
+    teams.forEach(team => {
+      yearTotals[y] += yearData[y][team] || 0;
+    });
+    yearTotals[y] = yearTotals[y] / 1000;
+  });
+
+  const growth1 = yearTotals[years[0]] > 0
+    ? ((yearTotals[years[1]] - yearTotals[years[0]]) / yearTotals[years[0]] * 100)
+    : 0;
+  const growth2 = yearTotals[years[1]] > 0
+    ? ((yearTotals[years[2]] - yearTotals[years[1]]) / yearTotals[years[1]] * 100)
+    : 0;
+
+  let bestTeam = { name: '', value: 0 };
+  teams.forEach(team => {
+    const val = (yearData[years[2]][team] || 0) / 1000;
+    if (val > bestTeam.value) bestTeam = { name: team, value: val };
+  });
+
+  let bestGrowthTeam = { name: '', growth: -Infinity };
+  teams.forEach(team => {
+    const prev = (yearData[years[1]][team] || 0) / 1000;
+    const curr = (yearData[years[2]][team] || 0) / 1000;
+    if (prev > 0) {
+      const g = (curr - prev) / prev * 100;
+      if (g > bestGrowthTeam.growth) bestGrowthTeam = { name: team, growth: g };
+    }
+  });
+
+  let html = `<div class="analysis-title">📋 Phân tích sản lượng 3 năm</div>`;
+
+  html += `
+    <div class="analysis-item">
+      <span class="analysis-icon">📊</span>
+      <span>Tổng SL ${years[2]}: <span class="highlight-info">${yearTotals[years[2]].toLocaleString('vi-VN', {maximumFractionDigits: 1})} Tấn</span> |
+      ${years[1]}: <span class="highlight-info">${yearTotals[years[1]].toLocaleString('vi-VN', {maximumFractionDigits: 1})} Tấn</span> |
+      ${years[0]}: <span class="highlight-info">${yearTotals[years[0]].toLocaleString('vi-VN', {maximumFractionDigits: 1})} Tấn</span></span>
+    </div>`;
+
+  html += `
+    <div class="analysis-item">
+      <span class="analysis-icon">${growth2 >= 0 ? '📈' : '📉'}</span>
+      <span>Tăng trưởng ${years[1]}→${years[2]}: <span class="${growth2 >= 0 ? 'highlight-good' : 'highlight-bad'}">${growth2 >= 0 ? '+' : ''}${growth2.toFixed(1)}%</span> |
+      ${years[0]}→${years[1]}: <span class="${growth1 >= 0 ? 'highlight-good' : 'highlight-bad'}">${growth1 >= 0 ? '+' : ''}${growth1.toFixed(1)}%</span></span>
+    </div>`;
+
+  if (bestTeam.value > 0) {
+    html += `
+    <div class="analysis-item">
+      <span class="analysis-icon">🏆</span>
+      <span>Đội dẫn đầu ${years[2]}: <span class="highlight-good">${bestTeam.name}</span> (${bestTeam.value.toLocaleString('vi-VN', {maximumFractionDigits: 1})} Tấn)</span>
+    </div>`;
+  }
+
+  if (bestGrowthTeam.growth > -Infinity && bestGrowthTeam.growth > 0) {
+    html += `
+    <div class="analysis-item">
+      <span class="analysis-icon">🚀</span>
+      <span>Tăng trưởng tốt nhất: <span class="highlight-good">${bestGrowthTeam.name}</span> (+${bestGrowthTeam.growth.toFixed(1)}%)</span>
+    </div>`;
+  }
+
+  analysisDiv.innerHTML = html;
+  analysisDiv.style.display = 'block';
+}
+
+// Load recent activity
+async function loadRecentActivity() {
+  const container = document.getElementById('activityList');
+
+  try {
+    const activities = [];
+
+    try {
+      const vppSnapshot = await db.collection('vppRequests')
+        .orderBy('createdAt', 'desc')
+        .limit(10)
+        .get();
+
+      vppSnapshot.forEach(doc => {
+        const data = doc.data();
+        activities.push({
+          type: 'vpp',
+          title: `Đăng ký VPP: ${data.productName || 'Sản phẩm'}`,
+          user: data.userName,
+          time: data.createdAt?.toDate?.() || new Date()
+        });
+      });
+    } catch (e) {}
+
+    try {
+      const vehicleSnapshot = await db.collection('vehicleRequests')
+        .orderBy('createdAt', 'desc')
+        .limit(10)
+        .get();
+
+      vehicleSnapshot.forEach(doc => {
+        const data = doc.data();
+        activities.push({
+          type: 'dieuxe',
+          title: `Đăng ký xe: ${data.destination || 'Công tác'}`,
+          user: data.userName,
+          time: data.createdAt?.toDate?.() || new Date()
+        });
+      });
+    } catch (e) {}
+
+    activities.sort((a, b) => b.time - a.time);
+
+    if (activities.length === 0) {
+      container.innerHTML = '<div class="loading"><p class="loading-text">Chưa có hoạt động nào</p></div>';
+      return;
+    }
+
+    let html = '';
+    activities.slice(0, 15).forEach(activity => {
+      const timeStr = formatTime(activity.time);
+      html += `
+        <div class="activity-item">
+          <div class="activity-icon ${activity.type}">${activity.type === 'vpp' ? '📦' : '🚗'}</div>
+          <div class="activity-content">
+            <h4>${activity.title}</h4>
+            <p>${activity.user || 'Người dùng'}</p>
+          </div>
+          <span class="activity-time">${timeStr}</span>
+        </div>
+      `;
+    });
+
+    container.innerHTML = html;
+
+  } catch (error) {
+    console.error('Load activity error:', error);
+    container.innerHTML = '<div class="loading"><p class="loading-text">Lỗi tải dữ liệu</p></div>';
+  }
+}
+
+function formatTime(date) {
+  const now = new Date();
+  const diff = now - date;
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+
+  if (minutes < 1) return 'Vừa xong';
+  if (minutes < 60) return `${minutes} phút trước`;
+  if (hours < 24) return `${hours} giờ trước`;
+  if (days < 7) return `${days} ngày trước`;
+  return date.toLocaleDateString('vi-VN');
+}
+
+// Single-session management
+let sessionListener = null;
+async function isSingleSessionEnabled() {
+  try {
+    const settingDoc = await db.collection('system_settings').doc('auth').get();
+    return settingDoc.exists ? (settingDoc.data().singleSessionEnabled ?? true) : true;
+  } catch (e) { return true; }
+}
+async function startSessionListener(userId) {
+  if (!userId) return;
+  const enabled = await isSingleSessionEnabled();
+  if (!enabled) return;
+  if (sessionListener) { sessionListener(); sessionListener = null; }
+  const storedToken = localStorage.getItem('sessionToken');
+  if (!storedToken) return;
+  sessionListener = db.collection('user_sessions').doc(userId)
+    .onSnapshot((doc) => {
+      if (doc.exists) {
+        const data = doc.data();
+        const currentToken = localStorage.getItem('sessionToken');
+        if (data.sessionToken && currentToken && data.sessionToken !== currentToken) {
+          stopSessionListener();
+          forceLogout('Tài khoản đã đăng nhập từ thiết bị khác');
+        }
+      }
+    }, (error) => { console.error('Session listener error:', error); });
+}
+function stopSessionListener() { if (sessionListener) { sessionListener(); sessionListener = null; } }
+function forceLogout(message) {
+  stopSessionListener();
+  ['currentUser', 'userRole', 'userDept', 'qtdn_user', 'sessionToken', 'authUid'].forEach(k => localStorage.removeItem(k));
+  alert(message);
+  window.location.href = '/';
+}
+
+// Load full user info (position, department, concurrent positions)
+async function loadUserFullInfo() {
+  try {
+    if (!currentUser?.id) return;
+
+    // 1. Get position and department from categoryPersonnel
+    const personnelDoc = await db.collection('categoryPersonnel').doc(currentUser.id).get();
+
+    let positionName = '--';
+    let departmentName = '--';
+    let concurrentPositions = [];
+
+    if (personnelDoc.exists) {
+      const personnelData = personnelDoc.data();
+      const primaryPositionValue = personnelData.position;
+      const primaryDepartmentId = personnelData.department;
+
+      // Get position name
+      if (primaryPositionValue) {
+        let positionDoc = await db.collection('categoryPositions').doc(primaryPositionValue).get();
+        if (positionDoc.exists) {
+          positionName = positionDoc.data().name || primaryPositionValue;
+        } else {
+          const positionsSnap = await db.collection('categoryPositions')
+            .where('name', '==', primaryPositionValue)
+            .limit(1)
+            .get();
+          if (!positionsSnap.empty) {
+            positionName = positionsSnap.docs[0].data().name;
+          } else {
+            positionName = primaryPositionValue;
+          }
+        }
+      }
+
+      // Get department name
+      if (primaryDepartmentId) {
+        const deptDoc = await db.collection('categoryDepartments').doc(primaryDepartmentId).get();
+        if (deptDoc.exists) {
+          departmentName = deptDoc.data().name || primaryDepartmentId;
+        } else {
+          departmentName = primaryDepartmentId;
+        }
+      }
+    }
+
+    // 2. Get concurrent positions from employeePositions
+    const concurrentSnap = await db.collection('employeePositions')
+      .where('userId', '==', currentUser.id)
+      .get();
+
+    for (const doc of concurrentSnap.docs) {
+      const data = doc.data();
+      if (data.positionId) {
+        const posDoc = await db.collection('categoryPositions').doc(data.positionId).get();
+        if (posDoc.exists) {
+          concurrentPositions.push(posDoc.data().name);
+        }
+      }
+    }
+
+    // Update UI
+    document.getElementById('userPosition').textContent = positionName;
+    document.getElementById('userDepartment').textContent = departmentName;
+
+    const concurrentEl = document.getElementById('userConcurrent');
+    if (concurrentPositions.length > 0) {
+      concurrentEl.textContent = 'KN: ' + concurrentPositions.join(', ');
+      concurrentEl.style.display = 'block';
+    } else {
+      concurrentEl.style.display = 'none';
+    }
+
+  } catch (error) {
+    console.error('Error loading user full info:', error);
+  }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+  auth.onAuthStateChanged(async (user) => {
+    if (user) {
+      const storedUser = localStorage.getItem('currentUser');
+      if (storedUser) {
+        currentUser = JSON.parse(storedUser);
+      } else {
+        const email = user.email;
+        const username = email.split('@')[0];
+        const query = await db.collection('categoryPersonnel')
+          .where('username', '==', username)
+          .limit(1)
+          .get();
+
+        if (!query.empty) {
+          const doc = query.docs[0];
+          currentUser = { id: doc.id, ...doc.data() };
+          localStorage.setItem('currentUser', JSON.stringify(currentUser));
+        }
+      }
+
+      if (currentUser) {
+        document.getElementById('userName').textContent = currentUser.name || currentUser.username;
+        document.getElementById('userAvatar').textContent = (currentUser.name || 'U')[0].toUpperCase();
+
+        // Load full user info (position, department, concurrent)
+        loadUserFullInfo();
+
+        loadDashboardStats();
+        loadGardenKPIs();
+        loadProductionPlanCard();
+        initYieldSourceYearSelector();
+        renderYieldSourceChart();
+        renderYearCompareChart();
+
+        const authUid = localStorage.getItem('authUid') || user.uid;
+        startSessionListener(authUid);
+      }
+    } else {
+      window.location.href = '/';
+    }
+  });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+__pycache__
+*.pyc
+.env
+.env.*
+.git
+.gitignore
+.vscode
+*.md
+terminals
+tmp_out.txt
+data/
+supabase/
+scripts/
+render.yaml
+Procfile
+run.sh
+public/

@@ -1,0 +1,6 @@
+flask>=3.0.0
+supabase>=2.0.0
+python-dotenv>=1.0.0
+gunicorn>=22.0.0
+# Dev: sinh lại icon PWA từ logo — python scripts/generate_pwa_icons.py
+Pillow>=10.0.0
