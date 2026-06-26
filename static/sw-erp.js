@@ -4,9 +4,9 @@
 
  */
 
-var SHELL_CACHE = 'rriv-erp-shell-v2';
+var SHELL_CACHE = 'rriv-erp-shell-v4';
 
-var RUNTIME_CACHE = 'rriv-erp-runtime-v2';
+var RUNTIME_CACHE = 'rriv-erp-runtime-v4';
 
 var OFFLINE_URL = '/offline.html';
 

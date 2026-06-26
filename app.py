@@ -164,16 +164,41 @@ def _row_to_doc(row, use_data_field=True, table_name=None):
     doc_id = doc.pop('id', None)
     if doc_id:
         doc['id'] = doc_id
-    if table_name == 'employee':
-        _apply_employee_field_aliases(doc)
+    if table_name in ('employee', 'category_personnel'):
+        _apply_personnel_field_aliases(doc)
+    if row.get('created_at') and not doc.get('createdAt'):
+        doc['createdAt'] = row['created_at']
+    if row.get('updated_at') and not doc.get('updatedAt'):
+        doc['updatedAt'] = row['updated_at']
     return doc
 
 
-def _apply_employee_field_aliases(doc):
-    """Map cột employee → tên field app ERP (hoTen, ho_ten…)."""
-    if doc.get('full_name') and not doc.get('ho_ten'):
-        doc['ho_ten'] = doc['full_name']
-        doc['hoTen'] = doc['full_name']
+# Cột hợp lệ khi ghi qua view category_personnel (PostgREST PGRST204 nếu gửi field lạ)
+_CATEGORY_PERSONNEL_COLUMNS = frozenset({
+    'username', 'ho_ten', 'phone', 'email', 'department', 'position', 'team',
+    'role', 'disabled', 'account_locked', 'lock_until', 'status',
+    'app_roles_cache', 'metadata', 'created_at', 'updated_at',
+})
+
+_EMPLOYEE_WRITE_COLUMNS = frozenset({
+    'employee_code', 'full_name', 'gender', 'phone_number', 'personal_email',
+    'company_email', 'national_id', 'status', 'hire_date', 'username',
+    'department_name', 'position_name', 'team_name', 'employment_status',
+    'disabled', 'account_locked', 'lock_until', 'app_roles_cache', 'metadata',
+    'erp_role', 'created_at', 'updated_at', 'team_id', 'work_group_id',
+})
+
+
+def _apply_personnel_field_aliases(doc):
+    """Map cột employee / category_personnel ↔ tên field app ERP (hoTen, ho_ten…)."""
+    name_val = (
+        doc.get('full_name') or doc.get('ho_ten') or doc.get('hoTen') or doc.get('name')
+    )
+    if name_val:
+        doc['full_name'] = name_val
+        doc['ho_ten'] = name_val
+        doc['hoTen'] = name_val
+        doc['name'] = name_val
     if doc.get('phone_number') and not doc.get('phone'):
         doc['phone'] = doc['phone_number']
     if not doc.get('email'):
@@ -190,6 +215,52 @@ def _apply_employee_field_aliases(doc):
         doc['status'] = doc['employment_status']
     if doc.get('employee_code') and not doc.get('employeeCode'):
         doc['employeeCode'] = doc['employee_code']
+
+
+def _prepare_table_write(table, data):
+    """Chuyển field Firestore (hoTen, updatedAt…) → cột Supabase trước khi ghi."""
+    if not data or table not in ('category_personnel', 'employee'):
+        return data
+
+    row = {}
+    name_val = data.get('hoTen') or data.get('name') or data.get('ho_ten') or data.get('full_name')
+
+    if table == 'category_personnel':
+        if name_val is not None:
+            row['ho_ten'] = name_val
+        for key, val in data.items():
+            if key in ('hoTen', 'name', 'ho_ten', 'full_name'):
+                continue
+            if key == 'updatedAt':
+                row['updated_at'] = val
+            elif key == 'createdAt':
+                row['created_at'] = val
+            elif key in _CATEGORY_PERSONNEL_COLUMNS:
+                row[key] = val
+        return row
+
+    # employee table
+    if name_val is not None:
+        row['full_name'] = name_val
+    field_map = {
+        'phone': 'phone_number',
+        'email': 'company_email',
+        'department': 'department_name',
+        'position': 'position_name',
+        'team': 'team_name',
+        'role': 'erp_role',
+        'status': 'employment_status',
+        'updatedAt': 'updated_at',
+        'createdAt': 'created_at',
+        'employeeCode': 'employee_code',
+    }
+    for key, val in data.items():
+        if key in ('hoTen', 'name', 'ho_ten', 'full_name'):
+            continue
+        dest = field_map.get(key, key)
+        if dest in _EMPLOYEE_WRITE_COLUMNS:
+            row[dest] = val
+    return row
 
 
 def _apply_where(docs, where_list):
@@ -408,7 +479,7 @@ def get_profile():
     try:
         res = supabase.table('category_personnel').select('*').eq('username', username).limit(1).execute()
         if res.data:
-            return jsonify({"profile": _row_to_doc(res.data[0], use_data_field=False)})
+            return jsonify({"profile": _row_to_doc(res.data[0], use_data_field=False, table_name='category_personnel')})
         res_emp = supabase.table('employee').select('*').eq('username', username).limit(1).execute()
         if res_emp.data:
             return jsonify({"profile": _row_to_doc(res_emp.data[0], use_data_field=False, table_name='employee')})
@@ -468,7 +539,7 @@ def create_document(collection):
     try:
         table = TABLE_MAP.get(collection)
         if table:
-            row = {'id': doc_id, **data}
+            row = {'id': doc_id, **_prepare_table_write(table, data)}
             supabase.table(table).upsert(row).execute()
         else:
             supabase.table('erp_collections').insert({
@@ -527,39 +598,110 @@ def cloud_function_stub(name):
     }), 501
 
 
+def _chunked(items, size):
+    for i in range(0, len(items), size):
+        yield items[i:i + size]
+
+
+@app.route('/api/harvest/assignments/bulk', methods=['POST'])
+def bulk_save_harvest_assignments():
+    """Ghi hàng loạt phân công phần cạo — ít round-trip hơn /api/data/batch."""
+    body = request.json or {}
+    date = body.get('date')
+    items = body.get('items') or []
+    meta_updates = body.get('sectionMetaUpdates') or []
+    if not date:
+        return jsonify({"success": False, "message": "Thiếu record_date"}), 400
+    try:
+        delete_ids = []
+        upsert_by_id = {}
+        for item in items:
+            section_id = item.get('sectionId')
+            if not section_id:
+                continue
+            for did in item.get('deleteIds') or []:
+                if did:
+                    delete_ids.append(str(did))
+            for row in item.get('rows') or []:
+                rid = row.get('id')
+                worker_id = row.get('worker_id')
+                if not rid or not worker_id:
+                    continue
+                upsert_by_id[str(rid)] = {
+                    'id': str(rid),
+                    'record_date': row.get('record_date') or date,
+                    'tapping_section_id': row.get('tapping_section_id') or section_id,
+                    'worker_id': worker_id,
+                    'assignment_role': row.get('assignment_role') or 'tapper',
+                    'notes': row.get('notes') or '',
+                    'metadata': row.get('metadata') or {},
+                }
+
+        unique_delete_ids = list(dict.fromkeys(delete_ids))
+        upsert_rows = list(upsert_by_id.values())
+
+        for chunk in _chunked(unique_delete_ids, 80):
+            supabase.table('section_worker_assignments').delete().in_('id', chunk).execute()
+
+        for chunk in _chunked(upsert_rows, 80):
+            supabase.table('section_worker_assignments').upsert(chunk).execute()
+
+        for mu in meta_updates:
+            sid = mu.get('sectionId')
+            if not sid:
+                continue
+            supabase.table('tapping_sections').update({
+                'metadata': mu.get('metadata') or {}
+            }).eq('id', sid).execute()
+
+        return jsonify({
+            "success": True,
+            "deleted": len(unique_delete_ids),
+            "upserted": len(upsert_rows),
+        })
+    except Exception as e:
+        print(f"bulk_save_harvest_assignments: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 @app.route('/api/data/batch', methods=['POST'])
 def batch_write():
     body = request.json or {}
-    for op in body.get('operations', []):
-        coll = op.get('collection')
-        doc_id = op.get('docId') or str(uuid.uuid4())
-        op_type = op.get('type', 'create')
-        if op_type == 'delete':
-            table = TABLE_MAP.get(coll)
-            if table:
-                supabase.table(table).delete().eq('id', doc_id).execute()
+    idx = -1
+    try:
+        for idx, op in enumerate(body.get('operations', [])):
+            coll = op.get('collection')
+            doc_id = op.get('docId') or str(uuid.uuid4())
+            op_type = op.get('type', 'create')
+            if op_type == 'delete':
+                table = TABLE_MAP.get(coll)
+                if table:
+                    supabase.table(table).delete().eq('id', doc_id).execute()
+                else:
+                    supabase.table('erp_collections').delete().eq('collection', coll).eq('id', doc_id).execute()
+            elif op_type == 'update':
+                data = op.get('data') or {}
+                table = TABLE_MAP.get(coll)
+                if table:
+                    supabase.table(table).update(data).eq('id', doc_id).execute()
+                else:
+                    existing = supabase.table('erp_collections').select('data').eq('collection', coll).eq('id', doc_id).limit(1).execute()
+                    merged = dict(existing.data[0].get('data') or {}) if existing.data else {}
+                    merged.update(data)
+                    supabase.table('erp_collections').update({'data': merged}).eq('id', doc_id).execute()
             else:
-                supabase.table('erp_collections').delete().eq('collection', coll).eq('id', doc_id).execute()
-        elif op_type == 'update':
-            data = op.get('data') or {}
-            table = TABLE_MAP.get(coll)
-            if table:
-                supabase.table(table).update(data).eq('id', doc_id).execute()
-            else:
-                existing = supabase.table('erp_collections').select('data').eq('collection', coll).eq('id', doc_id).limit(1).execute()
-                merged = dict(existing.data[0].get('data') or {}) if existing.data else {}
-                merged.update(data)
-                supabase.table('erp_collections').update({'data': merged}).eq('id', doc_id).execute()
-        else:
-            data = op.get('data') or {}
-            table = TABLE_MAP.get(coll)
-            if table:
-                supabase.table(table).upsert({'id': doc_id, **data}).execute()
-            else:
-                supabase.table('erp_collections').insert({
-                    'id': doc_id, 'collection': coll, 'data': data
-                }).execute()
-    return jsonify({"success": True})
+                data = op.get('data') or {}
+                table = TABLE_MAP.get(coll)
+                if table:
+                    supabase.table(table).upsert({'id': doc_id, **data}).execute()
+                else:
+                    supabase.table('erp_collections').insert({
+                        'id': doc_id, 'collection': coll, 'data': data
+                    }).execute()
+        return jsonify({"success": True})
+    except Exception as e:
+        print(f"batch_write op#{idx}: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
 
 
 if __name__ == '__main__':

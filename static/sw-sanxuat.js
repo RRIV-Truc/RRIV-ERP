@@ -1,7 +1,7 @@
 /**
  * Service Worker — cache shell Sản xuất + tab Sản lượng CN (mở lại khi không có mạng).
  */
-var CACHE = 'rriv-sanxuat-v1';
+var CACHE = 'rriv-sanxuat-v3';
 var SHELL = [
   '/',
   '/sanxuat',

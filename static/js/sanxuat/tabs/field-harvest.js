@@ -16,6 +16,9 @@ const TabFieldHarvest = (function () {
   let assignDraft = {};
   let weighSectionId = null;
   let weighDraft = {};
+  /** Ngày làm việc trước khi đổi (để hủy đổi ngày khi còn bản nháp). */
+  let _fhLastRecordDate = '';
+  let _fhSaveInProgress = false;
   let summaryTeam = '__all__';
   let summaryViewMode = 'section';
   let lotCatalog = [];
@@ -34,6 +37,7 @@ const TabFieldHarvest = (function () {
   ];
   var FH_SESSION_KEY = 'fh_last_tapping_session';
   var FH_TEAM_KEY = 'fh_last_production_team';
+  var FH_DEFAULT_TEAM_ID = 'team-lk';
   /** Tăng khi đổi cách lưu/lọc phân công — buộc xóa cache cũ trên máy. */
   var FH_ASSIGNMENTS_CACHE_VER = '4';
   var WORK_MODES = [
@@ -50,7 +54,21 @@ const TabFieldHarvest = (function () {
 
   function _db() { return ErpDb.firestore(); }
   function _user() { return window.currentUser; }
-  function _toast(msg, type) { if (window.showToast) window.showToast(msg, type); }
+  function _toast(msg, type) { if (window.showToast) window.showToast(msg, type || 'success'); }
+  function _formatDateShort(iso) {
+    if (typeof window.formatDateVN === 'function') return window.formatDateVN(iso);
+    if (!iso) return '';
+    var p = String(iso).split('-');
+    return p.length === 3 ? (p[2] + '/' + p[1] + '/' + p[0]) : iso;
+  }
+
+  function _setSaveButtonBusy(busy) {
+    var btn = document.querySelector('button[onclick*="saveAllAssignments"]');
+    if (!btn) return;
+    btn.disabled = !!busy;
+    btn.style.opacity = busy ? '0.65' : '';
+    btn.textContent = busy ? '⏳ Đang lưu...' : '💾 Lưu phân công';
+  }
   function _el(id) { return document.getElementById(id); }
   function _today() { return new Date().toISOString().slice(0, 10); }
 
@@ -60,6 +78,46 @@ const TabFieldHarvest = (function () {
 
   function _isOnline() {
     return !_offlineReady() || FieldHarvestOffline.isOnline();
+  }
+
+  /** Chỉ coi là mất mạng thật — lỗi API/validation không fallback offline. */
+  function _isTransientNetworkError(e) {
+    if (!e) return false;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+    var msg = String(e.message || e).toLowerCase();
+    if (e.name === 'TypeError' && (msg.indexOf('fetch') >= 0 || msg.indexOf('network') >= 0)) return true;
+    if (msg.indexOf('failed to fetch') >= 0 || msg.indexOf('networkerror') >= 0) return true;
+    if (msg.indexOf('load failed') >= 0 || msg.indexOf('network request failed') >= 0) return true;
+    if (/http (502|503|504|429)/.test(msg)) return true;
+    return false;
+  }
+
+  async function _commitDbBatch(ops) {
+    if (!ops.length) return;
+    var CHUNK = 80;
+    for (var i = 0; i < ops.length; i += CHUNK) {
+      var batch = _db().batch();
+      var slice = ops.slice(i, i + CHUNK);
+      slice.forEach(function (item) {
+        if (item.type === 'delete') batch.delete(item.ref);
+        else if (item.type === 'update') batch.update(item.ref, item.data);
+        else batch.set(item.ref, item.data, { merge: true });
+      });
+      await batch.commit();
+    }
+  }
+
+  async function _bulkSaveAssignmentsApi(payload) {
+    var res = await fetch('/api/harvest/assignments/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    var body = await res.json().catch(function () { return {}; });
+    if (!res.ok || body.success === false) {
+      throw new Error(body.message || ('HTTP ' + res.status));
+    }
+    return body;
   }
 
   function _workersAllKey() {
@@ -165,11 +223,12 @@ const TabFieldHarvest = (function () {
       return 'offline';
     }
     try {
-      await _upsertSectionAssignments(sectionId, cfg);
+      await _upsertSectionAssignments(sectionId, cfg, date);
       await _saveSectionLot(sectionId, cfg.lot_code || '');
+      _applyAssignmentsLocal(sectionId, cfg, date);
       return 'online';
     } catch (e) {
-      if (!_offlineReady()) throw e;
+      if (!_offlineReady() || !_isTransientNetworkError(e)) throw e;
       console.warn('[FieldHarvest] fallback offline assign:', e.message);
       await _saveAssignmentsOffline(sectionId, cfg, date);
       return 'fallback';
@@ -212,7 +271,8 @@ const TabFieldHarvest = (function () {
   }
 
   function _workerName(w) {
-    return w.ho_ten || w.hoTen || w.username || w.id || '';
+    var n = w.ho_ten || w.hoTen || w.username || w.id || '';
+    return String(n).replace(/^\[?\s*CN\s*\]?\s+/i, '').trim();
   }
 
   function _sectionLabel(id) {
@@ -223,8 +283,7 @@ const TabFieldHarvest = (function () {
   function _workerLabel(id) {
     var w = workers.find(function (x) { return x.id === id; });
     if (!w) return id;
-    var g = _workerGroupCode(id);
-    return (g ? ('[' + g + '] ') : '') + _workerName(w);
+    return _workerGroupLabel(id) + _workerName(w);
   }
 
   function _workerGroupCode(workerId) {
@@ -232,6 +291,21 @@ const TabFieldHarvest = (function () {
     var w = workers.find(function (x) { return x.id === workerId; });
     if (w && (w.work_group_code || w.workGroupCode)) return w.work_group_code || w.workGroupCode;
     return workerGroupMap[String(workerId)] || '';
+  }
+
+  /** Hiển thị mã tổ: bỏ tiền tố CN (CN / CN01 / [CN] → rỗng hoặc 01). */
+  function _workerGroupDisplayCode(code) {
+    if (!code) return '';
+    var s = String(code).trim();
+    if (/^CN$/i.test(s) || /^\[CN\]$/i.test(s)) return '';
+    s = s.replace(/^\[?\s*CN\s*\]?/i, '').trim();
+    return s;
+  }
+
+  function _workerGroupLabel(workerId) {
+    var g = _workerGroupDisplayCode(_workerGroupCode(workerId));
+    if (!g || /^CN$/i.test(g)) return '';
+    return '[' + g + '] ';
   }
 
   function _isLegacyDemoTeam(t) {
@@ -246,6 +320,29 @@ const TabFieldHarvest = (function () {
     var list = companyTeams.filter(function (t) { return !_isLegacyDemoTeam(t); });
     if (list.length) return list;
     return companyTeams;
+  }
+
+  function _normalizeTeamLabel(name) {
+    return String(name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  /** Mặc định: Đội sản xuất Lai Khê (team-lk). */
+  function _resolveDefaultTeamId(teams) {
+    var list = teams && teams.length ? teams : _productionTeams();
+    if (!list.length) return '';
+    var byId = list.find(function (t) { return String(t.id) === FH_DEFAULT_TEAM_ID; });
+    if (byId) return String(byId.id);
+    var labels = ['đội sản xuất lai khê', 'tổ sx lai khê'];
+    for (var i = 0; i < labels.length; i++) {
+      var want = labels[i];
+      var hit = list.find(function (t) {
+        var n = _normalizeTeamLabel(t.name);
+        return n === want || (n.indexOf('lai khê') !== -1 && n.indexOf('đội') !== -1) ||
+          (n.indexOf('lai khê') !== -1 && n.indexOf('tổ') !== -1);
+      });
+      if (hit) return String(hit.id);
+    }
+    return '';
   }
 
   function _sectionLotId(section) {
@@ -531,6 +628,14 @@ const TabFieldHarvest = (function () {
         else localStorage.removeItem(FH_TEAM_KEY);
       } catch (e) { /* ignore */ }
     }
+    if (!selectedTeam && el) {
+      var defId = _resolveDefaultTeamId(visible.length ? visible : _productionTeams());
+      if (defId && _isTeamAllowed(defId)) {
+        selectedTeam = defId;
+        el.value = selectedTeam;
+        try { localStorage.setItem(FH_TEAM_KEY, selectedTeam); } catch (e) { /* ignore */ }
+      }
+    }
   }
 
   function _refreshTeamFilterOptions() {
@@ -564,7 +669,7 @@ const TabFieldHarvest = (function () {
 
   function _sectionLotCode(section) {
     if (!section) return '';
-    var draft = assignDraft[section.id];
+    var draft = _getAssignDraft(section.id);
     if (draft && draft.lot_code) return String(draft.lot_code).trim();
     var rows = _assignmentsForSection(section.id);
     if (rows.length) {
@@ -845,7 +950,7 @@ const TabFieldHarvest = (function () {
   function _assignmentsForSection(sectionId) {
     var session = selectedSession || 'A';
     return assignments.filter(function (a) {
-      if (a.tapping_section_id !== sectionId) return false;
+      if (!_sameSectionId(a.tapping_section_id, sectionId)) return false;
       return _assignmentSession(a) === session;
     });
   }
@@ -856,6 +961,20 @@ const TabFieldHarvest = (function () {
 
   function _configFromAssignmentRows(rows) {
     if (!rows || !rows.length) return null;
+
+    var ri;
+    for (ri = 0; ri < rows.length; ri++) {
+      var metaSlots = _parseMeta(rows[ri].metadata);
+      if (metaSlots.slots && metaSlots.slots.length) {
+        var modeFromMeta = metaSlots.work_mode || 'solo';
+        return {
+          work_mode: modeFromMeta,
+          slots: _normalizeSlots(metaSlots.slots, modeFromMeta),
+          notes: rows[ri].notes || rows[0].notes || '',
+          lot_code: metaSlots.lot_code || ''
+        };
+      }
+    }
 
     var notes = '';
     var work_mode = 'solo';
@@ -921,11 +1040,76 @@ const TabFieldHarvest = (function () {
     return { work_mode: work_mode, slots: _normalizeSlots(slots, work_mode), notes: notes, lot_code: lot_code };
   }
 
+  function _sameSectionId(a, b) {
+    return String(a || '') === String(b || '');
+  }
+
+  function _findSectionById(sectionId) {
+    if (sectionId == null || sectionId === '') return null;
+    return sections.find(function (s) { return _sameSectionId(s.id, sectionId); }) || null;
+  }
+
+  function _draftKey(sectionId) {
+    return String(sectionId || '');
+  }
+
+  function _getAssignDraft(sectionId) {
+    var k = _draftKey(sectionId);
+    if (Object.prototype.hasOwnProperty.call(assignDraft, k)) return assignDraft[k];
+    if (Object.prototype.hasOwnProperty.call(assignDraft, sectionId)) return assignDraft[sectionId];
+    return null;
+  }
+
+  function _setAssignDraft(sectionId, cfg) {
+    assignDraft[_draftKey(sectionId)] = cfg;
+    _persistAssignDraftCache();
+  }
+
+  function _assignDraftCacheKey(date) {
+    return 'fh-draft:' + (date || _dateVal()) + ':' + (selectedTeam || '') + ':' + (selectedSession || 'A');
+  }
+
+  function _assignDraftCount() {
+    return Object.keys(assignDraft).length;
+  }
+
+  function _persistAssignDraftCache(date) {
+    try {
+      var key = _assignDraftCacheKey(date);
+      if (!_assignDraftCount()) {
+        sessionStorage.removeItem(key);
+        return;
+      }
+      sessionStorage.setItem(key, JSON.stringify(assignDraft));
+    } catch (e) { /* ignore */ }
+  }
+
+  function _restoreAssignDraftCache(date) {
+    try {
+      var raw = sessionStorage.getItem(_assignDraftCacheKey(date));
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function _clearAssignDraftCache(date) {
+    try { sessionStorage.removeItem(_assignDraftCacheKey(date)); } catch (e) { /* ignore */ }
+  }
+
+  function _sortSectionsByCode(list) {
+    return (list || []).slice().sort(function (a, b) {
+      return String(a.section_code || '').localeCompare(String(b.section_code || ''), undefined, { numeric: true });
+    });
+  }
+
   function _configForSection(section) {
-    if (assignDraft[section.id]) {
-      var d = assignDraft[section.id];
-      if (!d.lot_code) d.lot_code = _sectionLotCode(section);
-      return d;
+    var draft = _getAssignDraft(section.id);
+    if (draft) {
+      if (!draft.lot_code) draft.lot_code = _sectionLotCode(section);
+      return draft;
     }
     var saved = _configFromAssignmentRows(_assignmentsForSection(section.id));
     if (saved) {
@@ -941,7 +1125,7 @@ const TabFieldHarvest = (function () {
     return sections.filter(function (s) {
       if (s.active === false) return false;
       if (!_sectionMatchesTeam(s)) return false;
-      if (Object.prototype.hasOwnProperty.call(assignDraft, s.id)) return true;
+      if (_getAssignDraft(s.id)) return true;
       if (_assignmentsForSection(s.id).length) return true;
       if (_sectionHasAssignmentsOnDate(s.id)) return false;
       var master = s.tapping_session || _parseMeta(s.metadata).tapping_session || '';
@@ -950,28 +1134,48 @@ const TabFieldHarvest = (function () {
     });
   }
 
-  /** Phần cạo hiển thị trên bảng — theo phân công ngày + phiên, không theo master lô KH. */
+  function _resolveSectionForUi(sectionId) {
+    var sec = _findSectionById(sectionId);
+    if (sec) {
+      if (sec.active === false) return null;
+      if (selectedTeam && !_sectionMatchesTeam(sec)) return null;
+      return sec;
+    }
+    var cfg = _getAssignDraft(sectionId);
+    var session = selectedSession || 'A';
+    var rows = assignments.filter(function (a) {
+      return _sameSectionId(a.tapping_section_id, sectionId) && _assignmentSession(a) === session;
+    });
+    if (!cfg && !rows.length) return null;
+    var meta = rows.length ? _parseMeta(rows[0].metadata) : {};
+    var lotCode = (cfg && cfg.lot_code) || meta.lot_code || '';
+    return {
+      id: String(sectionId),
+      section_code: lotCode || String(sectionId),
+      lot_id: lotCode,
+      active: true,
+      team_id: selectedTeam || ''
+    };
+  }
+
+  /** Phần cạo hiển thị trên bảng — assignDraft (nạp/nháp) + phân công đã lưu ngày + phiên. */
   function _displayedAssignSections() {
     var session = selectedSession || 'A';
     if (!selectedTeam) return [];
     var byId = {};
 
+    Object.keys(assignDraft).forEach(function (sid) {
+      var sec = _resolveSectionForUi(sid);
+      if (sec) byId[_draftKey(sec.id)] = sec;
+    });
+
     assignments.forEach(function (a) {
       if (_assignmentSession(a) !== session) return;
-      var sec = sections.find(function (s) { return s.id === a.tapping_section_id; });
-      if (!sec || sec.active === false || !_sectionMatchesTeam(sec)) return;
-      byId[sec.id] = sec;
+      var sec = _resolveSectionForUi(a.tapping_section_id);
+      if (sec) byId[_draftKey(sec.id)] = sec;
     });
 
-    Object.keys(assignDraft).forEach(function (sid) {
-      if (byId[sid]) return;
-      var sec = sections.find(function (s) { return s.id === sid; });
-      if (sec && sec.active !== false && _sectionMatchesTeam(sec)) byId[sid] = sec;
-    });
-
-    return Object.keys(byId).map(function (k) { return byId[k]; }).sort(function (a, b) {
-      return String(a.section_code || '').localeCompare(String(b.section_code || ''), undefined, { numeric: true });
-    });
+    return _sortSectionsByCode(Object.keys(byId).map(function (k) { return byId[k]; }));
   }
 
   function _initSessionFilter() {
@@ -987,26 +1191,67 @@ const TabFieldHarvest = (function () {
     _updateSessionHint();
   }
 
+  function _fitWorkerSelectWidth(sel) {
+    if (!sel || !sel.options) return;
+    var probe = _fitWorkerSelectWidth._probe;
+    if (!probe) {
+      probe = document.createElement('span');
+      probe.style.cssText = 'position:absolute;left:-9999px;top:0;white-space:nowrap;visibility:hidden;pointer-events:none;';
+      document.body.appendChild(probe);
+      _fitWorkerSelectWidth._probe = probe;
+    }
+    var style = window.getComputedStyle(sel);
+    probe.style.font = style.font;
+    probe.style.fontSize = style.fontSize;
+    probe.style.fontWeight = style.fontWeight;
+    probe.style.fontFamily = style.fontFamily;
+    probe.style.letterSpacing = style.letterSpacing;
+    var opt = sel.options[sel.selectedIndex];
+    probe.textContent = (opt && opt.textContent) ? opt.textContent : '— Không —';
+    var textW = probe.offsetWidth;
+    probe.textContent = '  ';
+    var pad = probe.offsetWidth + 26;
+    sel.style.width = Math.ceil(textW + pad) + 'px';
+  }
+
   function _stageCellHtml(workerId, selClass, pctClass, pctVal, hasWorker, hidePct) {
     var pctHtml = hidePct ? '' : (
       '<input type="number" class="fh-share-inp ' + pctClass + '" min="0" max="100" step="1" value="' +
       (pctVal !== '' && pctVal != null ? _intPct(pctVal) : '') + '"' +
       (hasWorker ? '' : ' disabled') + ' placeholder="0" title="Tỉ lệ %">'
     );
+    var nameLabel = workerId ? _workerLabel(workerId) : '';
+    var selTitle = nameLabel ? (' title="' + _escapeHtml(nameLabel) + '"') : '';
     return '<td class="fh-stage-cell fh-td-stage"><div class="fh-stage-inline">' +
-      _workerSelectHtml(workerId, selClass) + pctHtml + '</div></td>';
+      '<div class="fh-worker-cell">' +
+      _workerSelectHtml(workerId, selClass, selTitle) +
+      '</div>' + pctHtml + '</div></td>';
   }
 
-  function _workerSelectHtml(selectedId, extraClass) {
+  /** Phần cạo thuộc đội đang chọn (dùng khi nạp phân công từ ngày khác). */
+  function _sectionEligibleForCopy(sectionId, rows) {
+    var sec = _findSectionById(sectionId);
+    if (sec && sec.active === false) return false;
+    if (sec && !_sectionMatchesTeam(sec)) return false;
+    if (!sec) return !!(rows && rows.length);
+    return true;
+  }
+
+  function _workerSelectHtml(selectedId, extraClass, extraAttrs) {
     var html = '<option value="">— Không —</option>';
+    var foundSelected = false;
     workers.forEach(function (w) {
-      var sel = w.id === selectedId ? ' selected' : '';
-      var g = _workerGroupCode(w.id);
-      var label = (g ? ('[' + g + '] ') : '') + _workerName(w);
+      var sel = _sameSectionId(w.id, selectedId) ? ' selected' : '';
+      if (sel) foundSelected = true;
+      var label = _workerGroupLabel(w.id) + _workerName(w);
       html += '<option value="' + w.id + '"' + sel + '>' + _escapeHtml(label) + '</option>';
     });
+    if (selectedId && !foundSelected) {
+      html += '<option value="' + _escapeHtml(String(selectedId)) + '" selected>' +
+        _escapeHtml(_workerLabel(selectedId)) + '</option>';
+    }
     var cls = extraClass ? ('fh-sel ' + extraClass) : 'fh-sel';
-    return '<select class="' + cls + '">' + html + '</select>';
+    return '<select class="' + cls + '"' + (extraAttrs || '') + '>' + html + '</select>';
   }
 
   function _modeSelectHtml(mode) {
@@ -1021,13 +1266,50 @@ const TabFieldHarvest = (function () {
     return '<span class="fh-session-badge ' + (cls[session] || 'fh-session-a') + '">' + session + '</span>';
   }
 
+  function _mergeSlotFromFallback(domSlot, fbSlot) {
+    if (!fbSlot) return domSlot;
+    var out = Object.assign({}, domSlot);
+    STAGES.forEach(function (st) {
+      if (!out[st.idKey] && fbSlot[st.idKey]) {
+        out[st.idKey] = fbSlot[st.idKey];
+        if ((out[st.pctKey] === '' || out[st.pctKey] == null) &&
+            fbSlot[st.pctKey] !== '' && fbSlot[st.pctKey] != null) {
+          out[st.pctKey] = fbSlot[st.pctKey];
+        }
+      }
+    });
+    return out;
+  }
+
+  function _mergeAssignCfgFromFallback(collected, fallback) {
+    if (!fallback) return collected;
+    if (!collected) return fallback;
+    var mode = collected.work_mode || fallback.work_mode || 'solo';
+    var n = Math.max((collected.slots || []).length, (fallback.slots || []).length);
+    var merged = [];
+    var i;
+    for (i = 0; i < n; i++) {
+      merged.push(_mergeSlotFromFallback(
+        (collected.slots || [])[i] || _emptySlot(),
+        (fallback.slots || [])[i]
+      ));
+    }
+    return {
+      work_mode: mode,
+      slots: _trimSlotsToMode(merged, mode),
+      notes: collected.notes || fallback.notes || '',
+      lot_code: collected.lot_code || fallback.lot_code || ''
+    };
+  }
+
   function _collectSectionState(sectionId) {
     var group = document.querySelectorAll('#fhAssignBody tr[data-section-id="' + sectionId + '"]');
-    if (!group.length) return assignDraft[sectionId] || null;
+    if (!group.length) return _getAssignDraft(sectionId) || null;
 
+    var draftFallback = _getAssignDraft(sectionId) || null;
     var first = group[0];
     var modeEl = first.querySelector('.fh-mode-sel');
-    var work_mode = modeEl ? modeEl.value : 'solo';
+    var work_mode = modeEl ? modeEl.value : (draftFallback ? draftFallback.work_mode : 'solo');
     var slots = [];
     group.forEach(function (tr) {
       var slot = parseInt(tr.getAttribute('data-slot'), 10);
@@ -1058,21 +1340,34 @@ const TabFieldHarvest = (function () {
       if (outSlots[0].stripper_id) outSlots[0].stripper_pct = 100;
       if (outSlots[0].collector_id) outSlots[0].collector_pct = 100;
     }
-    return {
+    var result = {
       work_mode: work_mode,
       slots: outSlots,
-      notes: notesEl ? notesEl.value.trim() : '',
-      lot_code: lotEl ? lotEl.value.trim() : ''
+      notes: notesEl ? notesEl.value.trim() : (draftFallback ? draftFallback.notes : ''),
+      lot_code: lotEl ? lotEl.value.trim() : (draftFallback ? draftFallback.lot_code : '')
     };
+    return draftFallback ? _mergeAssignCfgFromFallback(result, draftFallback) : result;
   }
 
   function _collectAllAssignStates() {
     var draft = {};
     _displayedAssignSections().forEach(function (s) {
       var st = _collectSectionState(s.id);
-      if (st) draft[s.id] = st;
+      if (st) draft[_draftKey(s.id)] = st;
     });
     return draft;
+  }
+
+  /** Mọi phần cạo cần lưu — giao diện + mọi key trong assignDraft. */
+  function _sectionsForAssignSave(extraSectionIds) {
+    var byId = {};
+    _displayedAssignSections().forEach(function (s) { byId[_draftKey(s.id)] = s; });
+    (extraSectionIds || []).forEach(function (sid) {
+      if (byId[_draftKey(sid)]) return;
+      var sec = _resolveSectionForUi(sid);
+      if (sec) byId[_draftKey(sec.id)] = sec;
+    });
+    return _sortSectionsByCode(Object.keys(byId).map(function (k) { return byId[k]; }));
   }
 
   function _labelStage(people) {
@@ -1084,7 +1379,7 @@ const TabFieldHarvest = (function () {
   function getSectionWeighRows() {
     var rows = [];
     _displayedAssignSections().forEach(function (s) {
-      var cfg = _collectSectionState(s.id) || _configForSection(s);
+      var cfg = _getAssignDraft(s.id) || _collectSectionState(s.id) || _configForSection(s);
       var tappers = _stagePeople(cfg.slots, 'tapper_id', 'tapper_pct');
       if (!tappers.length) return;
       rows.push({
@@ -1266,9 +1561,12 @@ const TabFieldHarvest = (function () {
     await FieldHarvestOffline.setMeta({ assignmentsCacheVer: FH_ASSIGNMENTS_CACHE_VER });
   }
 
-  async function loadAssignments() {
-    assignDraft = {};
+  async function loadAssignments(opts) {
+    opts = opts || {};
     var date = _dateVal();
+    var memDraft = (!opts.clearDraft && _assignDraftCount())
+      ? JSON.parse(JSON.stringify(assignDraft)) : null;
+    assignDraft = {};
     var fromCache = false;
     try {
       if (_isOnline()) {
@@ -1292,6 +1590,12 @@ const TabFieldHarvest = (function () {
       assignments = _dedupeAssignments(await FieldHarvestOffline.getAssignmentsForDate(date));
     } else if (fromCache) {
       assignments = [];
+    }
+    if (memDraft) {
+      assignDraft = memDraft;
+    } else {
+      var cachedDraft = _restoreAssignDraftCache(date);
+      if (cachedDraft && Object.keys(cachedDraft).length) assignDraft = cachedDraft;
     }
     renderAssignmentTable();
     renderAssignmentStats();
@@ -1452,7 +1756,7 @@ const TabFieldHarvest = (function () {
   function onWorkModeChange(sectionId) {
     assignDraft = _collectAllAssignStates();
     var section = sections.find(function (s) { return s.id === sectionId; });
-    var cfg = assignDraft[sectionId] || _configForSection(section);
+    var cfg = _getAssignDraft(sectionId) || _configForSection(section);
     var el = document.querySelector('#fhAssignBody tr[data-section-id="' + sectionId + '"] .fh-mode-sel');
     cfg.work_mode = el ? el.value : 'solo';
     if (cfg.work_mode === 'solo') {
@@ -1467,7 +1771,7 @@ const TabFieldHarvest = (function () {
   function onSlotWorkerChange(sectionId, stageIdKey, slotIndex) {
     assignDraft = _collectAllAssignStates();
     var section = sections.find(function (s) { return s.id === sectionId; });
-    var cfg = assignDraft[sectionId] || _configForSection(section);
+    var cfg = _getAssignDraft(sectionId) || _configForSection(section);
     var sl = cfg.slots[slotIndex];
     if (stageIdKey === 'tapper_id' && sl) {
       if (sl.tapper_id) {
@@ -1497,7 +1801,7 @@ const TabFieldHarvest = (function () {
   function onSlotPctChange(sectionId, stageIdKey, slot, newPct) {
     assignDraft = _collectAllAssignStates();
     var section = sections.find(function (s) { return s.id === sectionId; });
-    var cfg = assignDraft[sectionId] || _configForSection(section);
+    var cfg = _getAssignDraft(sectionId) || _configForSection(section);
     var st = STAGES.find(function (x) { return x.idKey === stageIdKey; });
     if (st) _rebalanceOnPctEdit(cfg.slots, st.idKey, st.pctKey, slot, newPct);
     assignDraft[sectionId] = cfg;
@@ -1517,7 +1821,9 @@ const TabFieldHarvest = (function () {
     STAGES.forEach(function (st) {
       var cls = '.fh-' + st.id + '-sel';
       tbody.querySelectorAll(cls).forEach(function (el) {
+        _fitWorkerSelectWidth(el);
         el.addEventListener('change', function () {
+          _fitWorkerSelectWidth(el);
           var tr = el.closest('tr');
           onSlotWorkerChange(
             tr.getAttribute('data-section-id'),
@@ -1601,7 +1907,7 @@ const TabFieldHarvest = (function () {
 
     var html = [];
     secs.forEach(function (s, idx) {
-      var cfg = assignDraft[s.id] || _configForSection(s);
+      var cfg = _getAssignDraft(s.id) || _collectSectionState(s.id) || _configForSection(s);
       var n = _modeCount(cfg.work_mode);
       var assignRows = _assignmentsForSection(s.id);
       var session = assignRows.length ? _assignmentSession(assignRows[0]) : (selectedSession || 'A');
@@ -1649,7 +1955,7 @@ const TabFieldHarvest = (function () {
     });
     tbody.innerHTML = html.join('');
     _bindAssignRowEvents();
-    _updateSessionHint();
+    renderAssignmentStats();
   }
 
   function _weighingsForSection(sectionId) {
@@ -1665,7 +1971,7 @@ const TabFieldHarvest = (function () {
   function _getWeighWorkers(sectionId) {
     var section = sections.find(function (s) { return s.id === sectionId; });
     if (!section) return [];
-    var cfg = assignDraft[sectionId] || _configForSection(section);
+    var cfg = _getAssignDraft(sectionId) || _configForSection(section);
     return _stagePeople(cfg.slots, 'tapper_id', 'tapper_pct').map(function (p) {
       return {
         worker_id: p.worker_id,
@@ -2104,41 +2410,55 @@ const TabFieldHarvest = (function () {
     }
   }
 
-  function _buildAssignmentRows(sectionId, cfg, date) {
+  function _normWorkerId(wid) {
+    return String(wid || '').trim();
+  }
+
+  function _mergeWorkersFromCfg(cfg) {
     var merged = {};
     var notes = cfg.notes || '';
 
     function _queue(role, wid, pct) {
+      wid = _normWorkerId(wid);
       if (!wid) return;
       if (!merged[wid]) merged[wid] = { worker_id: wid, roles: [] };
       merged[wid].roles.push({ role: role, yield_share_pct: pct });
     }
 
-    cfg.slots.forEach(function (sl) {
+    (cfg.slots || []).forEach(function (sl) {
       if (sl.tapper_id) _queue('tapper', sl.tapper_id, sl.tapper_pct);
       if (sl.stripper_id) _queue('stripper', sl.stripper_id, sl.stripper_pct);
       if (sl.collector_id) _queue('collector', sl.collector_id, sl.collector_pct);
     });
+    return { merged: merged, notes: notes };
+  }
 
-    return Object.keys(merged).map(function (wid) {
-      var m = merged[wid];
-      return {
+  function _assignmentPayload(date, sectionId, wid, m, notes, cfg) {
+    return {
+      record_date: date,
+      tapping_section_id: sectionId,
+      worker_id: wid,
+      assignment_role: m.roles[0].role,
+      notes: notes,
+      metadata: {
+        tapping_session: selectedSession,
+        work_mode: cfg.work_mode,
+        slots: cfg.slots,
+        roles: m.roles,
+        yield_share_pct: m.roles[0].yield_share_pct,
+        lot_code: cfg.lot_code || null
+      }
+    };
+  }
+
+  function _buildAssignmentRows(sectionId, cfg, date) {
+    var pack = _mergeWorkersFromCfg(cfg);
+    return Object.keys(pack.merged).map(function (wid) {
+      var m = pack.merged[wid];
+      return Object.assign({
         id: _localId('local-swa-'),
-        record_date: date,
-        tapping_section_id: sectionId,
-        worker_id: wid,
-        assignment_role: m.roles[0].role,
-        notes: notes,
-        metadata: {
-          tapping_session: selectedSession,
-          work_mode: cfg.work_mode,
-          slots: cfg.slots,
-          roles: m.roles,
-          yield_share_pct: m.roles[0].yield_share_pct,
-          lot_code: cfg.lot_code || null
-        },
         _offlinePending: true
-      };
+      }, _assignmentPayload(date, sectionId, wid, m, pack.notes, cfg));
     });
   }
 
@@ -2173,118 +2493,224 @@ const TabFieldHarvest = (function () {
     assignments = assignments.concat(_buildAssignmentRows(sectionId, cfg, date));
   }
 
-  async function _upsertSectionAssignments(sectionId, cfg) {
-    var date = _dateVal();
+  function _assignmentOpsForSection(sectionId, cfg, date, existingRows) {
+    var ops = [];
+    (existingRows || []).forEach(function (row) {
+      if (String(row.id || '').indexOf('local-') === 0) return;
+      ops.push({
+        type: 'delete',
+        ref: _db().collection('sectionWorkerAssignments').doc(row.id)
+      });
+    });
+    var pack = _mergeWorkersFromCfg(cfg);
+    Object.keys(pack.merged).forEach(function (wid) {
+      var m = pack.merged[wid];
+      ops.push({
+        type: 'set',
+        ref: _db().collection('sectionWorkerAssignments').doc(_assignmentDocId(date, sectionId, wid)),
+        data: _assignmentPayload(date, sectionId, wid, m, pack.notes, cfg)
+      });
+    });
+    return ops;
+  }
+
+  async function _upsertSectionAssignments(sectionId, cfg, date) {
+    date = date || _dateVal();
+    var existingRows = assignments.filter(function (a) {
+      return a.record_date === date && _sameSectionId(a.tapping_section_id, sectionId);
+    });
     if (_isOnline()) {
       try {
         var snap = await _db().collection('sectionWorkerAssignments')
           .where('record_date', '==', date)
           .where('tapping_section_id', '==', sectionId)
           .get();
-        var di;
-        for (di = 0; di < snap.docs.length; di++) {
-          await _db().collection('sectionWorkerAssignments').doc(snap.docs[di].id).delete();
-        }
-      } catch (e) {
-        var existing = assignments.filter(function (a) {
-          return a.record_date === date && a.tapping_section_id === sectionId;
+        existingRows = snap.docs.map(function (d) {
+          return Object.assign({ id: d.id }, d.data());
         });
-        var i;
-        for (i = 0; i < existing.length; i++) {
-          if (String(existing[i].id || '').indexOf('local-') === 0) continue;
-          await _db().collection('sectionWorkerAssignments').doc(existing[i].id).delete();
-        }
+      } catch (e) {
+        console.warn('[FieldHarvest] assign query fallback:', e.message);
       }
-    } else {
-      var existing = assignments.filter(function (a) {
-        return a.record_date === date && a.tapping_section_id === sectionId;
+    }
+    await _commitDbBatch(_assignmentOpsForSection(sectionId, cfg, date, existingRows));
+  }
+
+  async function _batchSaveAllAssignments(toSave, date) {
+    var existingBySection = {};
+    assignments.filter(function (a) { return a.record_date === date; }).forEach(function (a) {
+      var sid = a.tapping_section_id;
+      if (!existingBySection[sid]) existingBySection[sid] = [];
+      existingBySection[sid].push(a);
+    });
+    if (_isOnline()) {
+      var snap = await _db().collection('sectionWorkerAssignments').where('record_date', '==', date).get();
+      snap.docs.forEach(function (d) {
+        var row = Object.assign({ id: d.id }, d.data());
+        var sid = row.tapping_section_id;
+        if (!existingBySection[sid]) existingBySection[sid] = [];
+        var seen = existingBySection[sid].some(function (x) { return x.id === row.id; });
+        if (!seen) existingBySection[sid].push(row);
       });
-      var i;
-      for (i = 0; i < existing.length; i++) {
-        if (String(existing[i].id || '').indexOf('local-') === 0) continue;
-        await _db().collection('sectionWorkerAssignments').doc(existing[i].id).delete();
+    }
+
+    var items = [];
+    var sectionMetaUpdates = [];
+    var si;
+    for (si = 0; si < toSave.length; si++) {
+      var item = toSave[si];
+      var sectionId = item.section.id;
+      var cfg = item.cfg;
+      var rows = existingBySection[sectionId] || [];
+      var deleteIds = [];
+      var ri;
+      for (ri = 0; ri < rows.length; ri++) {
+        if (String(rows[ri].id || '').indexOf('local-') === 0) continue;
+        deleteIds.push(rows[ri].id);
       }
+      var pack = _mergeWorkersFromCfg(cfg);
+      var upsertRows = Object.keys(pack.merged).map(function (wid) {
+        var m = pack.merged[wid];
+        return Object.assign(
+          { id: _assignmentDocId(date, sectionId, wid) },
+          _assignmentPayload(date, sectionId, wid, m, pack.notes, cfg)
+        );
+      });
+      items.push({ sectionId: sectionId, deleteIds: deleteIds, rows: upsertRows });
+      var sec = sections.find(function (s) { return s.id === sectionId; });
+      if (sec) {
+        var meta = _sectionMeta(sec);
+        meta.lot_code = cfg.lot_code || null;
+        sec.metadata = meta;
+        sectionMetaUpdates.push({ sectionId: sectionId, metadata: meta });
+      }
+      _applyAssignmentsLocal(sectionId, cfg, date);
     }
-
-    var merged = {};
-    var notes = cfg.notes || '';
-
-    function _queue(role, wid, pct) {
-      if (!wid) return;
-      if (!merged[wid]) merged[wid] = { worker_id: wid, roles: [] };
-      merged[wid].roles.push({ role: role, yield_share_pct: pct });
-    }
-
-    cfg.slots.forEach(function (sl) {
-      if (sl.tapper_id) _queue('tapper', sl.tapper_id, sl.tapper_pct);
-      if (sl.stripper_id) _queue('stripper', sl.stripper_id, sl.stripper_pct);
-      if (sl.collector_id) _queue('collector', sl.collector_id, sl.collector_pct);
+    await _bulkSaveAssignmentsApi({
+      date: date,
+      items: items,
+      sectionMetaUpdates: sectionMetaUpdates
     });
-
-    var promises = [];
-    Object.keys(merged).forEach(function (wid) {
-      var m = merged[wid];
-      var docId = _assignmentDocId(date, sectionId, wid);
-      promises.push(_db().collection('sectionWorkerAssignments').doc(docId).set({
-        record_date: date,
-        tapping_section_id: sectionId,
-        worker_id: wid,
-        assignment_role: m.roles[0].role,
-        notes: notes,
-        metadata: {
-          tapping_session: selectedSession,
-          work_mode: cfg.work_mode,
-          slots: cfg.slots,
-          roles: m.roles,
-          yield_share_pct: m.roles[0].yield_share_pct,
-          lot_code: cfg.lot_code || null
-        }
-      }));
-    });
-    await Promise.all(promises);
   }
 
   async function saveAllAssignments() {
+    if (_fhSaveInProgress) {
+      _toast('Đang lưu phân công — vui lòng đợi hoàn tất', 'warning');
+      return;
+    }
     if (!selectedTeam) { _toast('Chọn đội sản xuất trước khi lưu', 'warning'); return; }
     if (!_assertTeamAllowed(selectedTeam, 'lưu phân công')) return;
     if (typeof Permissions !== 'undefined' && Permissions.canWriteFieldHarvest && !Permissions.canWriteFieldHarvest()) {
       _toast('Bạn không có quyền lưu phân công', 'error');
       return;
     }
-    assignDraft = _collectAllAssignStates();
-    var secs = _displayedAssignSections();
+
     var date = _dateVal();
+    var priorDraft = JSON.parse(JSON.stringify(assignDraft));
+    var collected = _collectAllAssignStates();
+    assignDraft = {};
+    var saveIds = {};
+    Object.keys(priorDraft).forEach(function (sid) { saveIds[_draftKey(sid)] = true; });
+    Object.keys(collected).forEach(function (sid) { saveIds[_draftKey(sid)] = true; });
+    Object.keys(saveIds).forEach(function (sid) {
+      var merged = _mergeAssignCfgFromFallback(
+        collected[sid] || collected[_draftKey(sid)],
+        priorDraft[sid] || priorDraft[_draftKey(sid)]
+      );
+      if (merged) _setAssignDraft(sid, merged);
+    });
+    var secs = _sectionsForAssignSave(Object.keys(saveIds));
+
+    var toSave = [];
+    var si;
+    for (si = 0; si < secs.length; si++) {
+      var cfg = _getAssignDraft(secs[si].id) || _configForSection(secs[si]);
+      var code = secs[si].section_code || secs[si].id;
+      if (!_stagePeople(cfg.slots, 'tapper_id', 'tapper_pct').length) continue;
+      if (!_validateStageSlots(cfg.slots, 'tapper_id', 'tapper_pct', 'Cạo', code)) {
+        assignDraft = priorDraft;
+        _persistAssignDraftCache(date);
+        return;
+      }
+      if (!_validateStageSlots(cfg.slots, 'stripper_id', 'stripper_pct', 'Trút', code)) {
+        assignDraft = priorDraft;
+        _persistAssignDraftCache(date);
+        return;
+      }
+      if (!_validateStageSlots(cfg.slots, 'collector_id', 'collector_pct', 'Bốc', code)) {
+        assignDraft = priorDraft;
+        _persistAssignDraftCache(date);
+        return;
+      }
+      toSave.push({ section: secs[si], cfg: cfg });
+    }
+
+    if (!toSave.length) {
+      _toast('Không có phần cạo nào để lưu (thiếu công nhân cạo)', 'warning');
+      assignDraft = priorDraft;
+      _persistAssignDraftCache(date);
+      return;
+    }
+
+    _fhSaveInProgress = true;
+    _setSaveButtonBusy(true);
+    _toast('Đang lưu ' + toSave.length + ' phần cạo ngày ' + _formatDateShort(date) + '...', 'info');
+
     var offlineUsed = false;
     var fallbackUsed = false;
     try {
-      for (var i = 0; i < secs.length; i++) {
-        var cfg = assignDraft[secs[i].id] || _configForSection(secs[i]);
-        var code = secs[i].section_code || secs[i].id;
-        if (!_stagePeople(cfg.slots, 'tapper_id', 'tapper_pct').length) continue;
-        if (!_validateStageSlots(cfg.slots, 'tapper_id', 'tapper_pct', 'Cạo', code)) return;
-        if (!_validateStageSlots(cfg.slots, 'stripper_id', 'stripper_pct', 'Trút', code)) return;
-        if (!_validateStageSlots(cfg.slots, 'collector_id', 'collector_pct', 'Bốc', code)) return;
-        var mode = await _saveAssignmentsWithFallback(secs[i].id, cfg, date);
-        if (mode === 'offline') offlineUsed = true;
-        if (mode === 'fallback') fallbackUsed = true;
+      if (!_isOnline() && _offlineReady()) {
+        var oi;
+        for (oi = 0; oi < toSave.length; oi++) {
+          await _saveAssignmentsOffline(toSave[oi].section.id, toSave[oi].cfg, date);
+        }
+        offlineUsed = true;
+      } else {
+        try {
+          await _batchSaveAllAssignments(toSave, date);
+        } catch (e) {
+          if (!_offlineReady() || !_isTransientNetworkError(e)) throw e;
+          console.warn('[FieldHarvest] batch save fallback offline:', e.message);
+          var fi;
+          for (fi = 0; fi < toSave.length; fi++) {
+            await _saveAssignmentsOffline(toSave[fi].section.id, toSave[fi].cfg, date);
+          }
+          fallbackUsed = true;
+        }
       }
+
+      var savedCount = toSave.length;
       assignDraft = {};
+      _clearAssignDraftCache(date);
+
       if (offlineUsed || fallbackUsed) {
         await _persistAssignmentsCache();
         _toast(fallbackUsed
-          ? 'Mạng gián đoạn — đã lưu trên máy, sẽ tự đồng bộ khi có sóng'
-          : 'Đã lưu phân công trên máy — tự đồng bộ khi có mạng', 'success');
+          ? ('Mạng gián đoạn — đã lưu ' + savedCount + ' phần cạo trên máy, sẽ tự đồng bộ khi có sóng')
+          : ('Đã lưu ' + savedCount + ' phần cạo trên máy — tự đồng bộ khi có mạng'), 'success');
         renderAssignmentTable();
         renderAssignmentStats();
       } else {
-        _toast('Đã lưu phân công');
-        await loadAssignments();
+        _toast('Đã lưu phân công (' + savedCount + ' phần cạo) ngày ' + _formatDateShort(date), 'success');
+        var dateEl = _el('fhRecordDate');
+        if (dateEl && dateEl.value !== date) dateEl.value = date;
+        _fhLastRecordDate = date;
+        await loadAssignments({ clearDraft: true });
+        var reloaded = _displayedAssignSections().length;
+        if (reloaded < savedCount) {
+          _toast('Đã ghi ' + savedCount + ' phần cạo nhưng tải lại chỉ thấy ' + reloaded +
+            ' — thử refresh trang hoặc kiểm tra quyền/mạng', 'warning');
+        }
         await loadWeighings();
         await _syncPending();
       }
       _updateOfflineUI();
     } catch (e) {
+      assignDraft = priorDraft;
+      _persistAssignDraftCache(date);
       _toast('Lỗi lưu: ' + e.message, 'error');
+    } finally {
+      _fhSaveInProgress = false;
+      _setSaveButtonBusy(false);
     }
   }
 
@@ -2395,6 +2821,7 @@ const TabFieldHarvest = (function () {
     if (!srcDate) { _toast('Chọn ngày nguồn để sao chép', 'warning'); return; }
     if (srcDate === _dateVal()) { _toast('Chọn ngày khác ngày đang làm việc', 'warning'); return; }
     try {
+      if (!sections.length) await loadSections();
       var bySection = {};
       if (_isOnline()) {
         var snap = await _db().collection('sectionWorkerAssignments').where('record_date', '==', srcDate).get();
@@ -2426,22 +2853,30 @@ const TabFieldHarvest = (function () {
         return;
       }
       var copied = 0;
-      var secs = _filteredSections();
+      var skipped = 0;
       assignDraft = {};
-      for (var i = 0; i < secs.length; i++) {
-        var rows = bySection[secs[i].id];
-        if (!rows || !rows.length) continue;
+      Object.keys(bySection).forEach(function (sectionId) {
+        var rows = bySection[sectionId];
+        if (!_sectionEligibleForCopy(sectionId, rows)) {
+          skipped++;
+          return;
+        }
         var cfg = _configFromAssignmentRows(rows);
-        if (!cfg) continue;
-        assignDraft[secs[i].id] = cfg;
+        if (!cfg) return;
+        _setAssignDraft(sectionId, cfg);
         copied++;
-      }
+      });
       if (!copied) {
         _toast('Không có phân công phiên ' + selectedSession + ' ngày ' + srcDate + ' cho đội này', 'warning');
         return;
       }
       renderAssignmentTable();
-      _toast('Đã nạp ' + copied + ' phần cạo (phiên ' + selectedSession + ') từ ' + srcDate + ' — chỉnh sửa rồi bấm Lưu');
+      renderAssignmentStats();
+      _persistAssignDraftCache(_dateVal());
+      var msg = 'Đã nạp ' + copied + ' phần cạo (phiên ' + selectedSession + ') từ ' + srcDate +
+        ' — bấm «Lưu phân công» trước khi đổi ngày';
+      if (skipped) msg += ' (' + skipped + ' phần cạo ngoài đội, bỏ qua)';
+      _toast(msg);
     } catch (e) {
       _toast('Lỗi: ' + e.message, 'error');
     }
@@ -2683,8 +3118,30 @@ const TabFieldHarvest = (function () {
   }
 
   async function onDateChange() {
+    var dateEl = _el('fhRecordDate');
+    if (_fhSaveInProgress) {
+      _toast('Đang lưu phân công — vui lòng đợi xong rồi mới đổi ngày', 'warning');
+      if (dateEl && _fhLastRecordDate) dateEl.value = _fhLastRecordDate;
+      return;
+    }
+    var newDate = (dateEl && dateEl.value) ? dateEl.value : _today();
+    var draftN = _assignDraftCount();
+    if (draftN > 0) {
+      var discard = await showConfirm(
+        'Có ' + draftN + ' phần cạo chưa lưu (ngày ' + (_fhLastRecordDate || newDate) + ').\n\n' +
+        'Bấm OK = bỏ bản nháp và chuyển ngày.\n' +
+        'Bấm Cancel = ở lại (nên bấm «Lưu phân công» trước khi đổi ngày).'
+      );
+      if (!discard) {
+        if (dateEl && _fhLastRecordDate) dateEl.value = _fhLastRecordDate;
+        return;
+      }
+      _clearAssignDraftCache(_fhLastRecordDate || newDate);
+      assignDraft = {};
+    }
     if (weighSectionId) closeSectionWeigh();
-    await loadAssignments();
+    _fhLastRecordDate = newDate;
+    await loadAssignments({ clearDraft: true });
     await loadWeighings();
   }
 
@@ -3266,8 +3723,9 @@ const TabFieldHarvest = (function () {
       var item = queue[qi];
       try {
         if (item.type === 'assignments') {
-          await _upsertSectionAssignments(item.sectionId, item.cfg);
+          await _upsertSectionAssignments(item.sectionId, item.cfg, item.date);
           await _saveSectionLot(item.sectionId, (item.cfg && item.cfg.lot_code) || '');
+          _applyAssignmentsLocal(item.sectionId, item.cfg, item.date);
         } else if (item.type === 'section_weigh') {
           var pl = item.payloads || [];
           for (var pi = 0; pi < pl.length; pi++) {
@@ -3278,12 +3736,13 @@ const TabFieldHarvest = (function () {
         synced++;
       } catch (e) {
         console.warn('Sync failed:', item.type, e.message);
+        _toast('Đồng bộ thất bại: ' + e.message, 'error');
         break;
       }
     }
     if (synced > 0) {
       await loadSections();
-      await loadAssignments();
+      await loadAssignments({ clearDraft: true });
       await loadWeighings();
       _toast('Đã đồng bộ ' + synced + ' thao tác lên server', 'success');
     }
@@ -3372,6 +3831,7 @@ const TabFieldHarvest = (function () {
   async function init() {
     var dateEl = _el('fhRecordDate');
     if (dateEl && !dateEl.value) dateEl.value = _today();
+    _fhLastRecordDate = (dateEl && dateEl.value) ? dateEl.value : _today();
     _initSessionFilter();
     if (_offlineReady()) {
       try { await FieldHarvestOffline.init(); } catch (e) { console.warn('Offline DB:', e.message); }

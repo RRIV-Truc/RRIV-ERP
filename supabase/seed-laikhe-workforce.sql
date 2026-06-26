@@ -11,7 +11,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Đội / Tổ
 INSERT INTO category_teams (id, name, department, metadata) VALUES
-  ('team-lk', 'Tổ SX Lai Khê', 'Trung tâm nghiên cứu phát triển Giống cao su',
+  ('team-lk', 'Đội sản xuất Lai Khê', 'Trung tâm nghiên cứu phát triển Giống cao su',
    '{"department_id":"dl-3","code":"LK","location":"Lai Khê","station":"Trạm Lai Khê"}')
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,

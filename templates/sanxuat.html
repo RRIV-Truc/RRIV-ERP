@@ -291,17 +291,125 @@ tr:hover { background: rgba(0,104,255,0.04); }
 .fh-stat { font-size: 13px; color: #64748b; }
 .fh-stat strong { color: #0f172a; }
 .fh-drc-cell { font-weight: 600; color: #7c3aed; font-size: 13px; text-align: center; }
-.fh-assign-table { border-collapse: collapse; margin-top: 0 !important; table-layout: fixed; width: 100%; }
-.fh-assign-table col.fh-col-stt { width: 3%; }
-.fh-assign-table col.fh-col-lot { width: 17%; }
-.fh-assign-table col.fh-col-pc { width: 10%; }
-.fh-assign-table col.fh-col-session { width: 4%; }
-.fh-assign-table col.fh-col-mode { width: 9%; }
-.fh-assign-table col.fh-col-worker { width: 13%; }
-.fh-assign-table col.fh-col-notes { width: 7%; }
-#tab1-harvest .fh-assign-table td.fh-td-lot { min-width: 0; }
-#tab1-harvest .fh-assign-table td.fh-td-pc { min-width: 108px; max-width: 128px; }
-#tab1-harvest .fh-assign-table td.fh-td-stage { overflow: hidden; }
+.fh-assign-table {
+  border-collapse: collapse;
+  margin-top: 0 !important;
+  table-layout: auto;
+  width: max-content;
+  min-width: 1048px;
+}
+#tab1-harvest .fh-assign-scroll,
+#tab1-harvest .fh-summary-scroll {
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+  overscroll-behavior-x: contain;
+}
+.fh-scroll-hint {
+  display: none;
+  font-size: 12px;
+  color: #64748b;
+  margin: 0 0 8px;
+  text-align: center;
+}
+@media (max-width: 900px) {
+  .fh-scroll-hint { display: block; }
+  #tab1-harvest .fh-assign-table { min-width: 908px; }
+  #tab1-harvest .fh-assign-table col.fh-col-worker,
+  #tab1-harvest .fh-assign-table td.fh-td-stage { min-width: 0; }
+  #tab1-harvest .fh-assign-table td.fh-td-stage { white-space: nowrap; }
+  #tab1-harvest .fh-worker-cell { min-width: 0; width: auto; }
+  .fh-assign-table .fh-stage-inline {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+  .fh-assign-table .fh-stage-inline .fh-worker-cell {
+    min-width: 0;
+    width: 100%;
+  }
+  .fh-assign-table .fh-stage-inline .fh-share-inp {
+    align-self: flex-end;
+    width: 56px;
+  }
+  .fh-summary-table th.fh-sum-text,
+  .fh-summary-table td.fh-sum-text {
+    white-space: normal;
+    min-width: 120px;
+    max-width: 200px;
+  }
+  .fh-weigh-worker-title h4 {
+    word-break: break-word;
+    line-height: 1.35;
+  }
+}
+.fh-assign-table col.fh-col-stt { width: 40px; }
+.fh-assign-table col.fh-col-lot { width: 140px; }
+.fh-assign-table col.fh-col-pc { width: 96px; }
+.fh-assign-table col.fh-col-session { width: 52px; }
+.fh-assign-table col.fh-col-mode { width: 88px; }
+.fh-assign-table col.fh-col-worker { width: 1%; }
+.fh-assign-table col.fh-col-notes { width: 88px; }
+#tab1-harvest .fh-assign-table td.fh-td-lot { min-width: 128px; }
+#tab1-harvest .fh-assign-table td.fh-td-pc {
+  min-width: 0;
+  max-width: 96px;
+  width: 96px;
+  padding-left: 3px !important;
+  padding-right: 3px !important;
+}
+#tab1-harvest .fh-assign-table td.fh-td-pc .fh-section-cell { gap: 3px; min-height: 30px; }
+#tab1-harvest .fh-assign-table td.fh-td-pc .fh-section-sel {
+  min-width: 28px;
+  max-width: 36px;
+  flex: 0 0 32px;
+  padding-left: 2px !important;
+  padding-right: 2px !important;
+  font-size: 12px;
+}
+#tab1-harvest .fh-assign-table td.fh-td-pc .fh-section-weigh-btn {
+  min-width: 26px;
+  min-height: 28px;
+  padding: 2px 4px;
+  font-size: 14px;
+}
+#tab1-harvest .fh-assign-table td.fh-td-pc .fh-section-del {
+  min-width: 24px;
+  min-height: 26px;
+  padding: 2px 3px;
+  font-size: 13px;
+}
+#tab1-harvest .fh-assign-table td.fh-td-pc .fh-weigh-done { font-size: 9px; }
+#tab1-harvest .fh-assign-table td.fh-td-mode {
+  min-width: 0;
+  max-width: 88px;
+  width: 88px;
+  padding-left: 3px !important;
+  padding-right: 3px !important;
+  vertical-align: top;
+}
+#tab1-harvest .fh-assign-table select.fh-mode-sel {
+  min-width: 0 !important;
+  width: 100%;
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 2px 4px !important;
+  white-space: normal;
+}
+#tab1-harvest .fh-assign-table td.fh-td-mode .fh-share-warns {
+  font-size: 9px;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+#tab1-harvest .fh-assign-table td.fh-td-stage {
+  overflow: visible;
+  width: 1%;
+  min-width: 0;
+  max-width: none;
+  white-space: nowrap;
+}
 #tab1-harvest .fh-assign-table th,
 #tab1-harvest .fh-assign-table td {
   padding: 4px 5px !important;
@@ -317,8 +425,6 @@ tr:hover { background: rgba(0,104,255,0.04); }
 }
 #tab1-harvest .fh-assign-table select.fh-sel,
 #tab1-harvest .fh-assign-table .fh-notes-inp {
-  width: 100%;
-  min-width: 0;
   box-sizing: border-box;
   border: 1px solid #e2e8f0;
   border-radius: 4px;
@@ -326,6 +432,19 @@ tr:hover { background: rgba(0,104,255,0.04); }
   background: #fff;
   margin: 0;
 }
+#tab1-harvest .fh-assign-table select.fh-sel {
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  padding-right: 22px !important;
+  field-sizing: content;
+}
+#tab1-harvest .fh-assign-table .fh-notes-inp {
+  width: 100%;
+  min-width: 72px;
+}
+.fh-worker-cell { min-width: 0; width: auto; display: inline-flex; }
+.fh-worker-cell .fh-sel { margin: 0; width: auto; min-width: 0; }
 #tab1-harvest .fh-assign-table tr.fh-mode-solo td { padding: 5px 4px !important; }
 #tab1-harvest .fh-assign-table tr.fh-mode-solo select.fh-sel,
 #tab1-harvest .fh-assign-table tr.fh-mode-solo .fh-notes-inp {
@@ -348,8 +467,9 @@ tr:hover { background: rgba(0,104,255,0.04); }
 }
 .fh-assign-table .fh-mode-sel { max-width: 100%; }
 .fh-assign-table .fh-stage-cell { padding: 2px 3px !important; }
-.fh-assign-table .fh-stage-inline { display: flex; align-items: center; gap: 4px; min-height: 0; }
-.fh-assign-table .fh-stage-inline .fh-sel { flex: 1; min-width: 0; }
+.fh-assign-table .fh-stage-inline { display: flex; align-items: center; gap: 6px; min-height: 0; flex-wrap: nowrap; }
+.fh-assign-table .fh-stage-inline .fh-worker-cell { flex: 0 1 auto; min-width: 0; }
+.fh-assign-table .fh-stage-inline .fh-sel { flex: 0 0 auto; min-width: 0; max-width: 100%; }
 .fh-assign-table .fh-share-inp {
   width: 52px; min-width: 52px; flex-shrink: 0; height: 34px; padding: 2px 5px;
   border: 1px solid #e2e8f0; border-radius: 4px; font-size: 13px; font-weight: 600;
@@ -448,7 +568,9 @@ tr:hover { background: rgba(0,104,255,0.04); }
 .fh-summary-panel .toolbar label { font-size: 13px; margin-right: 12px; }
 .fh-summary-panel .toolbar select { padding: 6px 10px; border-radius: 6px; border: 1px solid #94a3b8; min-width: 140px; }
 #fhSummaryHint { font-size: 12px; color: #64748b !important; }
-.fh-summary-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.fh-summary-table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 13px; table-layout: auto; }
+.fh-summary-table th.fh-sum-text,
+.fh-summary-table td.fh-sum-text { white-space: nowrap; min-width: 140px; }
 .fh-summary-table th, .fh-summary-table td { border: 1px solid #94a3b8; padding: 8px 10px; text-align: right; color: #0f172a !important; background: #fff; }
 .fh-summary-table th { background: #e2e8f0 !important; font-weight: 700; text-align: center; }
 .fh-summary-table th.fh-sum-col-latex { background: #bfdbfe !important; color: #1e3a8a !important; }
@@ -693,7 +815,7 @@ tr:hover { background: rgba(0,104,255,0.04); }
       <label style="font-size:13px;">Ngày:
         <input type="date" id="fhRecordDate" onchange="TabFieldHarvest.onDateChange()" style="padding:8px;border-radius:8px;border:1px solid #e2e8f0;">
       </label>
-      <label style="font-size:13px;font-weight:600;" title="Chọn tổ/đội sản xuất (vd. Tổ SX Lai Khê)">Tổ/đội SX *
+      <label style="font-size:13px;font-weight:600;" title="Chọn tổ/đội sản xuất (vd. Đội sản xuất Lai Khê)">Tổ/đội SX *
         <select id="fhTeamFilter" onchange="TabFieldHarvest.onTeamChange()" style="padding:8px 12px;border-radius:8px;border:2px solid #f59e0b;min-width:200px;font-weight:600;">
           <option value="">— Chọn tổ/đội SX —</option>
         </select>
@@ -724,7 +846,8 @@ tr:hover { background: rgba(0,104,255,0.04); }
         <button class="btn btn-secondary btn-sm" onclick="TabFieldHarvest.openAssignRowModal()">+ Thêm phân công</button>
         <button class="btn btn-secondary btn-sm" onclick="TabFieldHarvest.openSectionModal()">+ Thêm phần cạo</button>
       </div>
-      <div class="table-container">
+      <p class="fh-scroll-hint">← Vuốt ngang bảng để xem đủ họ tên công nhân →</p>
+      <div class="table-container fh-assign-scroll">
         <datalist id="fhLotDatalist"></datalist>
         <table class="data-table fh-assign-table">
           <colgroup>
@@ -792,7 +915,7 @@ tr:hover { background: rgba(0,104,255,0.04); }
         <button type="button" class="btn btn-secondary btn-sm" onclick="TabFieldHarvest.exportSummaryExcel()">📥 Xuất Excel</button>
         <button type="button" class="btn btn-secondary btn-sm" onclick="TabFieldHarvest.exportSummaryPdf()">📄 Xuất PDF</button>
       </div>
-      <div class="table-container">
+      <div class="table-container fh-summary-scroll">
         <table class="fh-summary-table">
           <thead id="fhSummaryHead"></thead>
           <tbody id="fhSummaryBody"></tbody>
@@ -3639,9 +3762,7 @@ tr:hover { background: rgba(0,104,255,0.04); }
 })();
 </script>
 
-<!-- Shared Services -->
-<script src="/static/js/services/FirestoreService.js"></script>
-<script src="/static/js/services/CRUDService.js"></script>
+<!-- Shared Services (FirestoreService/CRUDService đã nạp trong rriv_core.html) -->
 <script src="/static/js/services/ExportService.js"></script>
 
 <!-- Reusable Components -->
