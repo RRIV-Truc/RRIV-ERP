@@ -1,0 +1,7 @@
+-- KHÔNG chạy file này nếu đã có bảng employee_assignment trên Supabase.
+-- App RRIV map collection Firebase `employeePositions` → bảng `employee_assignment`.
+--
+-- Cột employee_assignment (hiện có):
+--   employee_uuid, department_name, job_title, is_primary, assigned_date, ...
+--
+-- Xem app.py TABLE_MAP['employeePositions'] = 'employee_assignment'

@@ -1,11 +1,72 @@
-/* services.js — Firebase CRUD wrappers for all 5 collections.
- * Reads `db` (ErpDb.firestore() instance) from window.db.
- */
+/* services.js — CRUD nhân sự qua ErpDb (Supabase /api/data). */
 (function () {
   'use strict';
 
   const SS = () => ErpDb.firestore.FieldValue.serverTimestamp();
   const getDb = () => window.db;
+
+  /** NV thuộc danh sách Viện — chỉ loại KH sản xuất Lai Khê. */
+  function isInstitutePersonnel(p) {
+    const meta = p.metadata || {};
+    if (meta.hr_scope === 'production_kh') return false;
+    const code = (p.employeeCode || p.employee_code || p.code || '').toUpperCase();
+    if (/^LK-KH-/.test(code)) return false;
+    const wg = p.workGroupId || p.work_group_id || '';
+    if (wg === 'wg-lk-kh') return false;
+    const pos = String(p.position || p.positionName || p.position_name || '').toLowerCase();
+    if (/khoán hộ/.test(pos)) return false;
+    return true;
+  }
+
+  async function loadSystemRoles() {
+    try {
+      const res = await fetch('/api/system-roles');
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.roles) return body.roles;
+    } catch (e) { /* ignore */ }
+    return [
+      { id: 1, role_name: 'Super_Admin', description: 'Quản trị viên' },
+      { id: 2, role_name: 'Institute_Executive', description: 'Ban Lãnh đạo Viện' },
+      { id: 3, role_name: 'Department_Head', description: 'Lãnh đạo đơn vị' },
+      { id: 4, role_name: 'Operations_Specialist', description: 'Chuyên viên Nghiệp vụ' },
+      { id: 5, role_name: 'Technical_Staff', description: 'NCV / KTV' },
+      { id: 6, role_name: 'Staff_Viewer', description: 'Nhân viên (chỉ xem)' }
+    ];
+  }
+
+  async function syncUserSystemRole(username, systemRoleId) {
+    if (!username || !systemRoleId) return;
+    const res = await fetch('/api/personnel/system-role', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, systemRoleId })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body.success) {
+      throw new Error(body.message || 'Không cập nhật được vai trò hệ thống');
+    }
+  }
+
+  async function syncAccessRights(username, employeeId, appRolesCache) {
+    if (!username) return;
+    const res = await fetch('/api/personnel/access-rights', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, employeeId, appRolesCache: appRolesCache || {} })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body.success) {
+      throw new Error(body.message || 'Không cập nhật được quyền truy cập');
+    }
+  }
+
+  function erpRoleFromSystemRoleId(systemRoleId, roles) {
+    const row = (roles || []).find(r => String(r.id) === String(systemRoleId));
+    const name = row?.role_name || '';
+    if (name === 'Super_Admin') return 'admin';
+    if (['Institute_Executive', 'Department_Head', 'Operations_Specialist'].includes(name)) return 'vpp';
+    return 'user';
+  }
 
   // ============== Personnel ==============
   async function loadPersonnel() {
@@ -32,14 +93,17 @@
 
     const list = snap.docs.map(doc => {
       const d = doc.data();
+      const meta = d.metadata || {};
       return {
         id: doc.id, ...d,
         hoTen: d.hoTen || d.name || '',
         employeeCode: d.employeeCode || d.code || '',
         disabled: d.disabled ?? (d.status === 'inactive' || d.status === 'resigned'),
-        concurrentPositions: positionsMap[doc.id] || []
+        concurrentPositions: positionsMap[doc.id] || [],
+        systemRoleId: meta.systemRoleId || meta.system_role_id || d.systemRoleId || null,
+        appRolesCache: d.appRolesCache || d.app_roles_cache || meta.appRolesCache || {}
       };
-    });
+    }).filter(isInstitutePersonnel);
     list.sort((a, b) => (a.hoTen || '').localeCompare(b.hoTen || '', 'vi'));
     return list;
   }
@@ -56,28 +120,17 @@
   }
 
   async function createPersonnelWithAuth(username, password, data) {
-    const db = getDb();
     if (!password || password.length < 6) throw new Error('Mật khẩu ≥ 6 ký tự');
-    const email = `${username}@phr.vn`;
-
-    // Check duplicate username
-    const existingQuery = await db.collection('categoryPersonnel')
-      .where('username', '==', username).limit(1).get().catch(() => null);
-    if (existingQuery && !existingQuery.empty) {
-      throw new Error('Username đã tồn tại trong danh sách nhân sự');
+    const res = await fetch('/api/personnel/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, data })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body.success) {
+      throw new Error(body.message || 'Không tạo được nhân sự');
     }
-
-    // Use secondary auth so admin session not affected
-    const tempAuth = window.NhansuPerms.getSecondaryAuth();
-    const uc = await tempAuth.createUserWithEmailAndPassword(email, password);
-    await tempAuth.signOut();
-
-    data.createdAt = SS();
-    data.updatedAt = SS();
-    data.email = email;
-    data.username = username;
-    await db.collection('categoryPersonnel').doc(uc.user.uid).set(data);
-    return uc.user.uid;
+    return body.id;
   }
 
   async function deletePersonnel(id) {
@@ -135,8 +188,17 @@
 
   // ============== Positions ==============
   async function loadPositions() {
-    const snap = await getDb().collection('categoryPositions').orderBy('name').get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    try {
+      const snap = await getDb().collection('categoryPositions').orderBy('name').get();
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+      try {
+        const snap = await getDb().collection('categoryPositions').get();
+        return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      } catch (e2) {
+        return [];
+      }
+    }
   }
 
   async function savePosition(id, data) {
@@ -238,9 +300,18 @@
   }
 
   // ============== Auth state ==============
-  async function loadCurrentUser(uid) {
-    const doc = await getDb().collection('categoryPersonnel').doc(uid).get();
-    if (!doc.exists) return null;
+  async function loadCurrentUser(uidOrUsername) {
+    const db = getDb();
+    let doc = await db.collection('categoryPersonnel').doc(uidOrUsername).get();
+    if (!doc.exists) {
+      const snap = await db.collection('categoryPersonnel')
+        .where('username', '==', uidOrUsername).limit(1).get();
+      if (!snap.empty) {
+        const d = snap.docs[0];
+        return { id: d.id, ...d.data() };
+      }
+      return null;
+    }
     return { id: doc.id, ...doc.data() };
   }
 
@@ -286,6 +357,7 @@
   window.NhansuServices = {
     loadPersonnel, savePersonnel, createPersonnelWithAuth,
     deletePersonnel, togglePersonnelStatus, setEmployeeOrder,
+    loadSystemRoles, syncUserSystemRole, syncAccessRights, erpRoleFromSystemRoleId,
     loadDepartments, saveDepartment, deleteDepartment,
     loadPositions, savePosition, deletePosition,
     loadFactories, saveFactory, deleteFactory,

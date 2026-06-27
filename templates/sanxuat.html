@@ -548,6 +548,17 @@ tr:hover { background: rgba(0,104,255,0.04); }
 .fh-weigh-summary th { background: #e2e8f0 !important; color: #0f172a !important; text-align: left; font-weight: 700; }
 .fh-weigh-summary td { background: #fff !important; color: #0f172a !important; font-weight: 600; }
 .fh-weigh-summary .fh-w-tt { font-weight: 800; color: #0f172a !important; background: #fde047 !important; }
+.fh-quick-weigh-scroll { overflow-x: auto; margin-bottom: 12px; }
+.fh-quick-weigh-table { min-width: 980px; font-size: 12px; }
+.fh-quick-weigh-table th { background: #bfdbfe !important; color: #1e3a8a !important; font-weight: 700; white-space: nowrap; }
+.fh-quick-weigh-table td { vertical-align: middle; }
+.fh-quick-weigh-table .fh-q-inp { width: 58px; padding: 5px 6px; border: 1px solid #64748b; border-radius: 5px; font-size: 12px; text-align: right; }
+.fh-quick-weigh-table .fh-q-inp-kl { width: 64px; }
+.fh-quick-weigh-table .fh-q-inp-tsc { width: 52px; }
+.fh-quick-weigh-table .fh-q-sel { padding: 5px 4px; border: 1px solid #64748b; border-radius: 5px; font-size: 11px; min-width: 58px; }
+.fh-quick-weigh-table .fh-q-net { font-weight: 700; white-space: nowrap; }
+.fh-quick-weigh-table .fh-q-pc { font-weight: 700; color: #1d4ed8; white-space: nowrap; }
+.fh-quick-weigh-table .fh-q-worker { text-align: left; min-width: 140px; }
 .fh-assign-table tr.fh-row-changed { background: rgba(251, 191, 36, 0.12); }
 .fh-assign-table tr.fh-row-default { background: rgba(59, 130, 246, 0.04); }
 .fh-assign-table tr.fh-section-start td { border-top: 1px solid #94a3b8; }
@@ -659,7 +670,6 @@ tr:hover { background: rgba(0,104,255,0.04); }
     <button class="back-btn" onclick="goBack()">←</button>
     <div class="header-title">
       <h1>Quản Lý Sản Xuất</h1>
-      <p>Nhà máy Chế biến Cao su</p>
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:12px;">
@@ -724,14 +734,17 @@ tr:hover { background: rgba(0,104,255,0.04); }
           <button class="map-layer-btn active" id="btnMapSatellite" onclick="toggleMapLayer('satellite')">🛰️ Vệ tinh</button>
           <button class="map-layer-btn" id="btnMapHybrid" onclick="toggleMapLayer('hybrid')">🌐 Hybrid</button>
           <button class="btn btn-secondary btn-sm" onclick="fitMapBounds()">🎯 Zoom Fit</button>
+          <button class="btn btn-secondary btn-sm" onclick="TabGardens.toggleMapFullscreen()">⛶ Toàn màn hình</button>
           <button class="btn btn-secondary btn-sm" onclick="loadMapPlots()">🔄 Tải lại</button>
         </div>
       </div>
-      <div class="map-container">
+      <div class="map-container map-wrapper" id="gardenMapWrapper">
         <div id="gardenMap"></div>
+        <button type="button" class="map-fullscreen-btn" id="btnGardenMapFullscreen" title="Toàn màn hình">⛶</button>
+        <button type="button" class="map-minimize-btn" id="btnGardenMapMinimize" title="Thu nhỏ">✕</button>
         <div class="map-zoom-controls">
-          <button class="map-zoom-btn" onclick="gardenMap.zoomIn()">+</button>
-          <button class="map-zoom-btn" onclick="gardenMap.zoomOut()">−</button>
+          <button type="button" class="map-zoom-btn" id="btnGardenMapZoomIn" title="Phóng to">+</button>
+          <button type="button" class="map-zoom-btn" id="btnGardenMapZoomOut" title="Thu nhỏ">−</button>
         </div>
         <div class="map-coordinates">
           <span class="coord-icon">📍</span>
@@ -815,7 +828,7 @@ tr:hover { background: rgba(0,104,255,0.04); }
       <label style="font-size:13px;">Ngày:
         <input type="date" id="fhRecordDate" onchange="TabFieldHarvest.onDateChange()" style="padding:8px;border-radius:8px;border:1px solid #e2e8f0;">
       </label>
-      <label style="font-size:13px;font-weight:600;" title="Chọn tổ/đội sản xuất (vd. Đội sản xuất Lai Khê)">Tổ/đội SX *
+      <label style="font-size:13px;font-weight:600;" title="Chọn trạm sản xuất (vd. Trạm Lai Khê)">Trạm SX *
         <select id="fhTeamFilter" onchange="TabFieldHarvest.onTeamChange()" style="padding:8px 12px;border-radius:8px;border:2px solid #f59e0b;min-width:200px;font-weight:600;">
           <option value="">— Chọn tổ/đội SX —</option>
         </select>
@@ -837,6 +850,7 @@ tr:hover { background: rgba(0,104,255,0.04); }
     <div id="fhAssignPanel">
       <div class="toolbar" style="margin-bottom:12px;flex-wrap:wrap;gap:8px;">
         <button class="btn btn-primary btn-sm" onclick="TabFieldHarvest.saveAllAssignments()">💾 Lưu phân công</button>
+        <button class="btn btn-secondary btn-sm" onclick="TabFieldHarvest.openQuickWeigh()">⚡ Cân nhanh</button>
         <label style="font-size:13px;margin:0;">Sao chép từ ngày:
           <input type="date" id="fhCopyFromDate" style="padding:6px 8px;border-radius:6px;border:1px solid #e2e8f0;">
         </label>
@@ -881,6 +895,44 @@ tr:hover { background: rgba(0,104,255,0.04); }
       </div>
     </div>
 
+    <div id="fhQuickWeighPanel" class="fh-weigh-panel" style="display:none;">
+      <div class="fh-weigh-panel-header">
+        <h3 id="fhQuickWeighTitle">⚡ Cân nhanh — tất cả phần cạo</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="TabFieldHarvest.closeQuickWeigh()">← Quay về</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="TabFieldHarvest.saveQuickWeigh()">💾 Lưu cân nhanh</button>
+        </div>
+      </div>
+      <p style="font-size:12px;color:#64748b;margin:0 0 12px;">
+        Một dòng = một công nhân cạo (1 thùng mủ nước + 1 thùng mủ đông). KL làm tròn 0,1 kg.
+        Mủ nước: bì mặc định 1 kg, TSC% → DRC%. Mủ đông: bì mặc định 0 kg, DRC% mặc định 40.
+        Dùng cân chi tiết khi một người có nhiều thùng.
+      </p>
+      <p class="fh-scroll-hint">← Vuốt ngang bảng nếu màn hình hẹp →</p>
+      <div class="table-container fh-quick-weigh-scroll">
+        <table class="data-table fh-quick-weigh-table">
+          <thead>
+            <tr>
+              <th>Phần cạo</th>
+              <th>Công nhân</th>
+              <th>Loại NL</th>
+              <th>KL (kg)</th>
+              <th>Bì</th>
+              <th>KL thực</th>
+              <th>TSC%</th>
+              <th>KL đông</th>
+              <th>Loại NL</th>
+              <th>Bì</th>
+              <th>DRC%</th>
+            </tr>
+          </thead>
+          <tbody id="fhQuickWeighBody">
+            <tr><td colspan="11" style="text-align:center;color:#64748b;">Đang tải...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <div id="fhWeighPanel" class="fh-weigh-panel" style="display:none;">
       <div class="fh-weigh-panel-header">
         <h3 id="fhWeighTitle">⚖️ Cân mủ</h3>
@@ -897,8 +949,25 @@ tr:hover { background: rgba(0,104,255,0.04); }
     </div>
 
     <div id="fhSummaryPanel" class="fh-summary-panel">
-      <h3>📊 Tổng hợp sản lượng trong ngày</h3>
+      <h3>📊 Tổng hợp sản lượng</h3>
       <div class="toolbar" style="flex-wrap:wrap;gap:12px;margin-bottom:12px;align-items:center;">
+        <label>Kỳ tổng hợp
+          <select id="fhSummaryPeriod" onchange="TabFieldHarvest.onSummaryFilterChange()" style="margin-left:4px;">
+            <option value="day" selected>Trong ngày</option>
+            <option value="week">Theo tuần</option>
+            <option value="month">Theo tháng</option>
+            <option value="year">Theo năm</option>
+          </select>
+        </label>
+        <label>Phiên
+          <select id="fhSummarySession" onchange="TabFieldHarvest.onSummaryFilterChange()" style="margin-left:4px;">
+            <option value="__all__">Tất cả phiên</option>
+            <option value="A">Phiên A</option>
+            <option value="B">Phiên B</option>
+            <option value="C">Phiên C</option>
+            <option value="D">Phiên D</option>
+          </select>
+        </label>
         <label>Đội / tổ SX
           <select id="fhSummaryTeam" onchange="TabFieldHarvest.onSummaryFilterChange()" style="margin-left:4px;">
             <option value="__all__">Tất cả đội</option>
@@ -1493,7 +1562,7 @@ tr:hover { background: rgba(0,104,255,0.04); }
   <div class="content-card" id="tab6">
     <h2>⚙️ Quản Trị</h2>
     <div class="sub-tabs" style="margin-bottom:16px;">
-      <button class="sub-tab active" onclick="TabAdmin.showSubTab(0)">👥 Nhân Sự</button>
+      <button class="sub-tab active" onclick="TabAdmin.showSubTab(0)">👥 Nhân sự trạm</button>
       <button class="sub-tab" onclick="TabAdmin.showSubTab(1)">🏢 Bộ Phận</button>
       <button class="sub-tab" onclick="TabAdmin.showSubTab(2)">📋 Chức Vụ</button>
       <button class="sub-tab" onclick="TabAdmin.showSubTab(3)">📐 TCCS</button>
@@ -3787,7 +3856,7 @@ tr:hover { background: rgba(0,104,255,0.04); }
 <!-- Sanxuat Tab Modules -->
 <script src="/static/js/sanxuat/tabs/gardens.js"></script>
 <script src="/static/js/sanxuat/services/FieldHarvestOffline.js"></script>
-<script src="/static/js/sanxuat/tabs/field-harvest.js"></script>
+<script src="/static/js/sanxuat/tabs/field-harvest.js?v=10"></script>
 <script src="/static/js/sanxuat/tabs/delivery.js"></script>
 <script src="/static/js/sanxuat/tabs/reception.js"></script>
 <script src="/static/js/sanxuat/tabs/mes.js"></script>
@@ -3892,9 +3961,6 @@ function switchFactory(factoryId) {
 }
 
 function updateFactoryUI() {
-  // Cập nhật header subtitle
-  const subtitle = document.querySelector('.header-title p');
-  if (subtitle) subtitle.textContent = getFactoryName();
   // Cập nhật Tab 2 header
   const tab2Label = document.getElementById('tab2FactoryLabel');
   if (tab2Label) tab2Label.textContent = `— ${getFactoryName()} (${currentFactory})`;
@@ -9244,6 +9310,8 @@ function showTab(index) {
 
 
     function fitMapBounds() { TabGardens.fitMapBounds(); }
+
+    function toggleGardenMapFullscreen() { TabGardens.toggleMapFullscreen(); }
 
 // ============================================
 // TAB 0: GARDENS & EUDR
@@ -14690,80 +14758,172 @@ function exportBatches() {
 // INITIALIZATION
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
-  function bootApp(user) {
-    if (!user) {
-      var restored = typeof Auth !== 'undefined' ? Auth.restoreSession() : null;
-      if (restored) user = restored;
+  function mergeSessionIntoUser(profile, session) {
+    if (!profile) profile = {};
+    if (!session) return profile;
+    var sessionIsAdmin = session.role === 'admin' || session.isSuperAdmin === true;
+    var profileRole = profile.role || profile.erp_role || 'user';
+    var role = sessionIsAdmin ? 'admin' : (session.role || profileRole);
+    var pos = profile.position_name || profile.positionName || profile.position
+      || session.position_name || session.positionName || session.position || '';
+    return Object.assign({}, profile, {
+      username: profile.username || session.username,
+      name: profile.name || profile.hoTen || session.name || session.displayName,
+      hoTen: profile.hoTen || profile.name || session.name,
+      role: role,
+      erp_role: role,
+      position: pos,
+      position_name: pos,
+      positionName: pos,
+      systemRoles: (session.systemRoles && session.systemRoles.length)
+        ? session.systemRoles
+        : (profile.systemRoles || []),
+      isSuperAdmin: session.isSuperAdmin === true || profile.isSuperAdmin === true,
+      appRolesCache: profile.appRolesCache || profile.app_roles_cache || session.appRolesCache || {}
+    });
+  }
+
+  function updateSanxuatUserHeader() {
+    var u = currentUser || window.currentUser;
+    if (!u) return;
+    var nameEl = document.getElementById('userName');
+    var avatarEl = document.getElementById('userAvatar');
+    if (!nameEl) return;
+    var displayName = u.hoTen || u.name || u.username || 'User';
+    var roleBadge = '';
+    var sxEntry = (u.appRolesCache || u.app_roles_cache || {}).sanxuat;
+    var sxRoles = sxEntry && (sxEntry.roles || (sxEntry.role ? [sxEntry.role] : []));
+    if (sxRoles && sxRoles.length) {
+      var sxRoleLabels = {
+        admin: 'Quản trị SX', manager: 'Quản lý SX', supervisor: 'Giám sát',
+        team_leader: 'Đội trưởng', doi_truong: 'Đội trưởng CN', staff: 'Nhập liệu cân mủ', viewer: 'Xem'
+      };
+      roleBadge = sxRoleLabels[sxRoles[0]] || sxRoles[0];
     }
-    if (!user) {
+    if (typeof Permissions !== 'undefined' && Permissions.isGlobalAdmin && Permissions.isGlobalAdmin(u)) {
+      roleBadge = 'Admin';
+    } else if (!roleBadge && u.role && String(u.role).toLowerCase() !== 'user') {
+      var roleMap = { admin: 'Admin', vpp: 'Quản lý', manager: 'Quản lý hệ thống' };
+      roleBadge = roleMap[String(u.role).toLowerCase()] || u.role;
+    }
+    if (!roleBadge && u.isSuperAdmin) roleBadge = 'Admin';
+    if (!roleBadge && u.systemRoles && u.systemRoles.length) {
+      var sr = String(u.systemRoles[0]);
+      if (/super.?admin/i.test(sr)) roleBadge = 'Admin';
+      else if (/department.?head/i.test(sr)) roleBadge = 'Lãnh đạo';
+    }
+    nameEl.textContent = displayName + (roleBadge ? ' · ' + roleBadge : '');
+    if (avatarEl) avatarEl.textContent = (displayName.trim()[0] || 'U').toUpperCase();
+  }
+
+  async function applyUserPermissions() {
+    if (!currentUser) return;
+    try {
+      Permissions.initFromUserData(currentUser);
+      if (typeof navigator !== 'undefined' && navigator.onLine !== false) {
+        await Permissions.loadRoleDefinitions(db);
+        await Permissions.loadPositionBasedRoles(db);
+      }
+      Permissions.mergePositionRolesIntoCache();
+    } catch (e) { console.warn('Permissions init:', e.message); }
+    updateSanxuatUserHeader();
+    if (typeof RrivAppBar !== 'undefined' && RrivAppBar.refresh) {
+      RrivAppBar.refresh(currentUser);
+    }
+    try {
+      window.dispatchEvent(new CustomEvent('rriv:user-updated', { detail: currentUser }));
+    } catch (e) { /* ignore */ }
+  }
+
+  function bootApp(_firebaseUser) {
+    var sessionUser = (typeof Auth !== 'undefined' && Auth.restoreSession && Auth.restoreSession()) || _firebaseUser;
+    if (!sessionUser) {
       window.location.href = 'index.html';
       return;
     }
     try {
       const storedUser = localStorage.getItem('currentUser');
       if (storedUser) {
-        currentUser = JSON.parse(storedUser);
+        currentUser = mergeSessionIntoUser(JSON.parse(storedUser), sessionUser);
+      } else {
+        currentUser = mergeSessionIntoUser({}, sessionUser);
       }
-      const personnelId = user.uid || user.id || currentUser?.id;
+      const personnelId = sessionUser.uid || sessionUser.id || currentUser?.id;
       const online = typeof navigator !== 'undefined' ? navigator.onLine !== false : true;
 
-      if (personnelId && online) {
-        db.collection('categoryPersonnel').doc(personnelId).get().then(function (personnelDoc) {
-          if (personnelDoc.exists) {
-            currentUser = { id: personnelDoc.id, uid: personnelDoc.id, ...personnelDoc.data() };
+      var finishBoot = function () {
+        window.currentUser = currentUser;
+        window.currentFactory = currentFactory;
+        window.showToast = showToast;
+        window.formatDate = formatDate;
+        window.formatDateVN = formatDateVN;
+        window.formatNumber = formatNumber;
+        window.generateCode = generateCode;
+
+        if (currentUser) {
+          updateSanxuatUserHeader();
+          applyUserPermissions().then(function () {
+            initFactorySelector();
+            window.currentFactory = currentFactory;
+          });
+        }
+
+        _getSXShiftsFromAdmin().catch(function() {});
+
+        if (typeof TabGardens !== 'undefined') {
+          TabGardens.loadGardens();
+        } else {
+          loadGardens();
+        }
+
+        setTimeout(() => {
+          if (typeof TabGardens !== 'undefined' && TabGardens.initGardenMap) {
+            TabGardens.initGardenMap();
+          } else {
+            initGardenMap();
+          }
+        }, 100);
+
+        var openHarvest = !online || window.location.hash === '#harvest' ||
+          localStorage.getItem('sanxuat_open_harvest') === '1';
+        if (openHarvest && typeof showTab === 'function') {
+          setTimeout(function () { showTab(1); }, 150);
+        }
+      };
+
+      var profilePromise = Promise.resolve();
+      if (sessionUser.username && typeof Auth !== 'undefined' && Auth.loadUserProfile) {
+        profilePromise = Auth.loadUserProfile(sessionUser.username).then(function () {
+          var prof = Auth.getProfile && Auth.getProfile();
+          if (prof) {
+            currentUser = mergeSessionIntoUser(prof, sessionUser);
             localStorage.setItem('currentUser', JSON.stringify(currentUser));
-            window.currentUser = currentUser;
           }
         }).catch(function () { /* offline */ });
       }
-      if (!currentUser) {
-        currentUser = { id: personnelId || user.uid, uid: personnelId || user.uid, name: user.displayName || user.name };
-      }
 
-      window.currentUser = currentUser;
-      window.currentFactory = currentFactory;
-      window.showToast = showToast;
-      window.formatDate = formatDate;
-      window.formatDateVN = formatDateVN;
-      window.formatNumber = formatNumber;
-      window.generateCode = generateCode;
-
-      if (currentUser) {
-        document.getElementById('userName').textContent = currentUser.name || currentUser.username || 'User';
-        document.getElementById('userAvatar').textContent = (currentUser.name || 'U')[0].toUpperCase();
-        try {
-          Permissions.initFromUserData(currentUser);
-          if (online) {
-            Permissions.loadRoleDefinitions(db);
-            Permissions.loadPositionBasedRoles(db);
-          }
-          Permissions.mergePositionRolesIntoCache();
-        } catch(e) { console.warn('Permissions init:', e.message); }
-        initFactorySelector();
-        window.currentFactory = currentFactory;
-      }
-
-      _getSXShiftsFromAdmin().catch(function() {});
-
-      if (typeof TabGardens !== 'undefined') {
-        TabGardens.loadGardens();
-      } else {
-        loadGardens();
-      }
-
-      setTimeout(() => {
-        if (typeof TabGardens !== 'undefined' && TabGardens.initGardenMap) {
-          TabGardens.initGardenMap();
-        } else {
-          initGardenMap();
+      profilePromise.then(function () {
+        if (personnelId && online) {
+          return db.collection('categoryPersonnel').doc(personnelId).get().then(function (personnelDoc) {
+            if (personnelDoc.exists) {
+              currentUser = mergeSessionIntoUser(
+                { id: personnelDoc.id, uid: personnelDoc.id, ...personnelDoc.data() },
+                sessionUser
+              );
+              localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            }
+          }).catch(function () { /* offline */ });
         }
-      }, 100);
-
-      var openHarvest = !online || window.location.hash === '#harvest' ||
-        localStorage.getItem('sanxuat_open_harvest') === '1';
-      if (openHarvest && typeof showTab === 'function') {
-        setTimeout(function () { showTab(1); }, 150);
-      }
+      }).then(function () {
+        if (!currentUser) {
+          currentUser = mergeSessionIntoUser({
+            id: personnelId || sessionUser.uid || sessionUser.id,
+            uid: personnelId || sessionUser.uid || sessionUser.id,
+            name: sessionUser.displayName || sessionUser.name
+          }, sessionUser);
+        }
+        finishBoot();
+      });
     } catch (error) {
       console.error('Init error:', error);
       showToast('Lỗi khởi tạo ứng dụng', 'error');

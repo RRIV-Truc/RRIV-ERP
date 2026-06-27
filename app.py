@@ -13,6 +13,16 @@ from dotenv import load_dotenv
 load_dotenv()
 app = Flask(__name__)
 
+
+@app.after_request
+def _no_cache_html(response):
+    ct = response.content_type or ''
+    if 'text/html' in ct:
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -96,7 +106,7 @@ APP_TEMPLATES = {
 
 # Firestore collection name → bảng Supabase chuyên biệt (nếu có)
 TABLE_MAP = {
-    'categoryPersonnel': 'category_personnel',  # VIEW → employee (sau migrate-employee-master.sql)
+    'categoryPersonnel': 'employee',  # đọc/ghi trực tiếp — có department_id, team_id
     'employee': 'employee',
     'categoryDepartments': 'category_departments',
     'categoryPositions': 'category_positions',
@@ -114,6 +124,7 @@ TABLE_MAP = {
     'sectionWorkerAssignments': 'section_worker_assignments',
     'fieldWorkerWeighings': 'field_worker_weighings',
     'tscDrcConversion': 'tsc_drc_conversion',
+    'employeePositions': 'employee_assignment',
 }
 
 
@@ -164,8 +175,17 @@ def _row_to_doc(row, use_data_field=True, table_name=None):
     doc_id = doc.pop('id', None)
     if doc_id:
         doc['id'] = doc_id
+    _flatten_metadata_into_doc(doc, table_name)
     if table_name in ('employee', 'category_personnel'):
         _apply_personnel_field_aliases(doc)
+    if table_name == 'role_definitions':
+        _apply_role_definition_aliases(doc)
+    if table_name == 'app_registry':
+        _apply_app_registry_aliases(doc)
+    if table_name == 'employee_assignment':
+        _apply_employee_assignment_aliases(doc)
+    if table_name == 'category_teams' and doc.get('manager_id') is not None:
+        doc['managerId'] = doc['manager_id']
     if row.get('created_at') and not doc.get('createdAt'):
         doc['createdAt'] = row['created_at']
     if row.get('updated_at') and not doc.get('updatedAt'):
@@ -182,11 +202,187 @@ _CATEGORY_PERSONNEL_COLUMNS = frozenset({
 
 _EMPLOYEE_WRITE_COLUMNS = frozenset({
     'employee_code', 'full_name', 'gender', 'phone_number', 'personal_email',
-    'company_email', 'national_id', 'status', 'hire_date', 'username',
+    'company_email', 'national_id', 'status', 'hire_date', 'date_of_birth', 'username',
     'department_name', 'position_name', 'team_name', 'employment_status',
+    'permanent_address', 'current_address', 'tax_code',
     'disabled', 'account_locked', 'lock_until', 'app_roles_cache', 'metadata',
     'erp_role', 'created_at', 'updated_at', 'team_id', 'work_group_id',
+    'department_id', 'position_id',
 })
+
+_CATEGORY_TABLE_COLUMNS = {
+    'category_departments': frozenset({
+        'id', 'name', 'ten', 'ten_phong_ban', 'dept_type', 'active',
+        'metadata', 'created_at', 'updated_at',
+    }),
+    'category_positions': frozenset({'id', 'name', 'metadata', 'created_at', 'updated_at'}),
+    'category_teams': frozenset({
+        'id', 'name', 'department', 'manager_id', 'metadata', 'created_at', 'updated_at',
+    }),
+    'category_factories': frozenset({'id', 'name', 'metadata', 'created_at', 'updated_at'}),
+    'employee_assignment': frozenset({
+        'id', 'employee_id', 'employee_uuid', 'department_name', 'job_title',
+        'is_primary', 'assigned_date', 'management_level', 'created_at',
+    }),
+    'role_definitions': frozenset({
+        'id', 'app_id', 'role_id', 'role_name', 'name', 'description',
+        'permissions', 'is_active', 'scope_type', 'scopeable', 'sort_order',
+        'metadata', 'created_at', 'updated_at',
+    }),
+    'app_registry': frozenset({
+        'app_id', 'name', 'scope_type', 'hub_enabled', 'assignable',
+        'sort_order', 'metadata', 'created_at', 'updated_at',
+    }),
+}
+
+_FIELD_ALIASES = {
+    'updatedAt': 'updated_at',
+    'createdAt': 'created_at',
+    'managerId': 'manager_id',
+    'userId': 'employee_uuid',
+    'departmentName': 'department_name',
+    'positionName': 'job_title',
+    'isPrimary': 'is_primary',
+    'assignedAt': 'assigned_date',
+    'startDate': 'assigned_date',
+}
+
+_PERSONNEL_FIELD_MAP = {
+    'phone': 'phone_number',
+    'email': 'company_email',
+    'personalEmail': 'personal_email',
+    'department': 'department_name',
+    'position': 'position_name',
+    'team': 'team_name',
+    'role': 'erp_role',
+    'status': 'employment_status',
+    'employeeCode': 'employee_code',
+    'code': 'employee_code',
+    'cccd': 'national_id',
+    'permanentAddress': 'permanent_address',
+    'currentAddress': 'current_address',
+    'hireDate': 'hire_date',
+    'dateOfBirth': 'date_of_birth',
+    'taxCode': 'tax_code',
+    'gender': 'gender',
+    'updatedAt': 'updated_at',
+    'createdAt': 'created_at',
+}
+
+
+def _is_delete_marker(val):
+    return isinstance(val, dict) and val.get('__op') == 'delete'
+
+
+def _normalize_date(val):
+    if val is None or val == '':
+        return None
+    if isinstance(val, str):
+        return val[:10] if len(val) >= 10 else val
+    if hasattr(val, 'isoformat'):
+        return val.isoformat()[:10]
+    return val
+
+
+def _flatten_metadata_into_doc(doc, table_name=None):
+    meta = doc.pop('metadata', None)
+    if not isinstance(meta, dict):
+        return
+    priority_keys = (
+        'factory', 'assignments', 'orderByDept', 'listStt', 'code', 'employeeCode', 'cccd',
+        'icon', 'order', 'description', 'parentId',
+    )
+    for key in priority_keys:
+        if key in meta:
+            doc[key] = meta[key]
+    for key, val in meta.items():
+        if key not in doc or doc.get(key) in (None, '', {}):
+            doc[key] = val
+    # Giữ metadata gốc — client Firestore đọc doc.metadata (slots, tapping_session, …)
+    doc['metadata'] = meta
+
+
+def _apply_employee_assignment_aliases(doc):
+    """Map employee_assignment ↔ collection Firebase employeePositions."""
+    if doc.get('employee_uuid') is not None:
+        doc['userId'] = str(doc['employee_uuid'])
+    if doc.get('department_name') is not None:
+        doc['departmentName'] = doc['department_name']
+    if doc.get('job_title') is not None:
+        doc['positionName'] = doc['job_title']
+    if doc.get('is_primary') is not None:
+        doc['isPrimary'] = doc['is_primary']
+    if doc.get('assigned_date') is not None:
+        doc['assignedAt'] = doc['assigned_date']
+    if doc.get('id') is not None:
+        doc['id'] = str(doc['id'])
+
+
+def _prepare_employee_assignment_write(data):
+    row = {}
+    user_id = data.get('userId') or data.get('employee_uuid') or data.get('user_id')
+    if user_id:
+        row['employee_uuid'] = str(user_id)
+    dept_name = data.get('departmentName') or data.get('department_name')
+    if dept_name:
+        row['department_name'] = dept_name
+    job_title = data.get('positionName') or data.get('position_name') or data.get('job_title')
+    if job_title:
+        row['job_title'] = job_title
+    if 'isPrimary' in data or 'is_primary' in data:
+        row['is_primary'] = bool(data.get('isPrimary', data.get('is_primary', False)))
+    assigned = data.get('assignedAt') or data.get('assigned_date') or data.get('startDate')
+    if assigned:
+        row['assigned_date'] = _normalize_date(assigned)
+    return row
+
+
+def _is_org_id(val, kind='dept'):
+    if not val or not isinstance(val, str):
+        return False
+    if kind == 'dept':
+        return val.startswith(('dl-', 'vien-', 'dept-'))
+    return val.startswith(('team-', 'tram-', 'wg-'))
+
+
+def _apply_department_field(row, data, table='employee'):
+    if 'department' not in data:
+        return
+    val = data.get('department')
+    if val is None or val == '':
+        if table == 'employee':
+            row['department_id'] = None
+            row['department_name'] = None
+        return
+    name = data.get('departmentName') or data.get('department_name')
+    if _is_org_id(val, 'dept'):
+        if table == 'employee':
+            row['department_id'] = val
+        row['department_name'] = name or val
+    else:
+        row['department_name'] = val
+        if table == 'employee' and name:
+            row['department_id'] = data.get('departmentId') or data.get('department_id')
+
+
+def _apply_team_field(row, data, table='employee'):
+    if 'team' not in data:
+        return
+    val = data.get('team')
+    if val is None or val == '':
+        if table == 'employee':
+            row['team_id'] = None
+        row['team_name'] = None
+        return
+    name = data.get('teamName') or data.get('team_name')
+    if _is_org_id(val, 'team'):
+        if table == 'employee':
+            row['team_id'] = val
+        row['team_name'] = name or val
+    else:
+        row['team_name'] = val
+        if table == 'employee' and name:
+            row['team_id'] = data.get('teamId') or data.get('team_id')
 
 
 def _apply_personnel_field_aliases(doc):
@@ -203,64 +399,267 @@ def _apply_personnel_field_aliases(doc):
         doc['phone'] = doc['phone_number']
     if not doc.get('email'):
         doc['email'] = doc.get('company_email') or doc.get('personal_email')
-    if doc.get('department_name') and not doc.get('department'):
+    if doc.get('department_id'):
+        doc['department'] = doc['department_id']
+    elif doc.get('department_name') and not doc.get('department'):
         doc['department'] = doc['department_name']
+    if doc.get('department_name'):
+        doc['departmentName'] = doc['department_name']
     if doc.get('position_name') and not doc.get('position'):
         doc['position'] = doc['position_name']
-    if doc.get('team_name') and not doc.get('team'):
+    if doc.get('position') and not doc.get('position_name'):
+        doc['position_name'] = doc['position']
+    if doc.get('position_name'):
+        doc['positionName'] = doc['position_name']
+    if doc.get('team_id'):
+        doc['team'] = doc['team_id']
+    elif doc.get('team_name') and not doc.get('team'):
         doc['team'] = doc['team_name']
+    if doc.get('team_name'):
+        doc['teamName'] = doc['team_name']
+    if doc.get('work_group_id'):
+        doc['workGroupId'] = doc['work_group_id']
     if doc.get('erp_role') and not doc.get('role'):
         doc['role'] = doc['erp_role']
     if doc.get('employment_status') and not doc.get('status'):
         doc['status'] = doc['employment_status']
     if doc.get('employee_code') and not doc.get('employeeCode'):
         doc['employeeCode'] = doc['employee_code']
+    if doc.get('national_id') and not doc.get('cccd'):
+        doc['cccd'] = doc['national_id']
+    if doc.get('app_roles_cache') is not None and doc.get('appRolesCache') is None:
+        doc['appRolesCache'] = doc['app_roles_cache']
 
 
-def _prepare_table_write(table, data):
-    """Chuyển field Firestore (hoTen, updatedAt…) → cột Supabase trước khi ghi."""
-    if not data or table not in ('category_personnel', 'employee'):
-        return data
+def _normalize_permissions_list(val):
+    if val is None:
+        return []
+    if isinstance(val, list):
+        return [str(p) for p in val if p]
+    if isinstance(val, dict):
+        return [str(k) for k in val.keys() if k]
+    return []
 
+
+def _apply_role_definition_aliases(doc):
+    """Map role_definitions ↔ field Firestore (appId, roleName, permissions[])."""
+    meta = doc.get('metadata') if isinstance(doc.get('metadata'), dict) else {}
+    if meta.get('app_id'):
+        doc['app_id'] = meta['app_id']
+    elif not doc.get('app_id') and doc.get('role_id') and '_' in str(doc['role_id']):
+        parts = str(doc['role_id']).split('_', 1)
+        if len(parts) == 2:
+            doc['app_id'] = parts[0]
+    if meta.get('role_id'):
+        doc['role_id'] = meta['role_id']
+    elif doc.get('role_id') and '_' in str(doc['role_id']) and not doc.get('app_id'):
+        parts = str(doc['role_id']).split('_', 1)
+        if len(parts) == 2:
+            doc.setdefault('app_id', parts[0])
+            doc['role_id'] = parts[1]
+    if doc.get('app_id'):
+        doc['appId'] = doc['app_id']
+    if doc.get('role_id'):
+        doc['roleId'] = doc['role_id']
+    name = doc.get('role_name') or doc.get('name') or meta.get('role_name')
+    if name:
+        doc['roleName'] = name
+        doc['name'] = name
+    perms = doc.get('permissions')
+    if not perms or perms == {}:
+        perms = meta.get('permissions')
+    doc['permissions'] = _normalize_permissions_list(perms)
+    if not doc.get('scope_type') and meta.get('scope_type'):
+        doc['scope_type'] = meta['scope_type']
+    if doc.get('scope_type'):
+        doc['scope'] = {'type': doc['scope_type']}
+    if doc.get('is_active') is not None:
+        doc['isActive'] = bool(doc['is_active'])
+    elif meta.get('is_active') is not None:
+        doc['isActive'] = bool(meta['is_active'])
+    if doc.get('scopeable') is not None:
+        doc['scopeable'] = doc['scopeable'] or {}
+    elif meta.get('scopeable'):
+        doc['scopeable'] = meta['scopeable']
+    if doc.get('sort_order') is not None:
+        doc['sortOrder'] = doc['sort_order']
+    elif meta.get('sort_order') is not None:
+        doc['sortOrder'] = meta['sort_order']
+    if meta.get('description') and not doc.get('description'):
+        doc['description'] = meta['description']
+
+
+def _apply_app_registry_aliases(doc):
+    if doc.get('app_id'):
+        doc['appId'] = doc['app_id']
+    if doc.get('scope_type'):
+        doc['scopeType'] = doc['scope_type']
+    if doc.get('hub_enabled') is not None:
+        doc['hubEnabled'] = bool(doc['hub_enabled'])
+    if doc.get('sort_order') is not None:
+        doc['sortOrder'] = doc['sort_order']
+
+
+def _prepare_role_definition_write(data, doc_id=None):
+    app_id = (data.get('appId') or data.get('app_id') or '').strip()
+    role_id = (data.get('roleId') or data.get('role_id') or '').strip()
+    rid = doc_id or data.get('id') or (f'{app_id}_{role_id}' if app_id and role_id else None)
+    scope = data.get('scope') if isinstance(data.get('scope'), dict) else {}
+    scope_type = data.get('scope_type') or data.get('scopeType') or scope.get('type') or ''
+    meta = dict(data.get('metadata') or {})
+    if data.get('scopeable'):
+        meta['scopeable'] = data['scopeable']
+    if data.get('color'):
+        meta['color'] = data['color']
+    row = {
+        'id': rid,
+        'app_id': app_id or None,
+        'role_id': role_id or None,
+        'role_name': data.get('roleName') or data.get('role_name') or data.get('name') or role_id,
+        'name': data.get('roleName') or data.get('role_name') or data.get('name') or role_id,
+        'description': data.get('description') or '',
+        'permissions': _normalize_permissions_list(data.get('permissions')),
+        'is_active': bool(data.get('isActive', data.get('is_active', True))),
+        'scope_type': scope_type or None,
+        'scopeable': data.get('scopeable') or meta.get('scopeable') or {},
+        'sort_order': int(data.get('sortOrder') or data.get('sort_order') or 100),
+        'metadata': meta,
+        'updated_at': datetime.utcnow().isoformat(),
+    }
+    return {k: v for k, v in row.items() if v is not None}
+
+
+def _fetch_row_metadata(table, doc_id):
+    storage = 'employee' if table == 'category_personnel' else table
+    if storage == 'employee_assignment':
+        return {}
+    if storage not in _CATEGORY_TABLE_COLUMNS and storage not in ('employee', 'category_personnel'):
+        return {}
+    try:
+        res = supabase.table(storage).select('metadata').eq('id', doc_id).limit(1).execute()
+        if res.data:
+            meta = res.data[0].get('metadata')
+            return dict(meta) if isinstance(meta, dict) else {}
+    except Exception as e:
+        print(f"_fetch_row_metadata({table}, {doc_id}): {e}")
+    return {}
+
+
+def _merge_personnel_metadata(existing_meta, data, table='employee'):
+    meta = dict(existing_meta or {})
     row = {}
     name_val = data.get('hoTen') or data.get('name') or data.get('ho_ten') or data.get('full_name')
-
-    if table == 'category_personnel':
-        if name_val is not None:
-            row['ho_ten'] = name_val
-        for key, val in data.items():
-            if key in ('hoTen', 'name', 'ho_ten', 'full_name'):
-                continue
-            if key == 'updatedAt':
-                row['updated_at'] = val
-            elif key == 'createdAt':
-                row['created_at'] = val
-            elif key in _CATEGORY_PERSONNEL_COLUMNS:
-                row[key] = val
-        return row
-
-    # employee table
     if name_val is not None:
-        row['full_name'] = name_val
-    field_map = {
-        'phone': 'phone_number',
-        'email': 'company_email',
-        'department': 'department_name',
-        'position': 'position_name',
-        'team': 'team_name',
-        'role': 'erp_role',
-        'status': 'employment_status',
-        'updatedAt': 'updated_at',
-        'createdAt': 'created_at',
-        'employeeCode': 'employee_code',
+        row['ho_ten' if table == 'category_personnel' else 'full_name'] = name_val
+
+    skip = {'hoTen', 'name', 'ho_ten', 'full_name', 'updatedAt', 'createdAt', 'metadata',
+            'department', 'team', 'departmentName', 'departmentId', 'teamName', 'teamId'}
+    cp_direct = {
+        'phone': 'phone', 'email': 'email', 'position': 'position',
+        'role': 'role', 'status': 'status',
+        'username': 'username', 'disabled': 'disabled', 'account_locked': 'account_locked',
+        'lock_until': 'lock_until', 'app_roles_cache': 'app_roles_cache',
     }
+    _apply_department_field(row, data, table)
+    _apply_team_field(row, data, table)
     for key, val in data.items():
-        if key in ('hoTen', 'name', 'ho_ten', 'full_name'):
+        if key in skip:
             continue
-        dest = field_map.get(key, key)
+        if key.startswith('orderByDept.'):
+            dept_id = key.split('.', 1)[1]
+            bucket = meta.setdefault('orderByDept', {})
+            if _is_delete_marker(val):
+                bucket.pop(dept_id, None)
+            else:
+                bucket[dept_id] = val
+            continue
+        if key == 'updatedAt':
+            row['updated_at'] = val
+            continue
+        if key == 'createdAt':
+            row['created_at'] = val
+            continue
+        if table == 'category_personnel':
+            dest = cp_direct.get(key, key)
+            if dest in _CATEGORY_PERSONNEL_COLUMNS:
+                row[dest] = val
+            elif not _is_delete_marker(val) and val is not None:
+                meta[key] = val
+            continue
+        dest = _PERSONNEL_FIELD_MAP.get(key, key)
         if dest in _EMPLOYEE_WRITE_COLUMNS:
-            row[dest] = val
+            if dest in ('hire_date', 'date_of_birth'):
+                row[dest] = _normalize_date(val)
+            else:
+                row[dest] = val
+        elif not _is_delete_marker(val) and val is not None:
+            meta[key] = val
+    if meta:
+        row['metadata'] = meta
     return row
+
+
+def _prepare_category_write(table, data, existing_meta=None):
+    allowed = _CATEGORY_TABLE_COLUMNS.get(table)
+    if not allowed:
+        return data
+    meta = dict(existing_meta or {})
+    row = {}
+    for key, val in data.items():
+        if key in ('updatedAt', 'createdAt'):
+            row[_FIELD_ALIASES[key]] = val
+            continue
+        dest = _FIELD_ALIASES.get(key, key)
+        if dest in allowed and dest != 'metadata':
+            row[dest] = val
+        elif not _is_delete_marker(val):
+            meta[dest if dest != key else key] = val
+    if meta:
+        row['metadata'] = meta
+    return row
+
+
+def _prepare_table_write(table, data, doc_id=None):
+    """Chuyển field Firestore (hoTen, updatedAt…) → cột Supabase trước khi ghi."""
+    if not data:
+        return data
+
+    if table in ('category_personnel', 'employee'):
+        existing = _fetch_row_metadata(table, doc_id) if doc_id else {}
+        return _merge_personnel_metadata(existing, data, table=table)
+
+    if table in _CATEGORY_TABLE_COLUMNS:
+        if table == 'employee_assignment':
+            return _prepare_employee_assignment_write(data)
+        if table == 'role_definitions':
+            return _prepare_role_definition_write(data, doc_id=doc_id)
+        existing = _fetch_row_metadata(table, doc_id) if doc_id else {}
+        return _prepare_category_write(table, data, existing)
+
+    if table == 'role_definitions':
+        return _prepare_role_definition_write(data, doc_id=doc_id)
+
+    return data
+
+
+def _prepare_table_update(table, doc_id, data):
+    """PATCH / batch update — merge metadata, map field names."""
+    if table in TABLE_MAP.values():
+        prepared = _prepare_table_write(table, data, doc_id=doc_id)
+        if prepared:
+            return prepared
+    return data
+
+
+def _resolve_query_field(field):
+    """Map tên field Firestore (camelCase) → cột Postgres khi filter/order Supabase."""
+    if not field:
+        return field
+    if field in _FIELD_ALIASES:
+        return _FIELD_ALIASES[field]
+    if field in _PERSONNEL_FIELD_MAP:
+        return _PERSONNEL_FIELD_MAP[field]
+    return field
 
 
 def _apply_where(docs, where_list):
@@ -281,11 +680,27 @@ def _load_collection_docs(collection, where=None, order_by=None, order_dir='desc
     docs = []
 
     if table:
-        res = supabase.table(table).select('*').execute()
+        q = supabase.table(table).select('*')
+        post_filters = []
+        for cond in where or []:
+            if len(cond) != 3:
+                continue
+            field, op, value = cond
+            db_field = _resolve_query_field(field)
+            if op == '==':
+                q = q.eq(db_field, value)
+            else:
+                post_filters.append(cond)
+        if order_by:
+            q = q.order(_resolve_query_field(order_by), desc=(order_dir or 'desc').lower() == 'desc')
+        if limit:
+            q = q.limit(int(limit))
+        res = q.execute()
         for row in res.data or []:
             doc = _row_to_doc(row, use_data_field=False, table_name=table)
             if doc:
                 docs.append(doc)
+        docs = _apply_where(docs, post_filters)
     else:
         res = supabase.table('erp_collections').select('*').eq('collection', collection).execute()
         for row in res.data or []:
@@ -296,7 +711,9 @@ def _load_collection_docs(collection, where=None, order_by=None, order_dir='desc
     docs = _apply_where(docs, where)
     reverse = (order_dir or 'desc').lower() == 'desc'
     if order_by:
-        docs.sort(key=lambda d: d.get(order_by) or '', reverse=reverse)
+        ob = order_by
+        db_ob = _resolve_query_field(order_by)
+        docs.sort(key=lambda d: d.get(ob) or d.get(db_ob) or '', reverse=reverse)
     else:
         docs.sort(key=lambda d: d.get('createdAt') or d.get('created_at') or '', reverse=True)
 
@@ -370,6 +787,109 @@ def show_app(app_name):
 
 # ==================== API ĐĂNG NHẬP ====================
 
+def _employee_position_name(personnel_id, username=None):
+    """Lấy position_name từ bảng employee (view đăng nhập có thể chưa có cột này)."""
+    try:
+        if personnel_id:
+            res = supabase.table('employee').select('position_name').eq('id', personnel_id).limit(1).execute()
+            if res.data and res.data[0].get('position_name'):
+                return res.data[0]['position_name']
+        if username:
+            res = supabase.table('employee').select('position_name').eq('username', username).limit(1).execute()
+            if res.data and res.data[0].get('position_name'):
+                return res.data[0]['position_name']
+    except Exception as e:
+        print(f"_employee_position_name: {e}")
+    return ''
+
+
+def _personnel_row_by_ref(username=None, personnel_id=None):
+    """Tìm hồ sơ category_personnel theo username hoặc id."""
+    try:
+        if username:
+            res = supabase.table('category_personnel').select('*').eq('username', username).limit(1).execute()
+            if res.data:
+                return res.data[0]
+        if personnel_id:
+            res = supabase.table('category_personnel').select('*').eq('id', personnel_id).limit(1).execute()
+            if res.data:
+                return res.data[0]
+    except Exception as e:
+        print(f'_personnel_row_by_ref: {e}')
+    return None
+
+
+def _resolve_login_profile_fields(user_row, username):
+    """Lấy personnel_id, chức vụ, app_roles_cache — kể cả khi view đăng nhập thiếu."""
+    personnel_id = user_row.get('personnel_id') or user_row.get('employee_id')
+    app_cache = user_row.get('app_roles_cache') or {}
+    position_name = user_row.get('position_name') or user_row.get('position') or ''
+
+    if not personnel_id and username:
+        try:
+            ua = supabase.table('user_accounts').select('employee_id').eq('username', username).limit(1).execute()
+            if ua.data and ua.data[0].get('employee_id'):
+                personnel_id = ua.data[0]['employee_id']
+        except Exception as e:
+            print(f'_resolve_login_profile_fields user_accounts: {e}')
+
+    personnel = _personnel_row_by_ref(username, personnel_id)
+    if personnel:
+        doc = _row_to_doc(personnel, use_data_field=False, table_name='employee')
+        if not app_cache or app_cache == {}:
+            app_cache = doc.get('appRolesCache') or doc.get('app_roles_cache') or {}
+        if not position_name:
+            position_name = (
+                doc.get('position_name') or doc.get('positionName') or doc.get('position') or ''
+            )
+        if not personnel_id:
+            personnel_id = doc.get('id')
+
+    if not position_name:
+        position_name = _employee_position_name(personnel_id, username)
+
+    if (not app_cache or app_cache == {}) and personnel_id:
+        try:
+            res = supabase.table('employee').select('app_roles_cache, position_name').eq(
+                'id', personnel_id
+            ).limit(1).execute()
+            if res.data:
+                row = res.data[0]
+                if row.get('app_roles_cache'):
+                    app_cache = row['app_roles_cache']
+                if not position_name and row.get('position_name'):
+                    position_name = row['position_name']
+        except Exception as e:
+            print(f'_resolve_login_profile_fields employee: {e}')
+
+    return personnel_id, position_name, app_cache
+
+
+def _login_user_payload(user_row, username):
+    """JSON user trả về sau đăng nhập — gồm chức vụ để header hiển thị ngay."""
+    role = user_row.get('role', 'user')
+    is_super = bool(user_row.get('is_super_admin')) or role == 'admin'
+    personnel_id, position_name, app_cache = _resolve_login_profile_fields(user_row, username)
+    department = user_row.get('department') or user_row.get('department_name') or ''
+    display = user_row.get('display_name') or user_row.get('ho_ten') or username
+    return {
+        'username': username,
+        'name': display,
+        'hoTen': display,
+        'id': personnel_id or username,
+        'role': role,
+        'department': department,
+        'department_name': department,
+        'position': position_name,
+        'position_name': position_name,
+        'positionName': position_name,
+        'email': user_row.get('email') or f'{username}@rriv.org.vn',
+        'systemRoles': user_row.get('system_roles') or [],
+        'isSuperAdmin': is_super,
+        'appRolesCache': app_cache if isinstance(app_cache, dict) else {}
+    }
+
+
 @app.route('/api/login-password', methods=['POST'])
 def login_password():
     data = request.json or {}
@@ -384,21 +904,9 @@ def login_password():
 
         user = res.data[0]
         record_login_history(username, "success_via_password", request)
-        role = user.get("role", "user")
-        is_super = bool(user.get("is_super_admin")) or role == "admin"
         return jsonify({
             "success": True,
-            "user": {
-                "username": username,
-                "name": user.get("display_name") or user.get("ho_ten") or username,
-                "id": user.get("personnel_id") or username,
-                "role": role,
-                "department": user.get("department", ""),
-                "email": user.get("email") or f"{username}@rriv.org.vn",
-                "systemRoles": user.get("system_roles") or [],
-                "isSuperAdmin": is_super,
-                "appRolesCache": user.get("app_roles_cache") or {}
-            }
+            "user": _login_user_payload(user, username)
         })
     except Exception as e:
         print(e)
@@ -450,21 +958,9 @@ def verify_login_otp():
         res = supabase.table("user_login_view").select("*").eq("username", username).execute()
         user = res.data[0] if res.data else {}
         record_login_history(username, "success_via_otp", request)
-        role = user.get("role", "user")
-        is_super = bool(user.get("is_super_admin")) or role == "admin"
         return jsonify({
             "success": True,
-            "user": {
-                "username": username,
-                "name": user.get("display_name") or user.get("ho_ten") or username,
-                "id": user.get("personnel_id") or username,
-                "role": role,
-                "department": user.get("department", ""),
-                "email": user.get("email") or f"{username}@rriv.org.vn",
-                "systemRoles": user.get("system_roles") or [],
-                "isSuperAdmin": is_super,
-                "appRolesCache": user.get("app_roles_cache") or {}
-            }
+            "user": _login_user_payload(user, username)
         })
     except Exception as e:
         print(e)
@@ -477,12 +973,28 @@ def get_profile():
     if not username:
         return jsonify({"profile": None}), 400
     try:
-        res = supabase.table('category_personnel').select('*').eq('username', username).limit(1).execute()
-        if res.data:
-            return jsonify({"profile": _row_to_doc(res.data[0], use_data_field=False, table_name='category_personnel')})
         res_emp = supabase.table('employee').select('*').eq('username', username).limit(1).execute()
         if res_emp.data:
             return jsonify({"profile": _row_to_doc(res_emp.data[0], use_data_field=False, table_name='employee')})
+        res = supabase.table('category_personnel').select('*').eq('username', username).limit(1).execute()
+        if res.data:
+            return jsonify({"profile": _row_to_doc(res.data[0], use_data_field=False, table_name='employee')})
+        try:
+            ua = supabase.table('user_accounts').select('employee_id').eq('username', username).limit(1).execute()
+            if ua.data and ua.data[0].get('employee_id'):
+                emp_id = ua.data[0]['employee_id']
+                res_link = supabase.table('category_personnel').select('*').eq('id', emp_id).limit(1).execute()
+                if res_link.data:
+                    doc = _row_to_doc(res_link.data[0], use_data_field=False, table_name='employee')
+                    doc['username'] = username
+                    return jsonify({"profile": doc})
+                res_emp2 = supabase.table('employee').select('*').eq('id', emp_id).limit(1).execute()
+                if res_emp2.data:
+                    doc = _row_to_doc(res_emp2.data[0], use_data_field=False, table_name='employee')
+                    doc['username'] = username
+                    return jsonify({"profile": doc})
+        except Exception as e:
+            print(f'get_profile link employee_id: {e}')
         res2 = supabase.table('erp_collections').select('*').eq('collection', 'categoryPersonnel').execute()
         for row in res2.data or []:
             doc = _row_to_doc(row, use_data_field=True)
@@ -492,6 +1004,322 @@ def get_profile():
     except Exception as e:
         print(e)
         return jsonify({"profile": None}), 500
+
+
+def _system_role_erp_role(system_role_id):
+    """Map system_role → erp_role legacy (user/vpp/admin)."""
+    if not system_role_id:
+        return 'user'
+    try:
+        res = supabase.table('system_role').select('role_name').eq('id', int(system_role_id)).limit(1).execute()
+        if not res.data:
+            return 'user'
+        name = res.data[0].get('role_name') or ''
+        if name == 'Super_Admin':
+            return 'admin'
+        if name in ('Institute_Executive', 'Department_Head', 'Operations_Specialist'):
+            return 'vpp'
+        return 'user'
+    except Exception:
+        return 'user'
+
+
+def _sync_user_app_roles(username, employee_id, app_roles_cache):
+    """Đồng bộ app_roles_cache → user_roles (1 dòng / app, metadata.roles + scopes)."""
+    if not username:
+        return
+    cache = app_roles_cache if isinstance(app_roles_cache, dict) else {}
+    try:
+        supabase.table('user_roles').delete().eq('username', username).execute()
+    except Exception as e:
+        print(f'_sync_user_app_roles delete: {e}')
+
+    for app_id, entry in cache.items():
+        if not isinstance(entry, dict):
+            continue
+        roles = entry.get('roles') or []
+        if not roles:
+            continue
+        primary = roles[0] if isinstance(roles, list) else roles
+        meta = {
+            'roles': roles if isinstance(roles, list) else [roles],
+            'scopes': entry.get('scopes') or {},
+            'isActive': True,
+        }
+        row = {
+            'id': f'ur-{username}-{app_id}',
+            'uid': employee_id or username,
+            'username': username,
+            'app_id': app_id,
+            'role_id': primary,
+            'is_active': True,
+            'metadata': meta,
+        }
+        try:
+            supabase.table('user_roles').upsert(row).execute()
+        except Exception as e:
+            print(f'_sync_user_app_roles upsert {app_id}: {e}')
+
+
+def _sync_user_system_role(username, system_role_id, assigned_by='nhansu'):
+    """Gán một vai trò tổ chức duy nhất cho user (thay thế các role cũ)."""
+    if not username or not system_role_id:
+        return
+    try:
+        rid = int(system_role_id)
+    except (TypeError, ValueError):
+        return
+    supabase.table('user_system_role').delete().eq('username', username).execute()
+    supabase.table('user_system_role').insert({
+        'username': username,
+        'system_role_id': rid,
+        'assigned_by': assigned_by,
+    }).execute()
+
+
+# Phạm vi dữ liệu mặc định theo app (cấu hình cấu trúc — không phải tên role)
+APP_SCOPE_TYPES = {
+    'nhansu': 'department',
+    'sanxuat': 'team',
+    'vuoncay': 'department',
+    'baocao': 'department',
+    'thongbao': 'department',
+    'phanquyen': 'none',
+}
+
+
+@app.route('/api/app-registry', methods=['GET'])
+def list_app_registry():
+    """Danh mục app — ma trận gán quyền Nhân sự đọc từ đây."""
+    assignable_only = request.args.get('assignable', '').lower() in ('1', 'true', 'yes')
+    try:
+        q = supabase.table('app_registry').select('*').order('sort_order')
+        if assignable_only:
+            q = q.eq('assignable', True)
+        res = q.execute()
+        if res.data:
+            apps = [_row_to_doc(row, use_data_field=False, table_name='app_registry') for row in res.data]
+            return jsonify({"success": True, "apps": apps})
+    except Exception as e:
+        print(f'list_app_registry (table): {e}')
+
+    try:
+        res = supabase.table('role_definitions').select('id, metadata').execute()
+        seen = {}
+        for row in res.data or []:
+            doc = _row_to_doc(row, use_data_field=False, table_name='role_definitions')
+            app_id = doc.get('appId') or doc.get('app_id')
+            if not app_id:
+                continue
+            if app_id not in seen:
+                seen[app_id] = {
+                    'appId': app_id,
+                    'app_id': app_id,
+                    'name': APP_TITLES.get(app_id, app_id),
+                    'scopeType': APP_SCOPE_TYPES.get(app_id, 'department'),
+                    'scope_type': APP_SCOPE_TYPES.get(app_id, 'department'),
+                    'assignable': True,
+                    'sortOrder': len(seen) + 1,
+                }
+        apps = sorted(seen.values(), key=lambda a: a.get('sortOrder', 999))
+        if assignable_only:
+            apps = [a for a in apps if a.get('assignable', True)]
+        return jsonify({"success": True, "apps": apps})
+    except Exception as e:
+        print(f'list_app_registry (fallback): {e}')
+        return jsonify({"success": False, "message": str(e), "apps": []}), 500
+
+
+def _load_role_definitions_rows(app_id='', active_only=True):
+    """Đọc role_definitions — tương thích schema cũ (chỉ metadata) và schema ERP mới."""
+    try:
+        q = supabase.table('role_definitions').select('*')
+        if app_id:
+            q = q.eq('app_id', app_id)
+        if active_only:
+            q = q.eq('is_active', True)
+        res = q.order('sort_order').order('role_name').execute()
+        return res.data or []
+    except Exception as e:
+        print(f'_load_role_definitions_rows (modern): {e}')
+
+    res = supabase.table('role_definitions').select(
+        'id, role_id, name, permissions, metadata, created_at'
+    ).execute()
+    rows = res.data or []
+    if not app_id and not active_only:
+        return rows
+
+    filtered = []
+    for row in rows:
+        doc = _row_to_doc(row, use_data_field=False, table_name='role_definitions')
+        row_app = doc.get('appId') or doc.get('app_id') or ''
+        if app_id and row_app != app_id:
+            continue
+        if active_only:
+            meta = row.get('metadata') if isinstance(row.get('metadata'), dict) else {}
+            is_active = doc.get('isActive')
+            if is_active is None:
+                is_active = meta.get('is_active', True)
+            if not is_active:
+                continue
+        filtered.append(row)
+    filtered.sort(key=lambda r: (
+        (r.get('metadata') or {}).get('sort_order', 999),
+        (r.get('metadata') or {}).get('role_name') or r.get('name') or '',
+    ))
+    return filtered
+
+
+@app.route('/api/role-definitions', methods=['GET'])
+def list_role_definitions():
+    """Danh mục role theo app — dropdown Nhân sự + Permissions.js đọc từ đây."""
+    app_id = (request.args.get('app_id') or request.args.get('appId') or '').strip()
+    active_only = request.args.get('active_only', 'true').lower() not in ('0', 'false', 'no')
+    try:
+        rows = _load_role_definitions_rows(app_id=app_id, active_only=active_only)
+        roles = [
+            _row_to_doc(row, use_data_field=False, table_name='role_definitions')
+            for row in rows
+        ]
+        return jsonify({"success": True, "roles": roles})
+    except Exception as e:
+        print(f'list_role_definitions: {e}')
+        return jsonify({"success": False, "message": str(e), "roles": []}), 500
+
+
+@app.route('/api/system-roles', methods=['GET'])
+def list_system_roles():
+    try:
+        res = supabase.table('system_role').select('id, role_name, description').order('id').execute()
+        return jsonify({"success": True, "roles": res.data or []})
+    except Exception as e:
+        print(f"list_system_roles: {e}")
+        return jsonify({"success": False, "message": str(e), "roles": []}), 500
+
+
+@app.route('/api/personnel/system-role', methods=['POST'])
+def set_personnel_system_role():
+    body = request.json or {}
+    username = (body.get('username') or '').strip().lower()
+    system_role_id = body.get('systemRoleId') or body.get('system_role_id')
+    if not username or not system_role_id:
+        return jsonify({"success": False, "message": "Thiếu username hoặc systemRoleId"}), 400
+    try:
+        erp_role = _system_role_erp_role(system_role_id)
+        _sync_user_system_role(username, system_role_id)
+        supabase.table('user_accounts').update({'role': erp_role}).eq('username', username).execute()
+        emp = supabase.table('employee').select('id, metadata').eq('username', username).limit(1).execute()
+        if emp.data:
+            meta = dict(emp.data[0].get('metadata') or {})
+            meta['systemRoleId'] = int(system_role_id)
+            supabase.table('employee').update({
+                'erp_role': erp_role,
+                'metadata': meta,
+            }).eq('id', emp.data[0]['id']).execute()
+        return jsonify({"success": True})
+    except Exception as e:
+        print(f"set_personnel_system_role: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/api/personnel/access-rights', methods=['POST'])
+def set_personnel_access_rights():
+    """Cập nhật ma trận quyền app (app_roles_cache + user_roles)."""
+    body = request.json or {}
+    username = (body.get('username') or '').strip().lower()
+    employee_id = body.get('employeeId') or body.get('employee_id') or body.get('id')
+    app_roles_cache = body.get('appRolesCache') or body.get('app_roles_cache') or {}
+
+    if not username:
+        return jsonify({'success': False, 'message': 'Thiếu username'}), 400
+    if not isinstance(app_roles_cache, dict):
+        return jsonify({'success': False, 'message': 'appRolesCache không hợp lệ'}), 400
+
+    try:
+        if not employee_id:
+            emp = supabase.table('employee').select('id').eq('username', username).limit(1).execute()
+            if emp.data:
+                employee_id = emp.data[0]['id']
+
+        if employee_id:
+            supabase.table('employee').update({
+                'app_roles_cache': app_roles_cache,
+            }).eq('id', employee_id).execute()
+
+        _sync_user_app_roles(username, employee_id, app_roles_cache)
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f'set_personnel_access_rights: {e}')
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/personnel/create', methods=['POST'])
+def create_personnel():
+    """Tạo nhân sự + tài khoản đăng nhập (thay Firebase Auth createUser)."""
+    body = request.json or {}
+    username = (body.get('username') or '').strip().lower()
+    password = body.get('password') or ''
+    data = dict(body.get('data') or {})
+
+    if not username:
+        return jsonify({"success": False, "message": "Thiếu username"}), 400
+    if len(password) < 6:
+        return jsonify({"success": False, "message": "Mật khẩu ≥ 6 ký tự"}), 400
+
+    try:
+        dup = supabase.table('employee').select('id').eq('username', username).limit(1).execute()
+        if dup.data:
+            return jsonify({"success": False, "message": "Username đã tồn tại trong danh sách nhân sự"}), 409
+        dup_acct = supabase.table('user_accounts').select('username').eq('username', username).limit(1).execute()
+        if dup_acct.data:
+            return jsonify({"success": False, "message": "Username đã có tài khoản đăng nhập"}), 409
+
+        emp_id = str(uuid.uuid4())
+        email = data.get('email') or f'{username}@rriv.org.vn'
+        data.setdefault('username', username)
+        data.setdefault('email', email)
+        if not data.get('employeeCode') and not data.get('code'):
+            data['employeeCode'] = f'RRIV-{username.upper().replace(".", "-")}'
+
+        row = {'id': emp_id, **_prepare_table_write('employee', data)}
+        if not row.get('employee_code'):
+            row['employee_code'] = data['employeeCode']
+        if not row.get('full_name'):
+            row['full_name'] = data.get('hoTen') or username
+        if not row.get('employment_status'):
+            row['employment_status'] = 'active'
+
+        system_role_id = data.get('systemRoleId') or data.get('system_role_id')
+        erp_role = _system_role_erp_role(system_role_id) if system_role_id else (data.get('role') or 'user')
+        row['erp_role'] = erp_role
+        meta = dict(row.get('metadata') or {})
+        if system_role_id:
+            meta['systemRoleId'] = int(system_role_id)
+        row['metadata'] = meta
+
+        app_cache = data.get('appRolesCache') or data.get('app_roles_cache')
+        if app_cache:
+            row['app_roles_cache'] = app_cache
+
+        supabase.table('employee').insert(row).execute()
+        supabase.table('user_accounts').insert({
+            'username': username,
+            'password': password,
+            'display_name': row.get('full_name') or username,
+            'email': email,
+            'role': erp_role,
+            'department': row.get('department_name') or data.get('department') or '',
+            'employee_id': emp_id,
+        }).execute()
+        if system_role_id:
+            _sync_user_system_role(username, system_role_id, assigned_by='create_personnel')
+        if app_cache:
+            _sync_user_app_roles(username, emp_id, app_cache)
+        return jsonify({"success": True, "id": emp_id})
+    except Exception as e:
+        print(f"create_personnel: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
 
 
 # ==================== API DỮ LIỆU (thay Firestore) ====================
@@ -539,7 +1367,14 @@ def create_document(collection):
     try:
         table = TABLE_MAP.get(collection)
         if table:
-            row = {'id': doc_id, **_prepare_table_write(table, data)}
+            row = _prepare_table_write(table, data, doc_id=doc_id if body.get('id') else None)
+            if table == 'employee_assignment':
+                if body.get('id'):
+                    row['id'] = body.get('id')
+                res = supabase.table(table).insert(row).execute()
+                new_id = res.data[0]['id'] if res.data else doc_id
+                return jsonify({"success": True, "id": str(new_id)})
+            row = {'id': doc_id, **row}
             supabase.table(table).upsert(row).execute()
         else:
             supabase.table('erp_collections').insert({
@@ -561,7 +1396,8 @@ def update_document(collection, doc_id):
     try:
         table = TABLE_MAP.get(collection)
         if table:
-            supabase.table(table).update(data).eq('id', doc_id).execute()
+            patch = _prepare_table_update(table, doc_id, data)
+            supabase.table(table).update(patch).eq('id', doc_id).execute()
         else:
             existing = supabase.table('erp_collections').select('data').eq('collection', collection).eq('id', doc_id).limit(1).execute()
             merged = {}
@@ -664,6 +1500,33 @@ def bulk_save_harvest_assignments():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
+@app.route('/api/harvest/weighings/range', methods=['GET'])
+def harvest_weighings_range():
+    """Tổng hợp sản lượng CN theo khoảng ngày (tuần / tháng / năm)."""
+    from_date = request.args.get('from') or request.args.get('date_from')
+    to_date = request.args.get('to') or request.args.get('date_to')
+    if not from_date or not to_date:
+        return jsonify({"success": False, "message": "Thiếu tham số from và to (YYYY-MM-DD)"}), 400
+    try:
+        res = (
+            supabase.table('field_worker_weighings')
+            .select('*')
+            .gte('record_date', from_date)
+            .lte('record_date', to_date)
+            .execute()
+        )
+        docs = []
+        for row in res.data or []:
+            doc = _row_to_doc(row, use_data_field=False, table_name='field_worker_weighings')
+            if doc:
+                docs.append(doc)
+        docs.sort(key=lambda d: (d.get('record_date') or '', d.get('tapping_section_id') or ''))
+        return jsonify({"success": True, "data": docs, "from": from_date, "to": to_date})
+    except Exception as e:
+        print(f"harvest_weighings_range: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 @app.route('/api/data/batch', methods=['POST'])
 def batch_write():
     body = request.json or {}
@@ -683,7 +1546,8 @@ def batch_write():
                 data = op.get('data') or {}
                 table = TABLE_MAP.get(coll)
                 if table:
-                    supabase.table(table).update(data).eq('id', doc_id).execute()
+                    patch = _prepare_table_update(table, doc_id, data)
+                    supabase.table(table).update(patch).eq('id', doc_id).execute()
                 else:
                     existing = supabase.table('erp_collections').select('data').eq('collection', coll).eq('id', doc_id).limit(1).execute()
                     merged = dict(existing.data[0].get('data') or {}) if existing.data else {}
@@ -693,7 +1557,14 @@ def batch_write():
                 data = op.get('data') or {}
                 table = TABLE_MAP.get(coll)
                 if table:
-                    supabase.table(table).upsert({'id': doc_id, **data}).execute()
+                    row = _prepare_table_write(table, data, doc_id=doc_id if op.get('docId') else None)
+                    if table == 'employee_assignment':
+                        supabase.table(table).insert(row).execute()
+                    else:
+                        supabase.table(table).upsert({
+                            'id': doc_id,
+                            **row
+                        }).execute()
                 else:
                     supabase.table('erp_collections').insert({
                         'id': doc_id, 'collection': coll, 'data': data

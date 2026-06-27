@@ -678,6 +678,7 @@ SELECT
   e.id::text AS personnel_id,
   COALESCE(e.erp_role, a.role, 'user') AS role,
   COALESCE(e.department_name, a.department) AS department,
+  e.position_name,
   e.app_roles_cache,
   (
     SELECT COALESCE(json_agg(sr.role_name ORDER BY sr.id), '[]'::json)

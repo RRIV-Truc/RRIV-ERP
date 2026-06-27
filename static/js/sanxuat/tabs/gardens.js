@@ -85,6 +85,7 @@ const TabGardens = (function() {
         gardenMap.invalidateSize();
         if (mapPlots.length === 0) loadMapPlots();
       }, 100);
+      _bindMapControls();
       return;
     }
     gardenMap = L.map('gardenMap', {
@@ -103,7 +104,123 @@ const TabGardens = (function() {
     setTimeout(function() {
       if (gardenMap) gardenMap.invalidateSize();
     }, 100);
+    _bindMapControls();
     loadMapPlots();
+  }
+
+  function _bindMapControls() {
+    if (_bindMapControls._done) return;
+    _bindMapControls._done = true;
+
+    function onZoomIn(e) {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      if (gardenMap) gardenMap.zoomIn();
+    }
+    function onZoomOut(e) {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      if (gardenMap) gardenMap.zoomOut();
+    }
+    function onFullscreen(e) {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      toggleMapFullscreen();
+    }
+
+    var btnIn = document.getElementById('btnGardenMapZoomIn');
+    var btnOut = document.getElementById('btnGardenMapZoomOut');
+    var btnFs = document.getElementById('btnGardenMapFullscreen');
+    var btnMin = document.getElementById('btnGardenMapMinimize');
+
+    if (btnIn) {
+      btnIn.addEventListener('click', onZoomIn);
+      btnIn.addEventListener('touchend', onZoomIn, { passive: false });
+    }
+    if (btnOut) {
+      btnOut.addEventListener('click', onZoomOut);
+      btnOut.addEventListener('touchend', onZoomOut, { passive: false });
+    }
+    if (btnFs) {
+      btnFs.addEventListener('click', onFullscreen);
+      btnFs.addEventListener('touchend', onFullscreen, { passive: false });
+    }
+    if (btnMin) {
+      btnMin.addEventListener('click', onFullscreen);
+      btnMin.addEventListener('touchend', onFullscreen, { passive: false });
+    }
+
+    document.addEventListener('fullscreenchange', function() {
+      var minBtn = document.getElementById('btnGardenMapMinimize');
+      if (!document.fullscreenElement && minBtn) minBtn.classList.remove('show');
+      setTimeout(function() {
+        if (gardenMap) gardenMap.invalidateSize();
+      }, 100);
+    });
+  }
+
+  function zoomIn() {
+    if (gardenMap) gardenMap.zoomIn();
+  }
+
+  function zoomOut() {
+    if (gardenMap) gardenMap.zoomOut();
+  }
+
+  function toggleMapFullscreen() {
+    var wrapper = document.getElementById('gardenMapWrapper');
+    var minBtn = document.getElementById('btnGardenMapMinimize');
+    if (!wrapper || !gardenMap) return;
+
+    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    function _afterResize() {
+      setTimeout(function() {
+        gardenMap.invalidateSize();
+        if (geoJsonLayer) {
+          try {
+            gardenMap.fitBounds(geoJsonLayer.getBounds(), { padding: [30, 30] });
+          } catch (e) { /* ignore */ }
+        }
+      }, 100);
+    }
+
+    if (isIOS) {
+      if (!wrapper.classList.contains('ios-fullscreen')) {
+        wrapper.classList.add('ios-fullscreen');
+        if (minBtn) minBtn.classList.add('show');
+        document.body.style.overflow = 'hidden';
+      } else {
+        wrapper.classList.remove('ios-fullscreen');
+        if (minBtn) minBtn.classList.remove('show');
+        document.body.style.overflow = '';
+      }
+      _afterResize();
+      return;
+    }
+
+    if (!document.fullscreenElement) {
+      var req = wrapper.requestFullscreen && wrapper.requestFullscreen();
+      if (req && req.then) {
+        req.then(function() {
+          if (minBtn) minBtn.classList.add('show');
+          _afterResize();
+        }).catch(function() {
+          wrapper.classList.add('ios-fullscreen');
+          if (minBtn) minBtn.classList.add('show');
+          document.body.style.overflow = 'hidden';
+          _afterResize();
+        });
+      } else {
+        wrapper.classList.add('ios-fullscreen');
+        if (minBtn) minBtn.classList.add('show');
+        document.body.style.overflow = 'hidden';
+        _afterResize();
+      }
+    } else if (document.exitFullscreen) {
+      document.exitFullscreen().then(function() {
+        if (minBtn) minBtn.classList.remove('show');
+        _afterResize();
+      });
+    }
   }
 
   function setupMapLayers() {
@@ -569,6 +686,9 @@ const TabGardens = (function() {
     toggleMapLayer: toggleMapLayer,
     filterMapBySquad: filterMapBySquad,
     fitMapBounds: fitMapBounds,
+    zoomIn: zoomIn,
+    zoomOut: zoomOut,
+    toggleMapFullscreen: toggleMapFullscreen,
 
     // CRUD
     loadGardens: loadGardens,

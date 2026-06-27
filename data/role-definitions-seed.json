@@ -1,0 +1,141 @@
+{
+  "apps": [
+    { "app_id": "nhansu", "name": "Nhân sự", "scope_type": "department", "hub_enabled": true, "assignable": true, "sort_order": 10 },
+    { "app_id": "sanxuat", "name": "Sản xuất", "scope_type": "team", "hub_enabled": true, "assignable": true, "sort_order": 20 },
+    { "app_id": "vuoncay", "name": "Vườn cây", "scope_type": "department", "hub_enabled": false, "assignable": true, "sort_order": 30 },
+    { "app_id": "baocao", "name": "Báo cáo", "scope_type": "department", "hub_enabled": false, "assignable": true, "sort_order": 40 },
+    { "app_id": "thongbao", "name": "Thông báo", "scope_type": "department", "hub_enabled": false, "assignable": true, "sort_order": 50 },
+    { "app_id": "phanquyen", "name": "Phân quyền", "scope_type": "none", "hub_enabled": false, "assignable": true, "sort_order": 60 }
+  ],
+  "roles": [
+    {
+      "app_id": "nhansu", "role_id": "admin", "role_name": "Quản trị app",
+      "description": "Toàn quyền quản lý nhân sự",
+      "permissions": ["employee:*", "department:*", "position:*", "team:*", "stats:*"],
+      "scope_type": "all", "sort_order": 10
+    },
+    {
+      "app_id": "nhansu", "role_id": "manager", "role_name": "Quản lý phòng",
+      "description": "Quản lý nhân sự trong phòng ban",
+      "permissions": ["employee:view", "employee:create", "employee:edit", "employee:delete", "employee:toggle_status", "team:view", "team:manage", "stats:view"],
+      "scope_type": "department", "sort_order": 20
+    },
+    {
+      "app_id": "nhansu", "role_id": "staff", "role_name": "Nhập liệu",
+      "description": "Cập nhật hồ sơ nhân sự",
+      "permissions": ["employee:view", "employee:edit", "stats:view"],
+      "scope_type": "department", "sort_order": 30
+    },
+    {
+      "app_id": "nhansu", "role_id": "team_leader", "role_name": "Tổ trưởng",
+      "description": "Quản lý công nhân trong tổ",
+      "permissions": ["employee:view", "employee:create", "employee:edit"],
+      "scope_type": "team", "sort_order": 40
+    },
+    {
+      "app_id": "nhansu", "role_id": "viewer", "role_name": "Chỉ xem",
+      "description": "Xem danh sách nhân sự",
+      "permissions": ["employee:view", "stats:view"],
+      "scope_type": "department", "sort_order": 50
+    },
+    {
+      "app_id": "sanxuat", "role_id": "admin", "role_name": "Quản trị app",
+      "description": "Toàn quyền sản xuất & mọi đội SX",
+      "permissions": ["harvest:*", "field:*", "factory:*"],
+      "scope_type": "all", "scopeable": {"byDepartment": false, "byTeam": false, "byFactory": true},
+      "sort_order": 10
+    },
+    {
+      "app_id": "sanxuat", "role_id": "supervisor", "role_name": "Giám sát",
+      "description": "Mọi đội SX trong phạm vi được gán",
+      "permissions": ["harvest:*", "field:all_teams", "factory:view", "harvest:manage_personnel"],
+      "scope_type": "department", "scopeable": {"byDepartment": true, "byTeam": true, "byFactory": true},
+      "sort_order": 20
+    },
+    {
+      "app_id": "sanxuat", "role_id": "manager", "role_name": "Quản lý",
+      "description": "Xem & nhập mọi đội trong phạm vi",
+      "permissions": ["harvest:*", "field:all_teams", "factory:view", "harvest:manage_personnel"],
+      "scope_type": "department", "scopeable": {"byDepartment": true, "byTeam": true, "byFactory": true},
+      "sort_order": 30
+    },
+    {
+      "app_id": "sanxuat", "role_id": "team_leader", "role_name": "Đội trưởng",
+      "description": "Phân công & cân mủ — chỉ đội được gán",
+      "permissions": ["harvest:view", "harvest:assign", "harvest:weigh", "harvest:manage_sections", "harvest:manage_personnel"],
+      "scope_type": "team", "scopeable": {"byDepartment": false, "byTeam": true, "byFactory": false},
+      "sort_order": 40
+    },
+    {
+      "app_id": "sanxuat", "role_id": "doi_truong", "role_name": "Đội trưởng CN",
+      "description": "Giống Đội trưởng — chỉ đội được gán",
+      "permissions": ["harvest:view", "harvest:assign", "harvest:weigh", "harvest:manage_sections", "harvest:manage_personnel"],
+      "scope_type": "team", "scopeable": {"byDepartment": false, "byTeam": true, "byFactory": false},
+      "sort_order": 45
+    },
+    {
+      "app_id": "sanxuat", "role_id": "staff", "role_name": "Nhập liệu cân mủ",
+      "description": "Phân công & cân mủ tại trạm được gán",
+      "permissions": ["harvest:view", "harvest:assign", "harvest:weigh"],
+      "scope_type": "team", "scopeable": {"byDepartment": false, "byTeam": true, "byFactory": false},
+      "sort_order": 48
+    },
+    {
+      "app_id": "sanxuat", "role_id": "viewer", "role_name": "Chỉ xem",
+      "description": "Chỉ xem phân công & cân mủ",
+      "permissions": ["harvest:view"],
+      "scope_type": "team", "scopeable": {"byDepartment": false, "byTeam": true, "byFactory": false},
+      "sort_order": 50
+    },
+    {
+      "app_id": "vuoncay", "role_id": "admin", "role_name": "Quản trị app",
+      "permissions": ["harvest:view", "harvest:import", "harvest:delete", "lot:manage", "alert:manage", "config:all"],
+      "scope_type": "all", "sort_order": 10
+    },
+    {
+      "app_id": "vuoncay", "role_id": "staff", "role_name": "Nhập liệu",
+      "permissions": ["harvest:view", "harvest:import", "lot:view"],
+      "scope_type": "department", "sort_order": 20
+    },
+    {
+      "app_id": "vuoncay", "role_id": "viewer", "role_name": "Chỉ xem",
+      "permissions": ["harvest:view", "lot:view"],
+      "scope_type": "department", "sort_order": 30
+    },
+    {
+      "app_id": "baocao", "role_id": "admin", "role_name": "Quản trị app",
+      "permissions": ["report:*"],
+      "scope_type": "all", "sort_order": 10
+    },
+    {
+      "app_id": "baocao", "role_id": "staff", "role_name": "Tổng hợp",
+      "permissions": ["report:view", "report:export"],
+      "scope_type": "department", "sort_order": 20
+    },
+    {
+      "app_id": "baocao", "role_id": "viewer", "role_name": "Chỉ xem",
+      "permissions": ["report:view"],
+      "scope_type": "department", "sort_order": 30
+    },
+    {
+      "app_id": "thongbao", "role_id": "admin", "role_name": "Quản trị app",
+      "permissions": ["notify:*"],
+      "scope_type": "all", "sort_order": 10
+    },
+    {
+      "app_id": "thongbao", "role_id": "staff", "role_name": "Gửi TB",
+      "permissions": ["notify:send", "notify:view"],
+      "scope_type": "department", "sort_order": 20
+    },
+    {
+      "app_id": "thongbao", "role_id": "viewer", "role_name": "Chỉ xem",
+      "permissions": ["notify:view"],
+      "scope_type": "department", "sort_order": 30
+    },
+    {
+      "app_id": "phanquyen", "role_id": "admin", "role_name": "Quản trị",
+      "permissions": ["role:*", "user:*", "permission:*"],
+      "scope_type": "none", "sort_order": 10
+    }
+  ]
+}

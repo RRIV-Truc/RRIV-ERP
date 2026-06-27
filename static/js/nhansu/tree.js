@@ -1,108 +1,73 @@
-/* tree.js — OrgTree builder + renderer
- * Builds tree from departments + teams + personnel (counts) and renders to #treeRoot.
- * Handles expand/collapse, click selection, search filter.
- */
+/* tree.js — Cây tổ chức Viện (Ban/Phòng/Trung tâm — không nhà máy) */
 (function () {
   'use strict';
 
-  const { state, getFactories, esc, effFactory, sortByOrder } = window.NhansuState;
+  const { state, esc, sortByOrder, ROOT_LABEL, personInDept, personInTeam } = window.NhansuState;
 
-  // Build tree data structure.
-  // Hierarchy:
-  //   Toàn công ty
-  //     ├ Nhà máy A01 → các phòng ban thuộc A01 → tổ
-  //     ├ Nhà máy A02 → các phòng ban thuộc A02 → tổ
-  //     └ Các Ban / Phòng cấp công ty (không thuộc nhà máy nào) → tổ
   function build() {
     const personnel = state.allPersonnel;
     const depts = state.departments;
     const teams = state.allTeams;
 
     const totalCount = personnel.filter(p => !p.disabled).length;
-    const peffF = new Map();
-    personnel.forEach(p => peffF.set(p.id, effFactory(p)));
 
-    function buildDeptNode(d, factoryId) {
-      const deptTeams = teams.filter(t => t.department === d.id);
-      const matchFactory = (p) => factoryId ? peffF.get(p.id) === factoryId : true;
+    function buildDeptNode(d) {
+      const deptTeams = sortByOrder(
+        teams.filter(t => t.department === d.id && !t.metadata?.retired)
+      );
       const childNodes = deptTeams.map(t => ({
         type: 'team',
         id: t.id,
         label: t.name,
         icon: '👥',
         order: t.order ?? 999,
-        count: personnel.filter(p => p.team === t.id && matchFactory(p) && !p.disabled).length,
-        deptId: d.id,
-        factoryId: factoryId || undefined
+        count: personnel.filter(p => personInTeam(p, t.id) && !p.disabled).length,
+        deptId: d.id
       }));
       const noTeamCount = personnel.filter(p =>
-        p.department === d.id && !p.team && matchFactory(p) && !p.disabled
+        personInDept(p, d.id) && !p.team && !p.disabled
       ).length;
-      // "Trực thuộc phòng" — NV không thuộc tổ con nào (default group, đặt đầu)
-      if (noTeamCount > 0 && deptTeams.length > 0) {
+      if (noTeamCount > 0 && deptTeams.length > 0 && d.id !== 'dl-3') {
         childNodes.push({
           type: 'unteamed',
-          id: `unteamed_${d.id}_${factoryId || 'co'}`,
+          id: `unteamed_${d.id}`,
           label: 'Trực thuộc phòng',
           icon: '👤',
           order: 0,
           count: noTeamCount,
-          deptId: d.id,
-          factoryId: factoryId || undefined
+          deptId: d.id
         });
       }
-      const teamNodes = sortByOrder(childNodes);
       return {
         type: 'department',
         id: d.id,
         label: d.name,
-        icon: '🏢',
-        order: d.order,
-        count: personnel.filter(p =>
-          (p.department === d.id ||
-            (p.concurrentPositions || []).some(cp => cp.departmentId === d.id))
-          && matchFactory(p) && !p.disabled
-        ).length,
-        factoryId: factoryId || undefined,
-        children: teamNodes
+        icon: deptIcon(d),
+        order: d.order ?? d.metadata?.order ?? 999,
+        count: personnel.filter(p => personInDept(p, d.id) && !p.disabled).length,
+        children: sortByOrder(childNodes)
       };
     }
 
-    // Factory nodes — chỉ chứa phòng ban có dept.factory === f.id
-    const factoryNodes = getFactories().map(f => {
-      const factDepts = sortByOrder(
-        depts.filter(d => d.factory === f.id).map(d => buildDeptNode(d, f.id))
-      );
-      return {
-        type: 'factory',
-        id: f.id,
-        label: f.name,
-        icon: f.icon,
-        order: f.order,
-        count: personnel.filter(p => peffF.get(p.id) === f.id && !p.disabled).length,
-        children: factDepts
-      };
-    });
+    function deptIcon(d) {
+      const t = (d.dept_type || d.metadata?.dept_type || '').toLowerCase();
+      if (t.includes('ban')) return '🏛️';
+      if (t.includes('trung')) return '🔬';
+      return '🏢';
+    }
 
-    // Phòng ban cấp công ty — không có factory
-    const companyDeptNodes = depts
-      .filter(d => !d.factory)
-      .map(d => buildDeptNode(d, null));
-
-    // Top-level: factories + company depts gộp lại, sort theo order
-    const topLevel = sortByOrder([...factoryNodes, ...companyDeptNodes]);
+    const topLevel = sortByOrder(depts.map(buildDeptNode));
 
     return {
       type: 'root',
       id: 'root',
-      label: 'Toàn công ty',
-      icon: '🏛️',
+      label: ROOT_LABEL,
+      icon: '🌿',
       count: totalCount,
       children: topLevel
     };
   }
 
-  // Render
   function render() {
     const root = document.getElementById('treeRoot');
     if (!root) return;
@@ -122,8 +87,7 @@
     if (isExpanded) cls.push('expanded');
 
     const dataAttrs = `data-type="${node.type}" data-id="${esc(node.id)}"` +
-      (node.deptId ? ` data-dept-id="${esc(node.deptId)}"` : '') +
-      (node.factoryId ? ` data-factory-id="${esc(node.factoryId)}"` : '');
+      (node.deptId ? ` data-dept-id="${esc(node.deptId)}"` : '');
 
     let html = `<div class="${cls.join(' ')}" ${dataAttrs}>` +
       `<span class="twist">▶</span>` +
@@ -149,27 +113,22 @@
       const isTwist = e.target.classList.contains('twist');
       const hasChildren = !node.classList.contains('leaf');
 
-      // Twist toggle, OR clicking same selected node toggles
       if (isTwist && hasChildren) {
         toggleExpand(id);
         return;
       }
 
-      // Select
       const sel = { type, id, label: node.querySelector('.lbl').textContent };
       if (node.dataset.deptId) sel.deptId = node.dataset.deptId;
-      if (node.dataset.factoryId) sel.factoryId = node.dataset.factoryId;
       state.selection = sel;
 
-      // Auto-expand on click if has children and not expanded
       if (hasChildren && !state.expanded.has(id)) {
         state.expanded.add(id);
       }
 
       render();
       window.NhansuPanel?.render();
-      // Close drawer on mobile after select
-      if (window.innerWidth < 768 && type !== 'root' && type !== 'factory') {
+      if (window.innerWidth < 768 && type !== 'root') {
         closeDrawer();
       }
     };
@@ -196,7 +155,6 @@
     (node.children || []).forEach(c => walk(c, fn));
   }
 
-  // Drawer toggle (mobile)
   function openDrawer() {
     document.getElementById('treeSidebar')?.classList.add('open');
     document.getElementById('drawerBackdrop')?.classList.add('open');
@@ -210,9 +168,8 @@
     if (isOpen) closeDrawer(); else openDrawer();
   }
 
-  // Reset selection to root
   function selectRoot() {
-    state.selection = { type: 'root', id: 'root', label: 'Toàn công ty' };
+    state.selection = { type: 'root', id: 'root', label: ROOT_LABEL };
     state.expanded.add('root');
     render();
     window.NhansuPanel?.render();

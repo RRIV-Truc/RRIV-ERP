@@ -4,17 +4,15 @@
 
  */
 
-var SHELL_CACHE = 'rriv-erp-shell-v4';
+var SHELL_CACHE = 'rriv-erp-shell-v9';
 
-var RUNTIME_CACHE = 'rriv-erp-runtime-v4';
+var RUNTIME_CACHE = 'rriv-erp-runtime-v9';
 
 var OFFLINE_URL = '/offline.html';
 
 
 
 var PRECACHE = [
-
-  '/',
 
   '/manifest.json',
 
@@ -80,7 +78,7 @@ var PRECACHE = [
 
   '/static/js/sanxuat/services/FieldHarvestOffline.js',
 
-  '/static/js/sanxuat/tabs/field-harvest.js'
+  '/static/js/sanxuat/tabs/field-harvest.js?v=9'
 
 ];
 

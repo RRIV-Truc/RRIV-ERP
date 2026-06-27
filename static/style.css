@@ -107,6 +107,10 @@ body {
     transition: 0.3s;
 }
 .vrg-app-card:hover { transform: translateY(-6px); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); }
+/* App chưa mở trên hub — giữ HTML, ẩn giao diện (bật lại trong config.js HUB_APP_ENABLED) */
+.vrg-app-card.hub-app-locked {
+  display: none !important;
+}
 .footer-logo-text {
     display: flex;
     align-items: center;

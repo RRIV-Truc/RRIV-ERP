@@ -1,30 +1,8 @@
-/* permissions.js — auth helpers, permission checks, secondary auth, session listener.
- * Wraps the global Permissions module from js/utils/permissions.js
- */
+/* permissions.js — auth helpers, permission checks (RRIV Supabase, không Firebase). */
 (function () {
   'use strict';
 
-  const FIREBASE_CONFIG = {
-    apiKey: "AIzaSyBCpPDhOKofImy_K8xiV2Mhut_3gbdB1vY",
-    authDomain: "quantridoanhnghiepphr.firebaseapp.com",
-    projectId: "quantridoanhnghiepphr",
-    storageBucket: "quantridoanhnghiepphr.firebasestorage.app",
-    messagingSenderId: "1024381876052",
-    appId: "1:1024381876052:web:150ee86fc411bd14733ac1"
-  };
-
-  let secondaryApp = null;
-  let secondaryAuth = null;
-  let sessionListener = null;
   let roleDefsUnsub = null;
-
-  function getSecondaryAuth() {
-    if (!secondaryApp) {
-      secondaryApp = ErpDb.initializeApp(FIREBASE_CONFIG, 'SecondaryApp');
-      secondaryAuth = secondaryApp.auth();
-    }
-    return secondaryAuth;
-  }
 
   function isAdmin(user) {
     if (!user) return false;
@@ -95,7 +73,15 @@
     return false;
   }
 
-  // Check if current user can edit a specific employee
+  function canManageAccessRights(user) {
+    if (isAdmin(user)) return true;
+    if (typeof Permissions !== 'undefined' && Permissions.hasPermissionWithOverrides) {
+      return Permissions.hasPermissionWithOverrides('nhansu', 'access:manage') ||
+        Permissions.hasPermissionWithOverrides('nhansu', '*');
+    }
+    return false;
+  }
+
   function canEditEmployee(user, emp, managedTeams) {
     if (!user || !emp) return false;
     if (isAdmin(user)) return true;
@@ -113,41 +99,24 @@
     return false;
   }
 
-  // ============== Session enforcement ==============
   async function isSingleSessionEnabled() {
-    try {
-      const doc = await window.db.collection('system_settings').doc('auth').get();
-      return doc.exists && doc.data().singleSessionEnabled === true;
-    } catch { return false; }
+    return false;
   }
 
-  function startSessionListener(userId, onForceLogout) {
-    stopSessionListener();
-    const localToken = localStorage.getItem('sessionToken');
-    if (!localToken) return;
-    sessionListener = window.db.collection('user_sessions').doc(userId)
-      .onSnapshot(doc => {
-        if (!doc.exists) return;
-        const data = doc.data();
-        if (data.sessionToken && data.sessionToken !== localToken) {
-          if (typeof onForceLogout === 'function') onForceLogout('Tài khoản đã đăng nhập trên thiết bị khác');
-        }
-      }, () => {});
-  }
+  function startSessionListener() { /* chưa triển khai trên Supabase */ }
 
-  function stopSessionListener() {
-    if (sessionListener) { try { sessionListener(); } catch {} sessionListener = null; }
-  }
+  function stopSessionListener() { /* noop */ }
 
   function forceLogout(message) {
-    try { localStorage.removeItem('sessionToken'); } catch {}
-    alert(message || 'Phiên đăng nhập đã kết thúc');
-    window.location.href = 'index.html';
+    if (typeof Auth !== 'undefined') Auth.logout();
+    else {
+      alert(message || 'Phiên đăng nhập đã kết thúc');
+      window.location.href = '/';
+    }
   }
 
-  // ============== Role defs subscribe ==============
   function subscribeRoleDefs(userId, onChange) {
-    if (typeof Permissions === 'undefined') return;
+    if (typeof Permissions === 'undefined' || !window.db) return;
     try {
       if (typeof Permissions.subscribeToAllPermissions === 'function') {
         const subs = Permissions.subscribeToAllPermissions(window.db, userId, 'nhansu', () => {
@@ -155,19 +124,30 @@
         });
         roleDefsUnsub = subs?.unsubscribeAll || null;
       }
-    } catch (e) { /* noop */ }
+    } catch (_) { /* noop */ }
   }
 
   function unsubscribeRoleDefs() {
-    if (roleDefsUnsub) { try { roleDefsUnsub(); } catch {} roleDefsUnsub = null; }
+    if (roleDefsUnsub) { try { roleDefsUnsub(); } catch (_) { /* ignore */ } roleDefsUnsub = null; }
+  }
+
+  function canAccessApp(user) {
+    if (isAdmin(user)) return true;
+    if (typeof Permissions !== 'undefined' && Permissions.hasPermission) {
+      if (Permissions.hasPermission('nhansu', 'employee:view')) return true;
+    }
+    const cache = user?.appRolesCache || user?.app_roles_cache || {};
+    const entry = cache.nhansu;
+    if (!entry) return false;
+    const roles = entry.roles || (entry.role ? [entry.role] : []);
+    return roles.length > 0;
   }
 
   window.NhansuPerms = {
-    getSecondaryAuth,
-    isAdmin, getScope, canViewAll,
+    isAdmin, getScope, canViewAll, canAccessApp,
     canManageEmployees, canDeleteEmployees,
     canManageDepartments, canManagePositions, canManageTeams,
-    canImport, canEditEmployee,
+    canImport, canEditEmployee, canManageAccessRights,
     isSingleSessionEnabled, startSessionListener, stopSessionListener, forceLogout,
     subscribeRoleDefs, unsubscribeRoleDefs
   };

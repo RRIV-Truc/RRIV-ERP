@@ -17,7 +17,8 @@ INSERT INTO system_role (id, role_name, description) VALUES
   (2, 'Institute_Executive', 'Ban Lãnh đạo Viện - Xem báo cáo toàn Viện, phê duyệt tối cao'),
   (3, 'Department_Head', 'Lãnh đạo đơn vị - Quản lý và duyệt nội bộ đơn vị'),
   (4, 'Operations_Specialist', 'Chuyên viên Nghiệp vụ - Tổng hợp, xử lý dữ liệu toàn Viện'),
-  (5, 'Technical_Staff', 'NCV / KTV - Nhập liệu chuyên môn, báo cáo kỹ thuật')
+  (5, 'Technical_Staff', 'NCV / KTV - Nhập liệu chuyên môn, báo cáo kỹ thuật'),
+  (6, 'Staff_Viewer', 'Nhân viên - Chỉ xem dữ liệu, không chỉnh sửa')
 ON CONFLICT (id) DO UPDATE SET
   role_name = EXCLUDED.role_name,
   description = EXCLUDED.description;

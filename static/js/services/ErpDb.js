@@ -179,13 +179,25 @@ const ErpDb = (function () {
   const _defaultDb = new FirestoreDatabase();
   const _auth = createAuth();
 
+  function getAuthUser() {
+    if (typeof Auth !== 'undefined' && typeof Auth.restoreSession === 'function') {
+      const session = Auth.restoreSession();
+      if (session) return session;
+    }
+    return getStoredUser();
+  }
+
   function createAuth() {
     const listeners = [];
-    const user = getStoredUser();
+    const user = getAuthUser();
     const authUser = user ? {
       uid: user.id || user.uid || user.username,
       email: user.email || `${user.username}@rriv.org.vn`,
-      displayName: user.name || user.username,
+      displayName: user.name || user.hoTen || user.username,
+      role: user.role,
+      systemRoles: user.systemRoles,
+      isSuperAdmin: user.isSuperAdmin,
+      appRolesCache: user.appRolesCache,
       getIdToken: async () => 'rriv-session'
     } : null;
 

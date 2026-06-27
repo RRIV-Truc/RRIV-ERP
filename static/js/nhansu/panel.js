@@ -6,8 +6,9 @@
   'use strict';
 
   const NS = window.NhansuState;
-  const { state, esc, fmtDate, ageFrom, getInitials, genderClass,
-          deptName, posName, teamName, filterPersonnel, getFactories, ROLE_LABELS, TEAM_TYPES } = NS;
+  const { state, esc, fmtDate, ageFrom,
+          deptName, posName, teamName, filterPersonnel, ROLE_LABELS, TEAM_TYPES, ROOT_LABEL,
+          personInDept } = NS;
 
   let viewMode = 'list'; // 'list' | 'stats'
 
@@ -35,26 +36,20 @@
     const canAddTeam = perms.canManageTeams(u);
     const canImport = perms.canImport(u);
 
-    let title = sel.label || 'Toàn công ty';
-    let titleIcon = '🏛️';
-    if (sel.type === 'factory') titleIcon = '🏭';
-    else if (sel.type === 'department') titleIcon = '🏢';
+    let title = sel.label || ROOT_LABEL;
+    let titleIcon = '🌿';
+    if (sel.type === 'department') titleIcon = '🏢';
     else if (sel.type === 'team') titleIcon = '👥';
     else if (sel.type === 'unteamed') titleIcon = '◦';
 
     const actions = [];
     if (canAddEmp) actions.push(`<button class="btn btn-primary" data-act="add-employee">➕ Thêm NV</button>`);
-    if (canAddDept && (sel.type === 'root' || sel.type === 'factory')) actions.push(`<button class="btn" data-act="add-dept">🏢 Thêm phòng ban</button>`);
+    if (canAddDept && sel.type === 'root') actions.push(`<button class="btn" data-act="add-dept">🏢 Thêm phòng ban</button>`);
     if (canAddTeam && (sel.type === 'department')) actions.push(`<button class="btn" data-act="add-team">👥 Thêm tổ</button>`);
-    if (canAddDept && sel.type === 'root') actions.push(`<button class="btn" data-act="add-factory">🏭 Thêm NM</button>`);
     if (canAddPos && sel.type === 'root') actions.push(`<button class="btn" data-act="manage-positions">💼 Chức vụ</button>`);
     if (canImport) actions.push(`<button class="btn btn-ghost" data-act="import">📥 Import</button>`);
     actions.push(`<button class="btn btn-ghost" data-act="export">📊 Excel</button>`);
 
-    // Context-specific actions
-    if (sel.type === 'factory') {
-      if (canAddDept) actions.unshift(`<button class="btn btn-sm" data-act="edit-factory" data-id="${esc(sel.id)}">✏️ Sửa NM</button>`);
-    }
     if (sel.type === 'department') {
       if (canAddDept) actions.unshift(`<button class="btn btn-sm" data-act="edit-dept" data-id="${esc(sel.id)}">✏️ Sửa PB</button>`);
     }
@@ -104,19 +99,12 @@
   function buildBreadcrumb() {
     const sel = state.selection;
     const items = [];
-    items.push({ label: 'Toàn công ty', type: 'root', id: 'root' });
+    items.push({ label: ROOT_LABEL, type: 'root', id: 'root' });
     if (sel.type !== 'root') {
-      if (sel.factoryId && sel.factoryId !== 'unassigned') {
-        const f = getFactories().find(x => x.id === sel.factoryId);
-        if (f) items.push({ label: f.name, type: 'factory', id: f.id });
-      } else if (sel.type === 'factory') {
-        items.push({ label: sel.label, type: 'factory', id: sel.id });
-      }
       if (sel.type === 'team' || sel.type === 'unteamed') {
         const d = NS.dept(sel.deptId);
         if (d) items.push({ label: d.name, type: 'department', id: d.id });
       }
-      const lastIdx = items.length;
       items.push({ label: sel.label, type: sel.type, id: sel.id, current: true });
     } else {
       items[0].current = true;
@@ -129,24 +117,33 @@
     }).join('');
   }
 
+  function deptSortKey(d) {
+    return d.order ?? d.metadata?.order ?? 999;
+  }
+
+  function sortPeople(list, ctxDeptId) {
+    return list.slice().sort((a, b) => {
+      const oa = NS.effOrder(a, ctxDeptId || a.department);
+      const ob = NS.effOrder(b, ctxDeptId || b.department);
+      if (oa !== ob) return oa - ob;
+      return (a.hoTen || '').localeCompare(b.hoTen || '', 'vi');
+    });
+  }
+
   function renderList() {
     const body = document.getElementById('panelBody');
     if (!body) return;
 
-    // Determine dept context for ordering
     const sel = state.selection;
     let ctxDeptId = null;
     if (sel.type === 'department') ctxDeptId = sel.id;
-    else if (sel.type === 'team') ctxDeptId = sel.deptId;
-    else if (sel.type === 'unteamed') ctxDeptId = sel.deptId;
+    else if (sel.type === 'team' || sel.type === 'unteamed') ctxDeptId = sel.deptId;
 
-    const list = filterPersonnel(state.allPersonnel).slice().sort((a, b) => {
-      const oa = NS.effOrder(a, ctxDeptId);
-      const ob = NS.effOrder(b, ctxDeptId);
-      if (oa !== ob) return oa - ob;
-      return (a.hoTen || '').localeCompare(b.hoTen || '', 'vi');
-    });
-    if (list.length === 0) {
+    const u = state.currentUser;
+    const perms = window.NhansuPerms;
+    const filtered = filterPersonnel(state.allPersonnel);
+
+    if (filtered.length === 0) {
       body.innerHTML = `
         <div class="state">
           <div class="ico">📭</div>
@@ -156,55 +153,80 @@
       return;
     }
 
-    const u = state.currentUser;
-    const perms = window.NhansuPerms;
-    const cards = list.map(p => empCard(p, u, perms, ctxDeptId)).join('');
-    body.innerHTML = `<div class="emp-grid">${cards}</div>`;
+    if (sel.type === 'root' && !state.searchTerm) {
+      const depts = state.departments.slice().sort((a, b) => deptSortKey(a) - deptSortKey(b));
+      const sections = [];
+      depts.forEach((d, idx) => {
+        const inDept = filtered.filter(p => personInDept(p, d.id));
+        if (!inDept.length) return;
+        const sorted = sortPeople(inDept, d.id);
+        sections.push(`
+          <section class="emp-section">
+            <h3 class="emp-section-title"><span class="dept-idx">${deptSortKey(d) === 999 ? (sections.length + 1) : deptSortKey(d)}</span> ${esc(d.name)} <span class="badge-count">${sorted.length}</span></h3>
+            ${empTable(sorted, d.id, u, perms, false)}
+          </section>`);
+      });
+      const orphan = filtered.filter(p =>
+        !p.department || !depts.some(d => personInDept(p, d.id))
+      );
+      if (orphan.length) {
+        sections.push(`
+          <section class="emp-section">
+            <h3 class="emp-section-title">Chưa phân phòng ban <span class="badge-count">${orphan.length}</span></h3>
+            ${empTable(sortPeople(orphan, null), null, u, perms, false)}
+          </section>`);
+      }
+      body.innerHTML = `<div class="emp-list-wrap">${sections.join('')}</div>`;
+    } else {
+      const list = sortPeople(filtered, ctxDeptId);
+      body.innerHTML = `<div class="emp-list-wrap">${empTable(list, ctxDeptId, u, perms, sel.type === 'root')}</div>`;
+    }
     bindBodyClicks();
   }
 
-  function empCard(p, u, perms, ctxDeptId) {
-    const initials = getInitials(p.hoTen);
-    const gc = genderClass(p.gender);
-    const dis = p.disabled ? 'disabled' : '';
-    const meta = [
-      posName(p.position),
-      deptName(p.department),
-      p.team ? teamName(p.team) : null
-    ].filter(Boolean);
-    const roleBadge = p.role && p.role !== 'user' ? `<span class="badge ${p.role}">${ROLE_LABELS[p.role] || p.role}</span>` : '';
-    const canEdit = perms.canEditEmployee(u, p, NS.state.managedTeams);
+  function empTable(list, ctxDeptId, u, perms, showDeptCol) {
+    const rows = list.map((p, i) => empRow(p, i, ctxDeptId, u, perms, showDeptCol)).join('');
+    return `
+      <table class="emp-table">
+        <thead>
+          <tr>
+            <th class="col-stt">STT</th>
+            <th class="col-name">Họ và tên</th>
+            <th class="col-pos">Chức vụ</th>
+            ${showDeptCol ? '<th class="col-dept">Phòng ban</th>' : ''}
+            <th class="col-code">Mã NV</th>
+            <th class="col-phone">SĐT</th>
+            <th class="col-act"></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
 
-    // Inline order input — chỉ hiện khi xem 1 PB / Tổ cụ thể (có ctxDeptId)
-    let orderInput = '';
-    if (ctxDeptId && canEdit) {
-      const ordRaw = NS.effOrder(p, ctxDeptId);
-      const ord = ordRaw === 999 ? '' : ordRaw;
-      orderInput = `<input class="order-input" type="number" min="0" max="9999" placeholder="—"
-        data-order-emp="${esc(p.id)}" data-order-dept="${esc(ctxDeptId)}"
-        value="${ord}" title="Thứ tự trong PB này — gõ số rồi Enter để lưu">`;
-    }
+  function empRow(p, index, ctxDeptId, u, perms, showDeptCol) {
+    const stt = NS.effOrder(p, ctxDeptId || p.department);
+    const sttDisp = stt === 999 ? (index + 1) : stt;
+    const canEdit = perms.canEditEmployee(u, p, NS.state.managedTeams);
+    const dis = p.disabled ? ' row-inactive' : '';
+    const orderCell = (ctxDeptId && canEdit)
+      ? `<input class="order-input" type="number" min="0" max="9999" placeholder="—"
+          data-order-emp="${esc(p.id)}" data-order-dept="${esc(ctxDeptId)}"
+          value="${stt === 999 ? '' : stt}" title="Thứ tự trong phòng ban">`
+      : esc(sttDisp);
 
     return `
-      <div class="emp-card ${dis}" data-emp-id="${esc(p.id)}">
-        ${orderInput}
-        <div class="emp-avatar ${gc} ${dis}">
-          ${esc(initials)}
-          <span class="dot"></span>
-        </div>
-        <div class="emp-info">
-          <div class="emp-name">
-            <span class="emp-name-text">${esc(p.hoTen)}</span>
-            ${roleBadge}
-          </div>
-          <div class="emp-meta">${meta.map((m, i) => i > 0 ? `<span class="sep">·</span>${esc(m)}` : esc(m)).join('')}</div>
-        </div>
-        <div class="emp-actions">
+      <tr class="emp-row${dis}" data-emp-id="${esc(p.id)}">
+        <td class="col-stt">${orderCell}</td>
+        <td class="col-name"><strong>${esc(p.hoTen)}</strong></td>
+        <td class="col-pos">${esc(posName(p.position) || '—')}</td>
+        ${showDeptCol ? `<td class="col-dept">${esc(deptName(p.department) || '—')}</td>` : ''}
+        <td class="col-code">${esc(p.employeeCode || p.code || '—')}</td>
+        <td class="col-phone">${esc(p.phone || '—')}</td>
+        <td class="col-act">
           ${canEdit ? `<button class="btn-icon-sm" data-act="edit-emp" data-id="${esc(p.id)}" title="Sửa">✏️</button>` : ''}
           <button class="btn-icon-sm" data-act="detail-emp" data-id="${esc(p.id)}" title="Chi tiết">👁️</button>
-        </div>
-      </div>
-    `;
+        </td>
+      </tr>`;
   }
 
   function renderStats() {
@@ -225,7 +247,7 @@
 
     // Department breakdown (only when at root/factory)
     let deptBreakdown = '';
-    if (state.selection.type === 'root' || state.selection.type === 'factory') {
+    if (state.selection.type === 'root') {
       const counts = {};
       active.forEach(p => {
         const k = deptName(p.department) || 'Chưa có phòng ban';
@@ -296,17 +318,15 @@
     body.onclick = (e) => {
       // Don't open detail when clicking inline order input
       if (e.target.classList.contains('order-input')) return;
-      const card = e.target.closest('.emp-card');
+      const row = e.target.closest('.emp-row');
       const actBtn = e.target.closest('[data-act]');
       if (actBtn) {
         e.stopPropagation();
-        const act = actBtn.dataset.act;
-        const id = actBtn.dataset.id;
-        handleAction(act, id);
+        handleAction(actBtn.dataset.act, actBtn.dataset.id);
         return;
       }
-      if (card) {
-        handleAction('detail-emp', card.dataset.empId);
+      if (row) {
+        handleAction('detail-emp', row.dataset.empId);
       }
     };
 
@@ -342,8 +362,6 @@
       case 'detail-emp':   M.openEmployeeDetail(id); break;
       case 'add-dept':     M.openDeptForm(); break;
       case 'edit-dept':    M.openDeptForm(id); break;
-      case 'add-factory':  M.openFactoryForm(); break;
-      case 'edit-factory': M.openFactoryForm(id); break;
       case 'add-team':     M.openTeamForm(null, state.selection.id); break;
       case 'edit-team':    M.openTeamForm(id); break;
       case 'assign-manager': M.openAssignManager(id); break;

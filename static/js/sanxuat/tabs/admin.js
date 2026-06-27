@@ -21,9 +21,12 @@ const TabAdmin = (function() {
   let parentDeptDoc = null;  // Full data of the parent department
   let _secondaryApp = null;
   let _secondaryAuth = null;
-  let _employeeProdMap = {};
-  let _workGroupLabelMap = {};
+  let productionTeams = [];
+  let selectedTeamId = '';
+  let _teamScope = null;
   let orgUnits = [];
+  var ADMIN_TEAM_KEY = 'sanxuat.adminTeamId';
+  var FH_DEFAULT_TEAM_ID = 'team-lk';
 
   /** 3 Trung tâm + 2 Phòng nghiệp vụ (category_departments dl-2 … dl-6) */
   var ORG_UNIT_IDS = ['dl-2', 'dl-3', 'dl-4', 'dl-5', 'dl-6'];
@@ -64,9 +67,11 @@ const TabAdmin = (function() {
       parentDeptDoc = null;
       departments = [];
       personnel = [];
-      orgUnits = [];
+      productionTeams = [];
+      selectedTeamId = '';
+      _teamScope = null;
       loadDepartments();
-      loadOrgUnits();
+      loadProductionTeams();
       loadPositions();
     }
     showSubTab(currentSubTab);
@@ -81,45 +86,158 @@ const TabAdmin = (function() {
       if (el) el.style.display = (i === idx) ? 'block' : 'none';
     }
     switch (idx) {
-      case 0: loadPersonnel(); break;
+      case 0:
+        loadProductionTeams().then(function () { loadPersonnel(); });
+        break;
       case 1: renderDepartments(); break;
       case 2: loadPositions().then(function() { renderPositions(); }); break;
       case 3: loadTCCSOverrides(); break;
     }
   }
 
-  async function _loadEmployeeProductionMaps() {
-    _employeeProdMap = {};
-    _workGroupLabelMap = {};
+  async function _loadTeamScope() {
+    if (typeof Permissions === 'undefined' || !Permissions.resolveTeamScope) {
+      _teamScope = { mode: 'all', teamIds: [], locked: false, label: '' };
+      return _teamScope;
+    }
+    _teamScope = await Permissions.resolveTeamScope('sanxuat', _db());
+    return _teamScope;
+  }
+
+  function _isLegacyDemoTeam(t) {
+    if (!t) return false;
+    var id = String(t.id);
+    var name = String(t.name || '');
+    if (['1', '2', '3'].indexOf(id) >= 0 && /^Đội\s*SX\s*\d+$/i.test(name.trim())) return true;
+    return false;
+  }
+
+  function _normalizeTeamLabel(name) {
+    return String(name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  function _resolveDefaultTeamId(teams) {
+    var list = teams && teams.length ? teams : productionTeams;
+    if (!list.length) return '';
+    var byId = list.find(function (t) { return String(t.id) === FH_DEFAULT_TEAM_ID; });
+    if (byId) return String(byId.id);
+    var labels = ['trạm lai khê', 'tổ sx lai khê', 'đội sản xuất lai khê'];
+    for (var i = 0; i < labels.length; i++) {
+      var want = labels[i];
+      var hit = list.find(function (t) {
+        var n = _normalizeTeamLabel(t.name);
+        return n === want || (n.indexOf('lai khê') !== -1 && (n.indexOf('trạm') !== -1 || n.indexOf('tổ') !== -1));
+      });
+      if (hit) return String(hit.id);
+    }
+    return String(list[0].id);
+  }
+
+  function _teamsForPicker() {
+    var list = productionTeams.filter(function (t) { return !_isLegacyDemoTeam(t); });
+    if (!_teamScope || _teamScope.mode === 'all') return list;
+    if (_teamScope.mode === 'teams' && _teamScope.teamIds && _teamScope.teamIds.length) {
+      return list.filter(function (t) { return _teamScope.teamIds.indexOf(String(t.id)) !== -1; });
+    }
+    return list;
+  }
+
+  function _canManagePersonnel() {
+    if (typeof Permissions === 'undefined') return true;
+    if (Permissions.isGlobalAdmin && Permissions.isGlobalAdmin()) return true;
+    return Permissions.canManageStationPersonnel && Permissions.canManageStationPersonnel();
+  }
+
+  function _canEditCurrentTeam() {
+    if (!_canManagePersonnel()) return false;
+    if (!_teamScope || _teamScope.mode === 'all') return true;
+    if (!_selectedTeamId()) return false;
+    if (_teamScope.mode === 'teams') {
+      return !_teamScope.teamIds.length || _teamScope.teamIds.indexOf(_selectedTeamId()) !== -1;
+    }
+    return true;
+  }
+
+  function _selectedTeamId() {
+    return String(selectedTeamId || '');
+  }
+
+  function _selectedTeamName() {
+    var hit = productionTeams.find(function (t) { return String(t.id) === _selectedTeamId(); });
+    return hit ? (hit.name || hit.id) : '';
+  }
+
+  function _parseTeamMeta(team) {
+    if (!team) return {};
+    var meta = team.metadata;
+    if (!meta) return {};
+    if (typeof meta === 'object') return meta;
+    try { return JSON.parse(meta); } catch (e) { return {}; }
+  }
+
+  async function loadProductionTeams() {
     try {
       if (typeof EmployeeProductionProfile !== 'undefined') {
-        var groups = await EmployeeProductionProfile.loadWorkGroups();
-        groups.forEach(function (g) {
-          _workGroupLabelMap[g.id] = g.code || g.name || g.id;
+        productionTeams = await EmployeeProductionProfile.loadProductionTeams();
+      } else {
+        var snap = await _db().collection('categoryTeams').get();
+        productionTeams = snap.docs.map(function (d) {
+          return Object.assign({ id: d.id }, d.data());
         });
       }
-      var snap = await _db().collection('employee').get();
-      snap.forEach(function (doc) {
-        var d = doc.data() || {};
-        _employeeProdMap[doc.id] = {
-          employee_code: d.employee_code || '',
-          team_id: d.team_id || '',
-          team_name: d.team_name || '',
-          work_group_id: d.work_group_id || ''
-        };
-      });
+      productionTeams = productionTeams.filter(function (t) { return !_isLegacyDemoTeam(t); });
+      await _loadTeamScope();
+      var picker = _teamsForPicker();
+      var saved = localStorage.getItem(ADMIN_TEAM_KEY) || '';
+      if (saved && picker.some(function (t) { return String(t.id) === saved; })) {
+        selectedTeamId = saved;
+      } else if (picker.length === 1) {
+        selectedTeamId = String(picker[0].id);
+      } else {
+        selectedTeamId = _resolveDefaultTeamId(picker);
+      }
+      if (selectedTeamId) localStorage.setItem(ADMIN_TEAM_KEY, selectedTeamId);
     } catch (e) {
-      console.warn('_loadEmployeeProductionMaps:', e.message);
+      console.error('loadProductionTeams error:', e);
+      productionTeams = [];
     }
   }
 
-  function _prodMeta(personId) {
-    return _employeeProdMap[personId] || {};
+  function onTeamChange(teamId) {
+    selectedTeamId = String(teamId || '');
+    if (selectedTeamId) localStorage.setItem(ADMIN_TEAM_KEY, selectedTeamId);
+    loadPersonnel();
   }
 
-  function _workGroupLabel(groupId) {
-    if (!groupId) return '';
-    return _workGroupLabelMap[groupId] || groupId;
+  function openTeamPickerModal() {
+    var picker = _teamsForPicker();
+    if (!picker.length) {
+      _toast('Chưa có trạm sản xuất trong hệ thống', 'warning');
+      return;
+    }
+    var opts = picker.map(function (t) {
+      var sel = String(t.id) === _selectedTeamId() ? ' selected' : '';
+      return '<option value="' + t.id + '"' + sel + '>' + (t.name || t.id) + '</option>';
+    }).join('');
+    var html = '<div class="modal-overlay active" id="adminModal">' +
+      '<div class="modal" style="max-width:420px">' +
+      '<div class="modal-header"><h3>Chọn trạm sản xuất</h3>' +
+      '<button class="modal-close" onclick="TabAdmin.closeModal()">\u00D7</button></div>' +
+      '<div class="modal-body">' +
+      '<p style="font-size:13px;color:var(--text-secondary);margin:0 0 12px">Chỉ hiển thị nhân sự thuộc trạm đã chọn — không bao gồm nhân sự Viện.</p>' +
+      '<select id="adm_team_pick" class="form-control">' + opts + '</select>' +
+      '</div>' +
+      '<div class="modal-footer">' +
+      '<button class="btn btn-secondary" onclick="TabAdmin.closeModal()">H\u1EE7y</button>' +
+      '<button class="btn btn-primary" onclick="TabAdmin.applyTeamPicker()">X\u00E1c nh\u1EADn</button>' +
+      '</div></div></div>';
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  function applyTeamPicker() {
+    var sel = _el('adm_team_pick');
+    if (sel && sel.value) onTeamChange(sel.value);
+    closeModal();
   }
   function _deptType(d) {
     return d.dept_type || (d.metadata && d.metadata.dept_type) || '';
@@ -172,113 +290,166 @@ const TabAdmin = (function() {
     return _secondaryAuth;
   }
 
-  // ==================== NHÂN SỰ (categoryPersonnel) ====================
+  // ==================== NHÂN SỰ TRẠM SX (employee / vProductionWorkforce) ====================
 
   async function loadPersonnel() {
     try {
-      // Load departments & positions for this factory first (if not loaded)
-      if (!orgUnits.length) await loadOrgUnits();
-      if (!departments.length && !parentDeptId) await loadDepartments();
-      if (!positions.length) await loadPositions();
-
-      // Build lookup: đơn vị Viện + phòng ban nhà máy
-      var validDeptIds = [];
-      var validDeptNames = [];
-      orgUnits.forEach(function (u) {
-        validDeptIds.push(u.id);
-        if (u.name) validDeptNames.push(u.name);
-      });
-      // Include the parent department itself (e.g. "Nhà máy chế biến Cao su Cua paris")
-      if (parentDeptId) {
-        validDeptIds.push(parentDeptId);
-        if (parentDeptDoc && parentDeptDoc.name) validDeptNames.push(parentDeptDoc.name);
+      if (!productionTeams.length) await loadProductionTeams();
+      if (!_selectedTeamId()) {
+        personnel = [];
+        renderPersonnelTable(true);
+        return;
       }
-      // Include all child departments
-      departments.forEach(function(d) {
-        validDeptIds.push(d.id);
-        if (d.name) validDeptNames.push(d.name);
-      });
 
-      var snap = await _db().collection('categoryPersonnel')
-        .where('status', '==', 'active')
-        .get();
-
-      var factory = _factory();
       personnel = [];
-      snap.forEach(function(doc) {
-        var d = doc.data();
-        d.id = doc.id;
-        var dept = d.department || '';
-        // Match by: factory field OR department belongs to this factory's hierarchy
-        var matchByFactory = d.factory && d.factory === factory;
-        var matchByDept = dept && (validDeptIds.indexOf(dept) !== -1 || validDeptNames.indexOf(dept) !== -1);
-        if (matchByFactory || matchByDept) {
-          personnel.push(d);
-        }
-      });
-      personnel.sort(function(a, b) { return (a.hoTen || '').localeCompare(b.hoTen || ''); });
-      await _loadEmployeeProductionMaps();
+      var teamId = _selectedTeamId();
+      var fromView = false;
+
+      try {
+        var vSnap = await _db().collection('vProductionWorkforce')
+          .where('production_team_id', '==', teamId).get();
+        vSnap.forEach(function (doc) {
+          var d = Object.assign({ id: doc.id }, doc.data());
+          d.id = d.employee_id || doc.id;
+          if (d.disabled || d.employment_status === 'resigned') return;
+          personnel.push({
+            id: d.id,
+            hoTen: d.full_name || d.hoTen || '',
+            name: d.full_name || d.name || '',
+            employee_code: d.employee_code || '',
+            team_id: d.production_team_id || d.team_id || teamId,
+            team_name: d.production_team_name || d.team_name || '',
+            work_group_id: d.work_group_id || '',
+            work_group_code: d.work_group_code || '',
+            work_group_name: d.work_group_name || '',
+            phone: d.phone_number || d.phone || ''
+          });
+        });
+        fromView = personnel.length > 0;
+      } catch (e) { /* fallback */ }
+
+      if (!fromView) {
+        var snap = await _db().collection('employee').where('team_id', '==', teamId).get();
+        snap.forEach(function (doc) {
+          var d = doc.data() || {};
+          if (d.disabled || d.employment_status === 'resigned') return;
+          personnel.push({
+            id: doc.id,
+            hoTen: d.full_name || d.hoTen || d.name || '',
+            name: d.full_name || d.name || '',
+            employee_code: d.employee_code || '',
+            team_id: d.team_id || teamId,
+            team_name: d.team_name || '',
+            work_group_id: d.work_group_id || '',
+            work_group_code: (d.metadata && d.metadata.work_group_code) || '',
+            work_group_name: d.position_name || '',
+            phone: d.phone_number || d.phone || ''
+          });
+        });
+      }
+
+      personnel.sort(function (a, b) { return (a.hoTen || '').localeCompare(b.hoTen || '', 'vi'); });
       renderPersonnelTable(true);
     } catch (e) {
       console.error('loadPersonnel error:', e);
-      _toast('Lỗi tải nhân sự', 'error');
+      _toast('Lỗi tải nhân sự trạm', 'error');
     }
+  }
+
+  function _workGroupLabel(row) {
+    if (!row) return '';
+    if (row.work_group_code) return row.work_group_code;
+    if (row.work_group_name) return row.work_group_name;
+    return row.work_group_id || '';
   }
 
   function renderPersonnelTable(forceFullRender) {
     var container = _el('adminSubTab0');
     if (!container) return;
 
-    // Only render toolbar once, then update table body on search
+    var canEdit = _canEditCurrentTeam();
+    var picker = _teamsForPicker();
+    var teamName = _selectedTeamName() || '—';
+    var scopeHint = (_teamScope && _teamScope.label) ? _teamScope.label : '';
+    var permHint = '';
+    if (!canEdit) {
+      if (typeof Permissions !== 'undefined' && Permissions.isGlobalAdmin && Permissions.isGlobalAdmin()) {
+        permHint = '';
+      } else if (!_canManagePersonnel()) {
+        permHint = 'Bạn chỉ xem danh sách — cần quyền <strong>harvest:manage_personnel</strong> trên app Sản xuất (Đội trưởng / Quản lý SX). Liên hệ quản trị Phân quyền.';
+      } else {
+        permHint = 'Trạm này ngoài phạm vi đội bạn được phép.';
+      }
+    }
+
     var tableBody = container.querySelector('#personnelTableBody');
     if (!tableBody || forceFullRender) {
-      // Full render (first time or after data reload)
-      var html = '<div class="admin-toolbar">' +
-        '<button class="btn btn-primary btn-sm" onclick="TabAdmin.openPersonnelModal()">+ Thêm nhân sự</button>' +
-        '<input class="admin-search-input" id="personnelSearch" type="text" placeholder="Tìm kiếm theo tên, SĐT..." oninput="TabAdmin.filterPersonnel()">' +
-        '</div>';
+      var teamOpts = picker.map(function (t) {
+        var sel = String(t.id) === _selectedTeamId() ? ' selected' : '';
+        return '<option value="' + t.id + '"' + sel + '>' + (t.name || t.id) + '</option>';
+      }).join('');
+
+      var html = '<div class="admin-toolbar" style="flex-wrap:wrap;gap:8px">' +
+        '<label style="font-size:13px;font-weight:600;white-space:nowrap">Trạm SX</label>' +
+        '<select id="adminTeamSelect" class="form-control" style="max-width:220px" onchange="TabAdmin.onTeamChange(this.value)">' +
+          (teamOpts || '<option value="">— Chưa có trạm —</option>') +
+        '</select>' +
+        '<button class="btn btn-secondary btn-sm" onclick="TabAdmin.openTeamPickerModal()" title="Chọn trạm">📍 Chọn trạm</button>';
+      if (canEdit) {
+        html += '<button class="btn btn-primary btn-sm" onclick="TabAdmin.openPersonnelModal()">+ Thêm nhân sự</button>';
+      }
+      html += '<input class="admin-search-input" id="personnelSearch" type="text" placeholder="Tìm tên, mã NV..." oninput="TabAdmin.filterPersonnel()">' +
+        '</div>' +
+        '<p style="font-size:12px;color:var(--text-secondary);margin:8px 0 12px">' +
+        'Nhân sự trạm <strong style="color:var(--accent)">' + teamName + '</strong> — chỉ phục vụ sản xuất cạo mủ. ' +
+        'Quản lý hồ sơ Viện tại app <strong>Nhân sự</strong>.' +
+        (scopeHint ? ' <span>(' + scopeHint + ')</span>' : '') +
+        (permHint ? '<br><span style="color:#b45309">' + permHint + '</span>' : '') +
+        '</p>';
       html += '<div class="admin-table-wrap"><table class="admin-table">' +
-        '<thead><tr><th>STT</th><th>M\u00E3 NV</th><th>H\u1ECD v\u00E0 T\u00EAn</th><th>T\u1ED5 SX</th><th>Nh\u00F3m</th>' +
-        '<th>Ch\u1EE9c v\u1EE5</th><th>B\u1ED9 ph\u1EADn</th><th>S\u0110T</th><th>Thao t\u00E1c</th></tr></thead>' +
-        '<tbody id="personnelTableBody"></tbody></table></div>';
+        '<thead><tr><th>STT</th><th>M\u00E3 NV</th><th>H\u1ECD v\u00E0 T\u00EAn</th><th>Nh\u00F3m</th><th>S\u0110T</th>' +
+        (canEdit ? '<th>Thao t\u00E1c</th>' : '') +
+        '</tr></thead><tbody id="personnelTableBody"></tbody></table></div>';
       container.innerHTML = html;
       tableBody = _el('personnelTableBody');
+    }
+
+    if (!_selectedTeamId()) {
+      tableBody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary)">Vui lòng chọn trạm sản xuất</td></tr>';
+      return;
     }
 
     var searchVal = (_el('personnelSearch') || {}).value || '';
     var filtered = personnel;
     if (searchVal) {
       var kw = searchVal.toLowerCase();
-      filtered = personnel.filter(function(p) {
+      filtered = personnel.filter(function (p) {
         return (p.hoTen || '').toLowerCase().indexOf(kw) !== -1 ||
-               (p.phone || '').indexOf(kw) !== -1 ||
-               _getDepartmentName(p.department).toLowerCase().indexOf(kw) !== -1 ||
-               _getPositionName(p.position).toLowerCase().indexOf(kw) !== -1;
+          (p.employee_code || '').toLowerCase().indexOf(kw) !== -1 ||
+          (p.phone || '').indexOf(kw) !== -1;
       });
     }
 
+    var colSpan = canEdit ? 6 : 5;
     var rows = '';
     if (!filtered.length) {
-      rows = '<tr><td colspan="9" style="text-align:center;color:var(--text-secondary)">' +
-        (searchVal ? 'Kh\u00F4ng t\u00ECm th\u1EA5y nh\u00E2n s\u1EF1 ph\u00F9 h\u1EE3p' : 'Ch\u01B0a c\u00F3 nh\u00E2n s\u1EF1') + '</td></tr>';
+      rows = '<tr><td colspan="' + colSpan + '" style="text-align:center;color:var(--text-secondary)">' +
+        (searchVal ? 'Kh\u00F4ng t\u00ECm th\u1EA5y nh\u00E2n s\u1EF1 ph\u00F9 h\u1EE3p' : 'Ch\u01B0a c\u00F3 nh\u00E2n s\u1EF1 t\u1EA1i tr\u1EA1m n\u00E0y') + '</td></tr>';
     } else {
-      filtered.forEach(function(p, i) {
-        var posName = _getPositionName(p.position);
-        var deptName = _getDepartmentName(p.department);
-        var prod = _prodMeta(p.id);
+      filtered.forEach(function (p, i) {
         rows += '<tr>' +
           '<td>' + (i + 1) + '</td>' +
-          '<td>' + (prod.employee_code || '') + '</td>' +
+          '<td>' + (p.employee_code || '') + '</td>' +
           '<td><strong>' + (p.hoTen || p.name || '') + '</strong></td>' +
-          '<td>' + (prod.team_name || '') + '</td>' +
-          '<td>' + _workGroupLabel(prod.work_group_id) + '</td>' +
-          '<td>' + posName + '</td>' +
-          '<td>' + deptName + '</td>' +
-          '<td>' + (p.phone || '') + '</td>' +
-          '<td class="admin-actions">' +
+          '<td>' + _workGroupLabel(p) + '</td>' +
+          '<td>' + (p.phone || '') + '</td>';
+        if (canEdit) {
+          rows += '<td class="admin-actions">' +
             '<button class="btn-icon" onclick="TabAdmin.openPersonnelModal(\'' + p.id + '\')" title="S\u1EEDa">\u270F\uFE0F</button>' +
-            '<button class="btn-icon btn-danger-icon" onclick="TabAdmin.togglePersonnelStatus(\'' + p.id + '\')" title="V\u00F4 hi\u1EC7u h\u00F3a">\uD83D\uDEAB</button>' +
-          '</td></tr>';
+            '<button class="btn-icon btn-danger-icon" onclick="TabAdmin.removeFromStation(\'' + p.id + '\')" title="G\u1EE1 kh\u1ECFi tr\u1EA1m">\uD83D\uDDD1\uFE0F</button>' +
+            '</td>';
+        }
+        rows += '</tr>';
       });
     }
     tableBody.innerHTML = rows;
@@ -307,103 +478,52 @@ const TabAdmin = (function() {
   }
 
   async function openPersonnelModal(id) {
-    if (!positions.length) await loadPositions();
-    if (!orgUnits.length) await loadOrgUnits();
-    if (!departments.length && !parentDeptId) await loadDepartments();
+    if (!_canEditCurrentTeam()) {
+      _toast('Bạn không có quyền quản lý nhân sự trạm này', 'warning');
+      return;
+    }
+    if (!_selectedTeamId()) {
+      _toast('Vui lòng chọn trạm sản xuất trước', 'warning');
+      return;
+    }
 
-    var p = id ? personnel.find(function(x) { return x.id === id; }) : null;
+    var p = id ? personnel.find(function (x) { return x.id === id; }) : null;
     var isEdit = !!p;
-    var title = isEdit ? 'S\u1EEDa nh\u00E2n s\u1EF1' : 'Th\u00EAm nh\u00E2n s\u1EF1 m\u1EDBi';
+    var title = isEdit ? 'S\u1EEDa nh\u00E2n s\u1EF1 tr\u1EA1m' : 'Th\u00EAm nh\u00E2n s\u1EF1 tr\u1EA1m';
+    var teamId = _selectedTeamId();
+    var teamName = _selectedTeamName();
+    var workGroupId = p ? (p.work_group_id || '') : '';
+    var employeeCode = p ? (p.employee_code || '') : '';
 
-    // Đơn vị: 3 Trung tâm + 2 Phòng nghiệp vụ
-    var selectedUnit = '';
-    if (p) {
-      if (orgUnits.some(function (u) { return u.id === p.department; })) {
-        selectedUnit = p.department;
-      } else if (_getOrgUnitName(p.department)) {
-        selectedUnit = p.department;
-      }
-    }
-    var unitOpts = orgUnits.map(function (u) {
-      var sel = (selectedUnit === u.id) ? ' selected' : '';
-      var tag = _deptType(u) === 'Trung T\u00E2m' ? 'TT' : 'Ph\u00F2ng';
-      return '<option value="' + u.id + '"' + sel + '>[' + tag + '] ' + (u.name || u.id) + '</option>';
-    }).join('');
-
-    // Bộ phận con (tuỳ chọn — ca SX, QL… trong nhà máy)
-    var allDeptOptions = [];
-    if (parentDeptDoc) {
-      allDeptOptions.push({ id: parentDeptId, name: parentDeptDoc.name });
-    }
-    departments.forEach(function(d) { allDeptOptions.push(d); });
-
-    var deptOpts = allDeptOptions.map(function(d) {
-      var sel = (p && p.department === d.id) ? ' selected' : '';
-      return '<option value="' + d.id + '"' + sel + '>' + d.name + '</option>';
-    }).join('');
-
-    var posOpts = positions.map(function(pos) {
-      var sel = (p && p.position === pos.id) ? ' selected' : '';
-      return '<option value="' + pos.id + '"' + sel + '>' + pos.name + '</option>';
-    }).join('');
-
-    var prod = id ? (_prodMeta(id) || {}) : {};
     if (id && typeof EmployeeProductionProfile !== 'undefined') {
       try {
         var fresh = await EmployeeProductionProfile.getEmployeeProductionFields(id);
-        prod = {
-          employee_code: fresh.employee_code || prod.employee_code || '',
-          team_id: fresh.team_id || prod.team_id || '',
-          work_group_id: fresh.work_group_id || prod.work_group_id || ''
-        };
+        workGroupId = fresh.work_group_id || workGroupId;
+        employeeCode = fresh.employee_code || employeeCode;
       } catch (e) { /* ignore */ }
     }
 
-    var teams = [];
     var groupOpts = '<option value="">— Chọn nhóm —</option>';
     if (typeof EmployeeProductionProfile !== 'undefined') {
-      teams = await EmployeeProductionProfile.loadProductionTeams();
-      var groups = await EmployeeProductionProfile.loadWorkGroups(prod.team_id || '');
-      groupOpts = EmployeeProductionProfile.workGroupOptionsHtml(groups, prod.work_group_id || '');
-    }
-    var teamOpts = typeof EmployeeProductionProfile !== 'undefined'
-      ? EmployeeProductionProfile.teamOptionsHtml(teams, prod.team_id || '')
-      : '<option value="">—</option>';
-
-    // Username/Password fields (chỉ hiện khi thêm mới)
-    var authFields = '';
-    if (!isEdit) {
-      authFields =
-        '<div class="form-group"><label>T\u00EAn \u0111\u0103ng nh\u1EADp (username) *</label>' +
-          '<input type="text" id="adm_username" class="form-control" placeholder="VD: nguyenvana">' +
-          '<small style="color:var(--text-secondary);font-size:12px">S\u1EBD t\u1EA1o t\u00E0i kho\u1EA3n: username@phr.vn</small></div>' +
-        '<div class="form-group"><label>M\u1EADt kh\u1EA9u *</label>' +
-          '<input type="password" id="adm_password" class="form-control" placeholder="T\u1ED1i thi\u1EC3u 6 k\u00FD t\u1EF1"></div>';
+      var groups = await EmployeeProductionProfile.loadWorkGroups(teamId);
+      groupOpts = EmployeeProductionProfile.workGroupOptionsHtml(groups, workGroupId);
     }
 
     var html = '<div class="modal-overlay active" id="adminModal">' +
-      '<div class="modal" style="max-width:500px">' +
+      '<div class="modal" style="max-width:460px">' +
       '<div class="modal-header"><h3>' + title + '</h3><button class="modal-close" onclick="TabAdmin.closeModal()">\u00D7</button></div>' +
       '<div class="modal-body">' +
+        '<div style="background:var(--bg-tertiary);padding:8px 12px;border-radius:8px;margin-bottom:12px;font-size:13px;color:var(--text-secondary)">' +
+          'Trạm: <strong style="color:var(--accent)">' + teamName + '</strong></div>' +
         '<div class="form-group"><label>H\u1ECD v\u00E0 T\u00EAn *</label>' +
           '<input type="text" id="adm_hoTen" class="form-control" value="' + (p ? (p.hoTen || p.name || '') : '') + '"></div>' +
-        authFields +
-        '<div class="form-group"><label>\u0110\u01A1n v\u1ECB *</label>' +
-          '<select id="adm_unit" class="form-control"><option value="">-- Ch\u1ECDn \u0111\u01A1n v\u1ECB --</option>' + unitOpts + '</select></div>' +
-        '<div class="form-group"><label>B\u1ED9 ph\u1EADn</label>' +
-          '<select id="adm_department" class="form-control"><option value="">-- Ch\u1ECDn --</option>' + deptOpts + '</select></div>' +
-        '<div class="form-group"><label>Ch\u1EE9c v\u1EE5</label>' +
-          '<select id="adm_position" class="form-control"><option value="">-- Ch\u1ECDn --</option>' + posOpts + '</select></div>' +
+        '<div class="form-group"><label>M\u00E3 NV *</label>' +
+          '<input type="text" id="adm_employee_code" class="form-control" placeholder="VD: LK-CN-040" value="' + employeeCode + '"></div>' +
+        '<div class="form-group"><label>Nh\u00F3m (CN / KH) *</label>' +
+          '<select id="adm_work_group" class="form-control">' + groupOpts + '</select></div>' +
         '<div class="form-group"><label>S\u1ED1 \u0111i\u1EC7n tho\u1EA1i</label>' +
           '<input type="tel" id="adm_phone" class="form-control" value="' + (p ? (p.phone || '') : '') + '"></div>' +
-        '<hr style="margin:12px 0;border:none;border-top:1px solid var(--border,#e2e8f0)">' +
-        '<p style="font-size:12px;color:var(--text-secondary);margin:0 0 8px">Sản xuất cạo mủ — hiển thị trong tab Sản lượng CN</p>' +
-        '<div class="form-group"><label>M\u00E3 NV</label>' +
-          '<input type="text" id="adm_employee_code" class="form-control" placeholder="VD: LK-CN-040" value="' + (prod.employee_code || '') + '"></div>' +
-        '<div class="form-group"><label>T\u1ED5 s\u1EA3n xu\u1EA5t</label>' +
-          '<select id="adm_prod_team" class="form-control">' + teamOpts + '</select></div>' +
-        '<div class="form-group"><label>Nh\u00F3m (CN / KH)</label>' +
-          '<select id="adm_work_group" class="form-control">' + groupOpts + '</select></div>' +
+        '<p style="font-size:12px;color:var(--text-secondary);margin:12px 0 0">Chỉ gán nhân sự cho trạm SX. Hồ sơ nhân sự Viện quản lý tại app Nhân sự.</p>' +
       '</div>' +
       '<div class="modal-footer">' +
         '<button class="btn btn-secondary" onclick="TabAdmin.closeModal()">H\u1EE7y</button>' +
@@ -411,129 +531,107 @@ const TabAdmin = (function() {
       '</div></div></div>';
 
     document.body.insertAdjacentHTML('beforeend', html);
-
-    var teamSel = _el('adm_prod_team');
-    var groupSel = _el('adm_work_group');
-    if (teamSel && groupSel && typeof EmployeeProductionProfile !== 'undefined') {
-      teamSel.onchange = function () {
-        EmployeeProductionProfile.fillWorkGroupSelect(groupSel, teamSel.value, '');
-      };
-    }
   }
 
   async function savePersonnel(id) {
-    var hoTen = (_el('adm_hoTen') || {}).value || '';
-    if (!hoTen.trim()) { _toast('Vui l\u00F2ng nh\u1EADp h\u1ECD t\u00EAn', 'error'); return; }
-
-    var unitId = (_el('adm_unit') || {}).value || '';
-    var dept = (_el('adm_department') || {}).value || '';
-    var pos = (_el('adm_position') || {}).value || '';
-    var phone = (_el('adm_phone') || {}).value || '';
-
-    if (!unitId && !dept) {
-      _toast('Vui l\u00F2ng ch\u1ECDn \u0111\u01A1n v\u1ECB', 'error');
+    if (!_canEditCurrentTeam()) {
+      _toast('Bạn không có quyền quản lý nhân sự trạm này', 'warning');
       return;
     }
 
-    var data = {
-      hoTen: hoTen.trim(),
-      name: hoTen.trim(),
-      department: dept || unitId,
-      position: pos,
-      phone: phone.trim(),
-      updatedAt: _ts()
-    };
+    var hoTen = (_el('adm_hoTen') || {}).value || '';
+    var employeeCode = ((_el('adm_employee_code') || {}).value || '').trim();
+    var workGroupId = (_el('adm_work_group') || {}).value || '';
+    var phone = ((_el('adm_phone') || {}).value || '').trim();
+    var teamId = _selectedTeamId();
+
+    if (!hoTen.trim()) { _toast('Vui l\u00F2ng nh\u1EADp h\u1ECD t\u00EAn', 'error'); return; }
+    if (!employeeCode) { _toast('Vui l\u00F2ng nh\u1EADp m\u00E3 NV', 'error'); return; }
+    if (!workGroupId) { _toast('Vui l\u00F2ng ch\u1ECDn nh\u00F3m CN/KH', 'error'); return; }
+
+    var team = productionTeams.find(function (t) { return String(t.id) === teamId; });
+    var meta = _parseTeamMeta(team);
 
     try {
-      var savedId = id;
-      if (id) {
-        // === CẬP NHẬT ===
-        await _db().collection('categoryPersonnel').doc(id).update(data);
-        _toast('C\u1EADp nh\u1EADt nh\u00E2n s\u1EF1 th\u00E0nh c\u00F4ng', 'success');
+      if (typeof EmployeeProductionProfile !== 'undefined') {
+        if (id) {
+          await _db().collection('employee').doc(id).update({
+            full_name: hoTen.trim(),
+            hoTen: hoTen.trim(),
+            phone_number: phone,
+            phone: phone,
+            updatedAt: _ts()
+          });
+          await EmployeeProductionProfile.applyProfile(id, {
+            teamId: teamId,
+            workGroupId: workGroupId,
+            employeeCode: employeeCode
+          });
+          _toast('C\u1EADp nh\u1EADt nh\u00E2n s\u1EF1 th\u00E0nh c\u00F4ng', 'success');
+        } else {
+          var newId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : ('emp-' + Date.now());
+          var row = {
+            full_name: hoTen.trim(),
+            hoTen: hoTen.trim(),
+            name: hoTen.trim(),
+            employee_code: employeeCode,
+            phone_number: phone,
+            phone: phone,
+            team_id: teamId,
+            team_name: team ? (team.name || teamId) : teamId,
+            work_group_id: workGroupId,
+            department_id: meta.department_id || team.department || null,
+            department_name: team ? (team.department || '') : '',
+            employment_status: 'active',
+            disabled: false,
+            metadata: { hr_scope: 'production', station_id: teamId },
+            createdAt: _ts(),
+            updatedAt: _ts()
+          };
+          await _db().collection('employee').doc(newId).set(row);
+          await EmployeeProductionProfile.applyProfile(newId, {
+            teamId: teamId,
+            workGroupId: workGroupId,
+            employeeCode: employeeCode
+          });
+          _toast('Th\u00EAm nh\u00E2n s\u1EF1 tr\u1EA1m th\u00E0nh c\u00F4ng', 'success');
+        }
       } else {
-        // === THÊM MỚI — tạo tài khoản Firebase Auth ===
-        var username = (_el('adm_username') || {}).value || '';
-        var password = (_el('adm_password') || {}).value || '';
-
-        if (!username.trim()) {
-          _toast('Vui l\u00F2ng nh\u1EADp t\u00EAn \u0111\u0103ng nh\u1EADp', 'error'); return;
-        }
-        if (!password || password.length < 6) {
-          _toast('M\u1EADt kh\u1EA9u ph\u1EA3i c\u00F3 \u00EDt nh\u1EA5t 6 k\u00FD t\u1EF1', 'error'); return;
-        }
-
-        var email = username.trim() + '@phr.vn';
-
-        // Kiểm tra username đã tồn tại
-        try {
-          var existSnap = await _db().collection('categoryPersonnel')
-            .where('username', '==', username.trim())
-            .limit(1).get();
-          if (!existSnap.empty) {
-            _toast('Username \u0111\u00E3 t\u1ED3n t\u1EA1i!', 'error'); return;
-          }
-        } catch (qErr) {
-          console.warn('Could not check existing username:', qErr.message);
-        }
-
-        // Tạo Firebase Auth user bằng secondary app (không logout admin hiện tại)
-        var tempAuth = _getSecondaryAuth();
-        var userCred = await tempAuth.createUserWithEmailAndPassword(email, password);
-        await tempAuth.signOut();
-
-        data.username = username.trim();
-        data.email = email;
-        data.status = 'active';
-        data.disabled = false;
-        data.role = 'user';
-        data.createdAt = _ts();
-        // Lưu với UID làm document ID (giống app-nhansu)
-        await _db().collection('categoryPersonnel').doc(userCred.user.uid).set(data);
-        savedId = userCred.user.uid;
-        _toast('Th\u00EAm nh\u00E2n s\u1EF1 th\u00E0nh c\u00F4ng', 'success');
-      }
-
-      if (typeof EmployeeProductionProfile !== 'undefined' && savedId) {
-        var teamId = (_el('adm_prod_team') || {}).value || '';
-        var workGroupId = (_el('adm_work_group') || {}).value || '';
-        var employeeCode = (_el('adm_employee_code') || {}).value || '';
-        if (teamId && !workGroupId) {
-          _toast('Ch\u01B0a ch\u1ECDn nh\u00F3m CN/KH \u2014 nh\u00E2n s\u1EF1 ch\u01B0a hi\u1EC7n trong S\u1EA3n l\u01B0\u1EE3ng CN', 'warning');
-        }
-        await EmployeeProductionProfile.applyProfile(savedId, {
-          teamId: teamId,
-          workGroupId: workGroupId,
-          employeeCode: employeeCode.trim()
-        });
+        _toast('Thi\u1EBFu module EmployeeProductionProfile', 'error');
+        return;
       }
       closeModal();
       loadPersonnel();
     } catch (e) {
       console.error('savePersonnel error:', e);
-      var errorMsg = e.message;
-      if (e.code === 'auth/email-already-in-use') {
-        errorMsg = 'Username \u0111\u00E3 t\u1ED3n t\u1EA1i trong h\u1EC7 th\u1ED1ng!';
-      } else if (e.code === 'auth/weak-password') {
-        errorMsg = 'M\u1EADt kh\u1EA9u qu\u00E1 y\u1EBFu (c\u1EA7n \u00EDt nh\u1EA5t 6 k\u00FD t\u1EF1)';
-      } else if (e.code === 'auth/invalid-email') {
-        errorMsg = 'Username kh\u00F4ng h\u1EE3p l\u1EC7 (kh\u00F4ng d\u00F9ng k\u00FD t\u1EF1 \u0111\u1EB7c bi\u1EC7t)';
-      }
-      _toast('L\u1ED7i: ' + errorMsg, 'error');
+      var msg = e.message || String(e);
+      if (/duplicate|unique/i.test(msg)) msg = 'M\u00E3 NV \u0111\u00E3 t\u1ED3n t\u1EA1i';
+      _toast('L\u1ED7i: ' + msg, 'error');
     }
   }
 
-  async function togglePersonnelStatus(id) {
-    if (!(await showConfirm('Bạn có chắc muốn vô hiệu hóa nhân sự này?'))) return;
+  async function removeFromStation(id) {
+    if (!_canEditCurrentTeam()) {
+      _toast('Bạn không có quyền quản lý nhân sự trạm này', 'warning');
+      return;
+    }
+    if (!(await showConfirm('G\u1EE1 nh\u00E2n s\u1EF1 kh\u1ECFi tr\u1EA1m ' + _selectedTeamName() + '?\n(H\u1ED3 s\u01A1 g\u1ED1c v\u1EABn gi\u1EEF \u2014 kh\u00F4ng x\u00F3a nh\u00E2n s\u1EF1 Vi\u1EC7n)'))) return;
     try {
-      await _db().collection('categoryPersonnel').doc(id).update({
-        status: 'inactive',
-        disabled: true,
+      if (typeof EmployeeProductionProfile !== 'undefined') {
+        await EmployeeProductionProfile.applyProfile(id, { teamId: '', workGroupId: '' });
+      }
+      await _db().collection('employee').doc(id).update({
+        team_id: null,
+        team_name: null,
+        work_group_id: null,
         updatedAt: _ts()
       });
-      _toast('Đã vô hiệu hóa', 'success');
+      _toast('Đã gỡ khỏi trạm', 'success');
       loadPersonnel();
     } catch (e) {
-      console.error('togglePersonnelStatus error:', e);
+      console.error('removeFromStation error:', e);
       _toast('Lỗi: ' + e.message, 'error');
     }
   }
@@ -1059,7 +1157,10 @@ const TabAdmin = (function() {
     filterPersonnel: filterPersonnel,
     openPersonnelModal: openPersonnelModal,
     savePersonnel: savePersonnel,
-    togglePersonnelStatus: togglePersonnelStatus,
+    removeFromStation: removeFromStation,
+    onTeamChange: onTeamChange,
+    openTeamPickerModal: openTeamPickerModal,
+    applyTeamPicker: applyTeamPicker,
     // Departments
     getDepartmentsByType: getDepartmentsByType,
     openDepartmentModal: openDepartmentModal,

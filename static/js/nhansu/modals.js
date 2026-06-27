@@ -6,7 +6,9 @@
 
   const NS = window.NhansuState;
   const SVC = () => window.NhansuServices;
-  const { state, esc, fmtDate, getFactories, TEAM_TYPES, ROLE_LABELS, deptName, posName, teamName } = NS;
+  const { state, esc, fmtDate, getFactories, TEAM_TYPES, ROLE_LABELS, SYSTEM_ROLE_LABELS,
+    getSystemRoleLabel, personSystemRoleId, personSystemRoleLabel, deptName, posName, teamName,
+    resolvePositionId } = NS;
 
   // ============== Generic helpers ==============
   function ensureModalRoot() {
@@ -71,7 +73,7 @@
     if (document.getElementById('employeeModal')) return;
     root.insertAdjacentHTML('beforeend', `
       <div class="modal-bg" id="employeeModal">
-        <div class="modal" style="max-width:640px">
+        <div class="modal" style="max-width:720px">
           <div class="modal-head">
             <h3 id="empModalTitle">➕ Thêm nhân sự</h3>
             <button class="modal-close" data-close="employeeModal">✕</button>
@@ -98,24 +100,22 @@
               <div class="form-section">
                 <h4>🏢 Tổ chức</h4>
                 <div class="form-grid">
-                  <div class="form-field"><label>Nhà máy</label>
+                  <div class="form-field nhansu-hidden"><label>Nhà máy</label>
                     <select class="form-input" id="inputFactory"><option value="">-- Chọn --</option></select>
                   </div>
                   <div class="form-field"><label>Phòng ban</label>
                     <select class="form-input" id="inputDepartment"><option value="">-- Chọn --</option></select>
                   </div>
                   <div class="form-field"><label>Chức vụ</label>
-                    <select class="form-input" id="inputPosition"><option value="">-- Chọn --</option></select>
+                    <select class="form-input" id="inputPosition"><option value="">-- Chọn chức vụ --</option></select>
+                    <span class="field-hint">Chức danh công việc (VD: Giám đốc TT, Trưởng phòng…)</span>
                   </div>
                   <div class="form-field"><label>Tổ</label>
                     <select class="form-input" id="inputPersonnelTeam"><option value="">-- Chọn tổ --</option></select>
                   </div>
-                  <div class="form-field"><label>Vai trò</label>
-                    <select class="form-input" id="inputRole">
-                      <option value="user">👤 Nhân viên</option>
-                      <option value="vpp">👔 Quản lý</option>
-                      <option value="admin">👑 Admin</option>
-                    </select>
+                  <div class="form-field"><label>Vai trò hệ thống</label>
+                    <select class="form-input" id="inputSystemRole"><option value="">-- Chọn vai trò --</option></select>
+                    <span class="field-hint">Quyền ERP: Quản trị viên, Lãnh đạo đơn vị… (khác chức vụ)</span>
                   </div>
                   <div class="form-field"><label>Trạng thái</label>
                     <select class="form-input" id="inputStatus">
@@ -124,6 +124,10 @@
                     </select>
                   </div>
                 </div>
+              </div>
+              <div class="form-section" id="accessRightsSection">
+                <h4>🔐 Quyền truy cập ứng dụng</h4>
+                <div id="accessRightsRoot"></div>
               </div>
               <div class="form-section">
                 <h4>🌳 Sản xuất cạo mủ</h4>
@@ -235,7 +239,15 @@
         </div>
       </div>`);
     document.getElementById('btnSaveEmployee').onclick = saveEmployee;
-    document.getElementById('inputDepartment').onchange = () => populateTeamDropdown();
+    document.getElementById('inputDepartment').onchange = () => {
+      populateTeamDropdown();
+    };
+    document.getElementById('inputSystemRole')?.addEventListener('change', () => {
+      if (window.NhansuAccessRights && !state.editingId) {
+        window.NhansuAccessRights.applyTemplateFromForm();
+      }
+    });
+    document.getElementById('inputHoTen')?.addEventListener('blur', suggestUsernameFromName);
     const prodTeamSel = document.getElementById('inputProdTeam');
     if (prodTeamSel && typeof EmployeeProductionProfile !== 'undefined') {
       prodTeamSel.onchange = () => {
@@ -256,6 +268,49 @@
     if (currentValue) sel.value = currentValue;
   }
 
+  function populateSystemRoleDropdown(selectedId) {
+    const sel = document.getElementById('inputSystemRole');
+    if (!sel) return;
+    const roles = state.systemRoles || [];
+    sel.innerHTML = '<option value="">-- Chọn vai trò --</option>';
+    roles.forEach(r => {
+      const label = SYSTEM_ROLE_LABELS[r.role_name] || r.description || r.role_name;
+      sel.insertAdjacentHTML('beforeend',
+        `<option value="${r.id}">${esc(label)}</option>`);
+    });
+    if (selectedId) sel.value = String(selectedId);
+    else {
+      const viewer = roles.find(r => r.role_name === 'Staff_Viewer');
+      if (viewer) sel.value = String(viewer.id);
+    }
+  }
+
+  function removeVietnameseAccents(str) {
+    return String(str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd').replace(/Đ/g, 'D');
+  }
+
+  function usernameFromFullName(fullName) {
+    const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '';
+    if (parts.length === 1) {
+      return 'rriv.' + removeVietnameseAccents(parts[0]).toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+    const given = parts[parts.length - 1];
+    const initials = parts.slice(0, -1).map(p => removeVietnameseAccents(p).charAt(0)).join('').toLowerCase();
+    const givenNorm = removeVietnameseAccents(given).toLowerCase().replace(/[^a-z0-9]/g, '');
+    return 'rriv.' + initials + givenNorm;
+  }
+
+  function suggestUsernameFromName() {
+    if (state.editingId) return;
+    const hoTen = val('inputHoTen');
+    const userEl = document.getElementById('inputUsername');
+    if (!hoTen || !userEl || userEl.value.trim()) return;
+    const u = usernameFromFullName(hoTen);
+    if (u) userEl.value = u;
+  }
+
   function populateDeptDropdown() {
     const sel = document.getElementById('inputDepartment');
     sel.innerHTML = '<option value="">-- Chọn --</option>';
@@ -263,14 +318,28 @@
       sel.insertAdjacentHTML('beforeend', `<option value="${d.id}">${esc(d.name)}</option>`);
     });
   }
-  function populatePositionDropdown() {
+  function populatePositionDropdown(selectedRaw) {
     const sel = document.getElementById('inputPosition');
-    sel.innerHTML = '<option value="">-- Chọn --</option>';
-    const sorted = [...state.positions].sort((a, b) => (a.level || 999) - (b.level || 999));
+    if (!sel) return;
+    const selectedId = selectedRaw ? resolvePositionId(selectedRaw, state.positions) : '';
+    sel.innerHTML = '<option value="">-- Chọn chức vụ --</option>';
+    const sorted = [...state.positions].sort((a, b) => {
+      const la = a.level || 999;
+      const lb = b.level || 999;
+      if (la !== lb) return la - lb;
+      return (a.name || '').localeCompare(b.name || '', 'vi');
+    });
     sorted.forEach(p => {
       const lvl = p.level ? ` (Bậc ${p.level})` : '';
-      sel.insertAdjacentHTML('beforeend', `<option value="${p.id}">${esc(p.name)}${lvl}</option>`);
+      sel.insertAdjacentHTML('beforeend', `<option value="${esc(p.id)}">${esc(p.name)}${lvl}</option>`);
     });
+    if (selectedId && !sorted.some(p => p.id === selectedId)) {
+      sel.insertAdjacentHTML(
+        'beforeend',
+        `<option value="${esc(selectedId)}">${esc(posName(selectedId) || selectedId)}</option>`
+      );
+    }
+    if (selectedId) sel.value = selectedId;
   }
   function populateTeamDropdown(selectedTeamId) {
     const sel = document.getElementById('inputPersonnelTeam');
@@ -296,7 +365,6 @@
     ensureEmployeeForm();
     populateFactoryDropdown('inputFactory');
     populateDeptDropdown();
-    populatePositionDropdown();
 
     state.editingId = id || null;
     const isNew = !id;
@@ -307,9 +375,11 @@
     const form = document.getElementById('employeeForm');
     form.reset();
 
+    let selectedPosition = '';
     if (id) {
       const p = state.allPersonnel.find(x => x.id === id);
       if (!p) { NS.toast('Không tìm thấy nhân sự', 'error'); return; }
+      selectedPosition = p.position || p.position_name || p.positionName || '';
       setVal('inputHoTen', p.hoTen);
       setVal('inputCode', p.employeeCode || p.code);
       setVal('inputPhone', p.phone);
@@ -320,8 +390,7 @@
       setVal('inputFactory', p.factory);
       setVal('inputDepartment', p.department);
       populateTeamDropdown(p.team);
-      setVal('inputPosition', p.position);
-      setVal('inputRole', p.role || 'user');
+      setVal('inputSystemRole', personSystemRoleId(p) || legacyRoleToSystemId(p.role));
       setVal('inputStatus', p.disabled ? 'inactive' : 'active');
       setVal('inputGender', p.gender);
       setDate('inputDob', p.dateOfBirth);
@@ -368,7 +437,33 @@
       await populateProdTeamDropdown();
     }
 
+    populatePositionDropdown(selectedPosition);
+
+    let selectedSystemRole = null;
+    if (id) {
+      const pEdit = state.allPersonnel.find(x => x.id === id);
+      if (pEdit) selectedSystemRole = personSystemRoleId(pEdit) || legacyRoleToSystemId(pEdit.role);
+    }
+    populateSystemRoleDropdown(selectedSystemRole);
+
+    const canAccess = window.NhansuPerms?.canManageAccessRights?.(state.currentUser);
+    const accessSec = document.getElementById('accessRightsSection');
+    if (accessSec) accessSec.style.display = canAccess ? '' : 'none';
+    if (canAccess && window.NhansuAccessRights) {
+      const cache = id ? (state.allPersonnel.find(x => x.id === id)?.appRolesCache || {}) : {};
+      await window.NhansuAccessRights.render('accessRightsRoot', cache, { readonly: false });
+      if (!id) window.NhansuAccessRights.applyTemplateFromForm();
+    }
+
     show('employeeModal');
+  }
+
+  function legacyRoleToSystemId(erpRole) {
+    const roles = state.systemRoles || [];
+    const map = { admin: 'Super_Admin', vpp: 'Department_Head', user: 'Staff_Viewer' };
+    const want = map[erpRole] || 'Staff_Viewer';
+    const hit = roles.find(r => r.role_name === want);
+    return hit ? hit.id : (roles.find(r => r.role_name === 'Staff_Viewer')?.id || '');
   }
 
   async function saveEmployee() {
@@ -382,6 +477,9 @@
     const position = val('inputPosition');
     const team = val('inputPersonnelTeam');
 
+    const systemRoleId = val('inputSystemRole');
+    const erpRole = SVC().erpRoleFromSystemRoleId(systemRoleId, state.systemRoles);
+
     const data = {
       hoTen, name: hoTen, username,
       employeeCode: val('inputCode'),
@@ -391,7 +489,8 @@
       personalEmail: val('inputEmail'),
       factory: val('inputFactory'),
       department, position, team,
-      role: val('inputRole') || 'user',
+      role: erpRole,
+      systemRoleId: systemRoleId ? Number(systemRoleId) : null,
       gender: val('inputGender'),
       disabled: val('inputStatus') === 'inactive',
       status: val('inputStatus'),
@@ -421,13 +520,13 @@
     };
     // Sync assignments
     const deptObj = state.departments.find(d => d.id === department);
-    const posObj = state.positions.find(p => p.id === position);
+    const posObj = state.positions.find(p => p.id === position || p.name === position);
     data.assignments = [{
       isPrimary: true,
       departmentId: department || '',
       departmentName: deptObj?.name || '',
       positionId: position || '',
-      positionName: posObj?.name || ''
+      positionName: posObj?.name || position || ''
     }];
     // Date fields
     const dobVal = val('inputDob');
@@ -441,9 +540,19 @@
       let savedId = state.editingId;
       if (state.editingId) {
         await SVC().savePersonnel(state.editingId, data);
+        if (systemRoleId) await SVC().syncUserSystemRole(username, systemRoleId);
+        if (window.NhansuPerms?.canManageAccessRights?.(state.currentUser) && window.NhansuAccessRights) {
+          await SVC().syncAccessRights(username, savedId, window.NhansuAccessRights.collect());
+        }
         NS.toast('Đã cập nhật');
       } else {
+        if (window.NhansuPerms?.canManageAccessRights?.(state.currentUser) && window.NhansuAccessRights) {
+          data.appRolesCache = window.NhansuAccessRights.collect();
+        }
         savedId = await SVC().createPersonnelWithAuth(username, password, data);
+        if (window.NhansuPerms?.canManageAccessRights?.(state.currentUser) && data.appRolesCache) {
+          await SVC().syncAccessRights(username, savedId, data.appRolesCache);
+        }
         NS.toast('Đã thêm nhân viên');
       }
 
@@ -491,10 +600,14 @@
       </div>`);
   }
 
-  function openEmployeeDetail(id) {
+  async function openEmployeeDetail(id) {
     ensureEmployeeDetail();
     const p = state.allPersonnel.find(x => x.id === id);
     if (!p) { NS.toast('Không tìm thấy', 'error'); return; }
+
+    if (window.NhansuAccessRights?.loadCatalog) {
+      await window.NhansuAccessRights.loadCatalog();
+    }
 
     const u = state.currentUser;
     const perms = window.NhansuPerms;
@@ -503,8 +616,6 @@
 
     const row = (lbl, v) => v ? `<div class="detail-row"><span class="lbl">${esc(lbl)}</span><span class="val">${esc(v)}</span></div>` : '';
     const dateRow = (lbl, d) => d ? row(lbl, fmtDate(d)) : '';
-
-    const factory = getFactories().find(f => f.id === p.factory);
 
     document.getElementById('detailContent').innerHTML = `
       <div class="detail-section">
@@ -516,12 +627,15 @@
         ${row('Email cá nhân', p.personalEmail)}
         ${row('Email hệ thống', p.email)}
         ${row('Username', p.username)}
-        ${row('Vai trò', ROLE_LABELS[p.role] || p.role)}
+        ${row('Vai trò', personSystemRoleLabel(p))}
         ${row('Trạng thái', p.disabled ? '❌ Nghỉ việc' : '✅ Đang làm')}
       </div>
       <div class="detail-section">
+        <h4>🔐 Quyền truy cập ứng dụng</h4>
+        ${window.NhansuAccessRights ? window.NhansuAccessRights.summarize(p.appRolesCache) : row('App', '—')}
+      </div>
+      <div class="detail-section">
         <h4>🏢 Tổ chức</h4>
-        ${row('Nhà máy', factory?.name || p.factory)}
         ${row('Phòng ban', deptName(p.department))}
         ${row('Chức vụ', posName(p.position))}
         ${row('Tổ', p.team ? teamName(p.team) : '')}
@@ -624,7 +738,7 @@
               <div class="form-field full"><label>Tên <span class="req">*</span></label><input type="text" class="form-input" id="inputDeptName"></div>
               <div class="form-field"><label>Mã</label><input type="text" class="form-input" id="inputDeptCode"></div>
               <div class="form-field"><label>Thứ tự (số nhỏ = trước)</label><input type="number" class="form-input" id="inputDeptOrder" placeholder="VD: 10" min="0" max="9999"></div>
-              <div class="form-field full"><label>Nhà máy</label>
+              <div class="form-field full nhansu-hidden"><label>Nhà máy</label>
                 <select class="form-input" id="inputDeptFactory">
                   <option value="">-- Không gán (cấp công ty) --</option>
                 </select>
@@ -835,7 +949,9 @@
     const body = document.getElementById('posListBody');
     const sorted = [...state.positions].sort((a, b) => (a.level || 999) - (b.level || 999));
     body.innerHTML = sorted.length ? sorted.map(p => {
-      const count = state.allPersonnel.filter(x => x.position === p.id && !x.disabled).length;
+      const count = state.allPersonnel.filter(x =>
+        resolvePositionId(x.position, state.positions) === p.id && !x.disabled
+      ).length;
       return `
         <div class="emp-card" style="cursor:default">
           <div class="emp-info">

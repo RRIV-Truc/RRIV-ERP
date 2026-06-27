@@ -19,7 +19,7 @@ const Permissions = (function () {
   };
 
   const BROAD_SANXUAT_ROLES = ['admin', 'supervisor', 'manager', 'director'];
-  const TEAM_SCOPED_ROLES = ['team_leader', 'doi_truong', 'viewer'];
+  const TEAM_SCOPED_ROLES = ['team_leader', 'doi_truong', 'staff', 'viewer'];
 
   const DEFAULT_ROLE_DEFS = {
     sanxuat_admin: {
@@ -28,19 +28,23 @@ const Permissions = (function () {
     },
     sanxuat_supervisor: {
       appId: 'sanxuat', roleId: 'supervisor', scope: { type: 'department' },
-      permissions: ['harvest:*', 'field:all_teams', 'factory:view']
+      permissions: ['harvest:*', 'field:all_teams', 'factory:view', 'harvest:manage_personnel']
     },
     sanxuat_manager: {
       appId: 'sanxuat', roleId: 'manager', scope: { type: 'department' },
-      permissions: ['harvest:*', 'field:all_teams', 'factory:view']
+      permissions: ['harvest:*', 'field:all_teams', 'factory:view', 'harvest:manage_personnel']
     },
     sanxuat_team_leader: {
       appId: 'sanxuat', roleId: 'team_leader', scope: { type: 'team' },
-      permissions: ['harvest:view', 'harvest:assign', 'harvest:weigh', 'harvest:manage_sections']
+      permissions: ['harvest:view', 'harvest:assign', 'harvest:weigh', 'harvest:manage_sections', 'harvest:manage_personnel']
     },
     sanxuat_doi_truong: {
       appId: 'sanxuat', roleId: 'doi_truong', scope: { type: 'team' },
-      permissions: ['harvest:view', 'harvest:assign', 'harvest:weigh', 'harvest:manage_sections']
+      permissions: ['harvest:view', 'harvest:assign', 'harvest:weigh', 'harvest:manage_sections', 'harvest:manage_personnel']
+    },
+    sanxuat_staff: {
+      appId: 'sanxuat', roleId: 'staff', scope: { type: 'team' },
+      permissions: ['harvest:view', 'harvest:assign', 'harvest:weigh']
     },
     sanxuat_viewer: {
       appId: 'sanxuat', roleId: 'viewer', scope: { type: 'team' },
@@ -94,9 +98,36 @@ const Permissions = (function () {
     return String(user.role || '').toLowerCase() === 'admin';
   }
 
+  function _normalizeAppEntry(entry) {
+    if (!entry || typeof entry !== 'object') return null;
+    const roles = Array.isArray(entry.roles)
+      ? entry.roles.slice()
+      : (entry.role ? [entry.role] : []);
+    return {
+      roles: roles,
+      scopes: entry.scopes || {},
+      customPermissions: entry.customPermissions || { granted: [], denied: [] },
+      expiresAt: entry.expiresAt,
+      delegatedUntil: entry.delegatedUntil
+    };
+  }
+
+  function _normalizeAppRolesCache(cache) {
+    if (!cache || typeof cache !== 'object') return {};
+    const out = {};
+    Object.keys(cache).forEach(function (appId) {
+      const norm = _normalizeAppEntry(cache[appId]);
+      if (norm && (norm.roles.length || Object.keys(norm.scopes).length)) {
+        out[appId] = norm;
+      }
+    });
+    return out;
+  }
+
   function initFromUserData(profile) {
     _user = profile || getCurrentUser();
-    _cache = _user?.appRolesCache || _user?.appPermissions || null;
+    const raw = _user?.appRolesCache || _user?.app_roles_cache || _user?.appPermissions || null;
+    _cache = _normalizeAppRolesCache(raw);
   }
 
   function clearCache() {
@@ -116,7 +147,7 @@ const Permissions = (function () {
         if (doc.exists) {
           const data = doc.data() || {};
           _user = Object.assign({ id: doc.id, uid: doc.id }, data);
-          _cache = _user.appRolesCache || {};
+          _cache = _normalizeAppRolesCache(_user.appRolesCache || _user.app_roles_cache || {});
           localStorage.setItem('currentUser', JSON.stringify(_user));
           return _user;
         }
@@ -128,7 +159,7 @@ const Permissions = (function () {
           const body = await res.json();
           if (body.profile) {
             _user = Object.assign({ id: body.profile.id || userId }, body.profile);
-            _cache = _user.appRolesCache || {};
+            _cache = _normalizeAppRolesCache(_user.appRolesCache || _user.app_roles_cache || {});
             localStorage.setItem('currentUser', JSON.stringify(_user));
             return _user;
           }
@@ -140,18 +171,58 @@ const Permissions = (function () {
     return getCurrentUser();
   }
 
+  function _normalizeRoleDef(raw) {
+    if (!raw) return null;
+    const meta = raw.metadata && typeof raw.metadata === 'object' ? raw.metadata : {};
+    const appId = raw.appId || raw.app_id || meta.app_id || '';
+    let roleId = raw.roleId || raw.role_id || meta.role_id || '';
+    if (!appId && roleId && String(roleId).includes('_')) {
+      const parts = String(roleId).split('_');
+      if (parts.length >= 2) {
+        roleId = parts.slice(1).join('_');
+      }
+    }
+    const perms = raw.permissions || meta.permissions || [];
+    return {
+      id: raw.id,
+      appId: appId,
+      roleId: roleId,
+      roleName: raw.roleName || raw.role_name || raw.name || meta.role_name || roleId,
+      permissions: Array.isArray(perms) ? perms : [],
+      scope: raw.scope || (raw.scope_type || meta.scope_type ? { type: raw.scope_type || meta.scope_type } : {})
+    };
+  }
+
   async function loadRoleDefinitions(db) {
     if (_roleDefs.length) return _roleDefs;
+
+    try {
+      const res = await fetch('/api/role-definitions?active_only=true');
+      if (res.ok) {
+        const body = await res.json();
+        const roles = (body.roles || []).map(_normalizeRoleDef).filter(function (r) {
+          return r && r.appId && r.roleId;
+        });
+        if (roles.length) {
+          _roleDefs = roles;
+          return _roleDefs;
+        }
+      }
+    } catch (e) {
+      console.warn('[Permissions] loadRoleDefinitions API', e.message);
+    }
+
     try {
       if (db && db.collection) {
         const snap = await db.collection('roleDefinitions').get();
         _roleDefs = snap.docs.map(function (d) {
-          return Object.assign({ id: d.id }, d.data());
-        });
+          return _normalizeRoleDef(Object.assign({ id: d.id }, d.data()));
+        }).filter(function (r) { return r && r.appId && r.roleId; });
       }
     } catch (e) {
-      console.warn('[Permissions] loadRoleDefinitions', e.message);
+      console.warn('[Permissions] loadRoleDefinitions Firestore', e.message);
     }
+
     if (!_roleDefs.length) {
       _roleDefs = Object.keys(DEFAULT_ROLE_DEFS).map(function (k) {
         return DEFAULT_ROLE_DEFS[k];
@@ -198,9 +269,11 @@ const Permissions = (function () {
   }
 
   function getRoleDef(appId, roleId) {
-    return _roleDefs.find(function (r) {
+    const fromDb = _roleDefs.find(function (r) {
       return r.appId === appId && r.roleId === roleId;
-    }) || DEFAULT_ROLE_DEFS[appId + '_' + roleId] || null;
+    });
+    if (fromDb) return fromDb;
+    return DEFAULT_ROLE_DEFS[appId + '_' + roleId] || null;
   }
 
   function getEffectiveAppData(appId) {
@@ -210,7 +283,9 @@ const Permissions = (function () {
     }
 
     const merged = {
-      roles: [...(base.roles || [])],
+      roles: Array.isArray(base.roles)
+        ? [...base.roles]
+        : (base.role ? [base.role] : []),
       scopes: JSON.parse(JSON.stringify(base.scopes || {})),
       customPermissions: {
         granted: [...(base.customPermissions?.granted || [])],
@@ -401,6 +476,13 @@ const Permissions = (function () {
       hasPermissionWithOverrides('sanxuat', 'harvest:*');
   }
 
+  /** Quản trị nhân sự theo trạm SX (tab Quản trị → Nhân sự). */
+  function canManageStationPersonnel() {
+    if (isGlobalAdmin()) return true;
+    return hasPermissionWithOverrides('sanxuat', 'harvest:manage_personnel') ||
+      hasPermissionWithOverrides('sanxuat', 'harvest:*');
+  }
+
   async function loadAppPermissions() {
     try {
       return await CRUDService.load('appPermissions', { cache: true });
@@ -457,6 +539,7 @@ const Permissions = (function () {
     hasPermissionWithOverrides,
     resolveTeamScope,
     canWriteFieldHarvest,
+    canManageStationPersonnel,
     isAppPermActive,
     loadManagedTeamIds,
     loadAppPermissions,

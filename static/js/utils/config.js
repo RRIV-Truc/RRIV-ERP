@@ -66,11 +66,36 @@ const Config = (function () {
     phanquyen: '/app/phanquyen'
   };
 
+  /**
+   * Bật/tắt app trên màn hình hub (index).
+   * Đổi thành true khi app đã hoàn thiện — không cần sửa index.html.
+   */
+  const HUB_APP_ENABLED = {
+    vanphongpham: false,
+    doanhnghiep: false,
+    dieuhanhxe: false,
+    vanbannoibo: false,
+    nhansu: true,
+    dautu: false,
+    diemdanh: false,
+    vuoncay: false,
+    sanxuat: true,
+    chatluong: false,
+    thoitiet: false,
+    baocao: false,
+    thongbao: false,
+    phanquyen: false
+  };
+
+  function isHubAppEnabled(appId) {
+    return HUB_APP_ENABLED[appId] === true;
+  }
+
   function getCollection(key) { return COLLECTIONS[key] || key; }
   function isDevelopment() { return currentEnv === ENV.DEVELOPMENT; }
 
   return {
-    ENV, currentEnv, API, APP, AUTH, COLLECTIONS, APP_ROUTES,
-    getCollection, isDevelopment
+    ENV, currentEnv, API, APP, AUTH, COLLECTIONS, APP_ROUTES, HUB_APP_ENABLED,
+    getCollection, isDevelopment, isHubAppEnabled
   };
 })();

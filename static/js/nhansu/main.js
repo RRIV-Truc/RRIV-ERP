@@ -1,24 +1,9 @@
-/* main.js — bootstrap. Wire auth, load data, render UI, attach global events.
- * Initializes Firebase using config from permissions.js.
- */
+/* main.js — bootstrap RRIV (Supabase qua Flask, không Firebase). */
 (function () {
   'use strict';
 
-  const FIREBASE_CONFIG = {
-    apiKey: "AIzaSyBCpPDhOKofImy_K8xiV2Mhut_3gbdB1vY",
-    authDomain: "quantridoanhnghiepphr.firebaseapp.com",
-    projectId: "quantridoanhnghiepphr",
-    storageBucket: "quantridoanhnghiepphr.firebasestorage.app",
-    messagingSenderId: "1024381876052",
-    appId: "1:1024381876052:web:150ee86fc411bd14733ac1"
-  };
-
-  if (!ErpDb.apps.length) ErpDb.initializeApp(FIREBASE_CONFIG);
-  const auth = ErpDb.auth();
   const db = ErpDb.firestore();
   window.db = db;
-  window.auth = auth;
-  auth.setPersistence(ErpDb.auth.Auth.Persistence.LOCAL);
 
   const NS = window.NhansuState;
   const SVC = window.NhansuServices;
@@ -27,69 +12,108 @@
   const PANEL = window.NhansuPanel;
   const MOD = window.NhansuModals;
 
-  // ============== Bootstrap ==============
   let booted = false;
 
-  auth.onAuthStateChanged(async (user) => {
-    if (!user) {
-      window.location.href = 'index.html';
+  async function bootstrap() {
+    const authUser = await Auth.init();
+    if (!authUser) {
+      window.location.href = '/';
       return;
     }
 
     try {
-      // Load current user from Firestore
-      const u = await SVC.loadCurrentUser(user.uid);
+      await Auth.loadUserProfile(authUser.username);
+      const profile = Auth.getProfile() || authUser;
+      localStorage.setItem('currentUser', JSON.stringify(authUser));
+
+      const lookupId = profile.id || authUser.id || authUser.uid || authUser.username;
+      let u = await SVC.loadCurrentUser(lookupId);
+      if (!u && authUser.username) {
+        u = await SVC.loadCurrentUser(authUser.username);
+      }
       if (!u) {
-        alert('Không tìm thấy thông tin nhân sự — liên hệ admin');
-        await auth.signOut();
-        return;
+        u = {
+          id: lookupId,
+          username: authUser.username,
+          hoTen: profile.hoTen || profile.name || authUser.name || authUser.username,
+          role: profile.role || authUser.role || 'user',
+          department: profile.department || authUser.department || '',
+          appRolesCache: profile.appRolesCache || authUser.appRolesCache || {}
+        };
       }
       NS.state.currentUser = u;
 
-      // Init Permissions module
-      try { Permissions.initFromUserData?.({ uid: user.uid, ...u }); } catch {}
+      if (typeof Auth.persistSession === 'function') Auth.persistSession();
 
-      // Single session enforcement
-      if (await PERMS.isSingleSessionEnabled()) {
-        PERMS.startSessionListener(user.uid, msg => PERMS.forceLogout(msg));
+      try { Permissions.initFromUserData?.({ uid: u.id, ...u }); } catch (_) { /* ignore */ }
+      if (typeof Permissions?.loadRoleDefinitions === 'function') {
+        await Permissions.loadRoleDefinitions(db);
+        Permissions.initFromUserData?.({ uid: u.id, ...u });
       }
 
-      // Subscribe role definitions (refresh UI on permission change)
-      PERMS.subscribeRoleDefs(user.uid, () => { if (booted) refresh(); });
+      if (!PERMS.canAccessApp(u)) {
+        alert('Bạn không có quyền truy cập ứng dụng Nhân sự.');
+        window.location.href = '/';
+        return;
+      }
 
-      // Load managed teams
-      NS.state.managedTeams = await SVC.loadManagedTeams(user.uid);
+      if (typeof RrivAppBar !== 'undefined' && RrivAppBar.refresh) {
+        RrivAppBar.refresh(u);
+      }
 
-      // Update header user chip
+      if (await PERMS.isSingleSessionEnabled()) {
+        PERMS.startSessionListener(u.id, msg => PERMS.forceLogout(msg));
+      }
+
+      PERMS.subscribeRoleDefs(u.id, () => { if (booted) refresh(); });
+
+      NS.state.managedTeams = await SVC.loadManagedTeams(u.id);
+
+      if (window.NhansuAccessRights?.loadCatalog) {
+        await window.NhansuAccessRights.loadCatalog();
+      }
+      if (typeof Permissions?.loadRoleDefinitions === 'function') {
+        await Permissions.loadRoleDefinitions(db);
+      }
+
       updateUserChip(u);
-
-      // Initial data load
       await loadAll();
       booted = true;
     } catch (e) {
       console.error('Bootstrap error:', e);
       NS.toast('Lỗi tải dữ liệu: ' + e.message, 'error');
     }
-  });
+  }
+
+  function normalizeOrgIds(personnel, depts, teams) {
+    personnel.forEach(p => {
+      if (p.department && !depts.some(d => d.id === p.department)) {
+        const d = depts.find(x => x.name === p.department || x.id === p.department);
+        if (d) p.department = d.id;
+      }
+      if (p.team && !teams.some(t => t.id === p.team)) {
+        const t = teams.find(x => x.name === p.team || x.id === p.team);
+        if (t) p.team = t.id;
+      }
+    });
+  }
 
   async function loadAll() {
     const root = document.getElementById('treeRoot');
     if (root) root.innerHTML = '<div class="tree-loading"><div class="spinner"></div></div>';
 
-    const [personnel, depts, poss, teams, factories] = await Promise.all([
+    const [personnel, depts, poss, teams, factories, systemRoles] = await Promise.all([
       SVC.loadPersonnel(),
       SVC.loadDepartments(),
       SVC.loadPositions(),
       SVC.loadTeams(),
-      SVC.loadFactories().catch(() => [])
+      SVC.loadFactories().catch(() => []),
+      SVC.loadSystemRoles()
     ]);
 
-    // Merge factory data: ưu tiên Firestore, bổ sung defaults nếu chưa có doc
     const factMap = new Map();
-    NS.DEFAULT_FACTORIES.forEach(f => factMap.set(f.id, { ...f }));
-    factories.forEach(f => factMap.set(f.id, { ...factMap.get(f.id), ...f }));
+    factories.forEach(f => factMap.set(f.id, { ...f }));
 
-    // Apply scope filter to personnel
     const u = NS.state.currentUser;
     let filtered = personnel;
     if (!PERMS.canViewAll(u)) {
@@ -109,12 +133,32 @@
     }
 
     NS.state.allPersonnel = filtered;
-    NS.state.departments = depts;
-    NS.state.positions = poss;
-    NS.state.allTeams = teams;
+    NS.state.systemRoles = systemRoles || [];
+    NS.state.departments = depts.filter(d => d.active !== false && !d.metadata?.retired);
+    normalizeOrgIds(filtered, NS.state.departments, teams);
+    NS.state.positions = NS.mergePositionCatalog(poss, filtered);
+    filtered.forEach(p => {
+      const raw = p.position || p.position_name || p.positionName;
+      const resolved = NS.resolvePositionId(raw, NS.state.positions);
+      if (resolved) p.position = resolved;
+    });
+    NS.state.allTeams = teams.filter(t => !t.metadata?.retired);
     NS.state.factories = Array.from(factMap.values());
 
-    // Pre-expand root
+    // employee_assignment lưu tên PB/CV — bổ sung id để lọc cây tổ chức
+    filtered.forEach(p => {
+      (p.concurrentPositions || []).forEach(cp => {
+        if (!cp.departmentId && cp.departmentName) {
+          const d = depts.find(x => x.name === cp.departmentName || x.id === cp.departmentId);
+          if (d) cp.departmentId = d.id;
+        }
+        if (!cp.positionId && cp.positionName) {
+          const pos = NS.state.positions.find(x => x.name === cp.positionName || x.id === cp.positionId);
+          if (pos) cp.positionId = pos.id;
+        }
+      });
+    });
+
     NS.state.expanded.add('root');
 
     TREE.render();
@@ -138,7 +182,6 @@
     chip.onclick = () => MOD.openMyPerms();
   }
 
-  // ============== Search ==============
   function bindSearch() {
     const input = document.getElementById('searchInput');
     const wrap = input?.closest('.header-search');
@@ -152,12 +195,7 @@
       clearTimeout(timer);
       timer = setTimeout(() => {
         NS.state.searchTerm = v;
-        // If searching, auto-expand all and highlight; else collapse to default
-        if (v && v.length >= 2) {
-          PANEL.render();
-        } else {
-          PANEL.render();
-        }
+        PANEL.render();
       }, 250);
     });
     if (clear) clear.onclick = () => {
@@ -169,20 +207,20 @@
     };
   }
 
-  // ============== Header buttons ==============
   function bindHeader() {
-    document.getElementById('btnHome')?.addEventListener('click', () => window.location.href = 'index.html');
+    document.getElementById('btnHome')?.addEventListener('click', () => {
+      if (typeof Auth !== 'undefined' && typeof Auth.goHome === 'function') Auth.goHome();
+      else window.location.href = '/';
+    });
     document.getElementById('btnHamburger')?.addEventListener('click', () => TREE.toggleDrawer());
     document.getElementById('btnRefresh')?.addEventListener('click', refresh);
     document.getElementById('drawerBackdrop')?.addEventListener('click', () => TREE.closeDrawer());
 
-    // Tree toolbar
     document.getElementById('btnTreeExpand')?.addEventListener('click', () => TREE.expandAll());
     document.getElementById('btnTreeCollapse')?.addEventListener('click', () => TREE.collapseAll());
     document.getElementById('btnTreeRoot')?.addEventListener('click', () => TREE.selectRoot());
   }
 
-  // ============== Export Excel ==============
   function exportExcel() {
     const list = NS.filterPersonnel(NS.state.allPersonnel);
     const rows = list.map(p => ({
@@ -192,13 +230,10 @@
       'Email': p.email || p.personalEmail || '',
       'SĐT': p.phone || '',
       'CCCD': p.cccd || '',
-      'Giới tính': p.gender === 'male' ? 'Nam' : p.gender === 'female' ? 'Nữ' : '',
-      'Ngày sinh': NS.fmtDate(p.dateOfBirth),
-      'Nhà máy': p.factory || '',
-      'Phòng ban': NS.deptName(p.department),
-      'Chức vụ': NS.posName(p.position),
+      'Phòng ban': p.department ? NS.deptName(p.department) : '',
+      'Chức vụ': p.position ? NS.posName(p.position) : '',
       'Tổ': p.team ? NS.teamName(p.team) : '',
-      'Vai trò': NS.ROLE_LABELS[p.role] || p.role || '',
+      'Vai trò': NS.personSystemRoleLabel(p),
       'Trạng thái': p.disabled ? 'Nghỉ việc' : 'Đang làm',
       'Ngày vào': NS.fmtDate(p.hireDate),
       'Loại HĐ': p.contractType || '',
@@ -212,10 +247,10 @@
     NS.toast('Đã xuất Excel');
   }
 
-  // ============== Init when DOM ready ==============
   function init() {
     bindSearch();
     bindHeader();
+    bootstrap();
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
