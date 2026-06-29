@@ -726,6 +726,14 @@ CREATE TABLE IF NOT EXISTS rubber_deliveries (
   updated_at        TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE INDEX IF NOT EXISTS idx_rubber_deliveries_tapping_date
+  ON rubber_deliveries (tapping_date);
+
+CREATE INDEX IF NOT EXISTS idx_rubber_deliveries_tapping_date_team
+  ON rubber_deliveries (tapping_date, team);
+
+-- VIEW tổng hợp GN theo ngày: xem supabase/views-rubber-delivery-daily.sql
+
 -- Ca khai (tappingSessions) — liên kết delivery
 CREATE TABLE IF NOT EXISTS tapping_sessions (
   id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,

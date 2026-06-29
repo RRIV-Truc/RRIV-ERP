@@ -21,6 +21,10 @@ def _no_cache_html(response):
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'
+    path = request.path or ''
+    if '/static/js/sanxuat/tabs/' in path:
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
     return response
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -123,9 +127,60 @@ TABLE_MAP = {
     'tappingSections': 'tapping_sections',
     'sectionWorkerAssignments': 'section_worker_assignments',
     'fieldWorkerWeighings': 'field_worker_weighings',
+    'rubberDeliveries': 'rubber_deliveries',
+    'vRubberDeliveryDailyTotals': 'v_rubber_delivery_daily_totals',
+    'vRubberDeliveryDailyByDate': 'v_rubber_delivery_daily_totals_by_date',
+    'vRubberDeliveryDailyBySession': 'v_rubber_delivery_daily_totals_by_session',
+    'vRubberDeliveryReceiptMetrics': 'v_rubber_delivery_receipt_metrics',
     'tscDrcConversion': 'tsc_drc_conversion',
     'employeePositions': 'employee_assignment',
 }
+
+_RUBBER_DELIVERY_COLUMNS = frozenset({
+    'id', 'delivery_no', 'team', 'grp', 'garden_id', 'garden_code',
+    'material_type', 'grade', 'vehicle_no', 'gross_weight', 'drc_percent', 'dry_weight',
+    'nh3_percent', 'ph_value', 'tapping_session', 'tapping_date',
+    'plot_ids', 'plot_names', 'status', 'delivery_person', 'notes',
+    'metadata', 'created_by', 'created_at', 'updated_at',
+})
+
+_RUBBER_DELIVERY_FIELD_MAP = {
+    'deliveryNo': 'delivery_no',
+    'team_id': 'team',
+    'group': 'grp',
+    'gardenId': 'garden_id',
+    'gardenCode': 'garden_code',
+    'materialType': 'material_type',
+    'vehicleNo': 'vehicle_no',
+    'grossWeight': 'gross_weight',
+    'drcPercent': 'drc_percent',
+    'dryWeight': 'dry_weight',
+    'nh3Percent': 'nh3_percent',
+    'phValue': 'ph_value',
+    'tappingSession': 'tapping_session',
+    'tappingDate': 'tapping_date',
+    'tappingTime': 'tapping_date',
+    'plotIds': 'plot_ids',
+    'plotNames': 'plot_names',
+    'deliveryPerson': 'delivery_person',
+    'createdBy': 'created_by',
+}
+
+_FIELD_WEIGHING_COLUMNS = {
+    'id', 'record_date', 'tapping_section_id', 'worker_id', 'session_no',
+    'latex_fresh_kg', 'latex_tsc_pct', 'latex_drc_pct', 'latex_dry_kg',
+    'coag_fresh_kg', 'coag_tsc_pct', 'coag_drc_pct', 'coag_dry_kg',
+    'cord_fresh_kg', 'cord_drc_pct', 'cord_dry_kg',
+    'other_fresh_kg', 'other_drc_pct', 'other_dry_kg',
+    'total_fresh_kg', 'total_dry_kg',
+    'is_rainy', 'has_stimulant', 'notes', 'created_by', 'metadata',
+    'created_at', 'updated_at',
+}
+
+_FIELD_WEIGHING_AUDIT_KEYS = (
+    'updated_by', 'updated_by_name', 'updated_at',
+    'created_by_name', 'created_at',
+)
 
 
 def record_login_history(username, status, req):
@@ -184,6 +239,8 @@ def _row_to_doc(row, use_data_field=True, table_name=None):
         _apply_app_registry_aliases(doc)
     if table_name == 'employee_assignment':
         _apply_employee_assignment_aliases(doc)
+    if table_name == 'rubber_deliveries':
+        _apply_rubber_delivery_aliases(doc)
     if table_name == 'category_teams' and doc.get('manager_id') is not None:
         doc['managerId'] = doc['manager_id']
     if row.get('created_at') and not doc.get('createdAt'):
@@ -245,6 +302,23 @@ _FIELD_ALIASES = {
     'isPrimary': 'is_primary',
     'assignedAt': 'assigned_date',
     'startDate': 'assigned_date',
+    'deliveryNo': 'delivery_no',
+    'gardenId': 'garden_id',
+    'gardenCode': 'garden_code',
+    'materialType': 'material_type',
+    'vehicleNo': 'vehicle_no',
+    'grossWeight': 'gross_weight',
+    'drcPercent': 'drc_percent',
+    'dryWeight': 'dry_weight',
+    'nh3Percent': 'nh3_percent',
+    'phValue': 'ph_value',
+    'tappingSession': 'tapping_session',
+    'tappingDate': 'tapping_date',
+    'tappingTime': 'tapping_date',
+    'plotIds': 'plot_ids',
+    'plotNames': 'plot_names',
+    'deliveryPerson': 'delivery_person',
+    'createdBy': 'created_by',
 }
 
 _PERSONNEL_FIELD_MAP = {
@@ -619,6 +693,145 @@ def _prepare_category_write(table, data, existing_meta=None):
     return row
 
 
+def _apply_rubber_delivery_aliases(doc):
+    """Map rubber_deliveries ↔ collection rubberDeliveries (camelCase client)."""
+    aliases = {
+        'delivery_no': 'deliveryNo',
+        'garden_id': 'gardenId',
+        'garden_code': 'gardenCode',
+        'material_type': 'materialType',
+        'vehicle_no': 'vehicleNo',
+        'gross_weight': 'grossWeight',
+        'drc_percent': 'drcPercent',
+        'dry_weight': 'dryWeight',
+        'nh3_percent': 'nh3Percent',
+        'ph_value': 'phValue',
+        'tapping_session': 'tappingSession',
+        'tapping_date': 'tappingDate',
+        'plot_ids': 'plotIds',
+        'plot_names': 'plotNames',
+        'delivery_person': 'deliveryPerson',
+        'created_by': 'createdBy',
+        'grp': 'group',
+    }
+    for snake, camel in aliases.items():
+        if doc.get(snake) is not None and doc.get(camel) is None:
+            doc[camel] = doc[snake]
+    if doc.get('team') and not doc.get('team_id'):
+        doc['team_id'] = doc['team']
+    if doc.get('tappingDate') and not doc.get('tappingTime'):
+        doc['tappingTime'] = doc['tappingDate']
+    meta_doc = doc.get('metadata') if isinstance(doc.get('metadata'), dict) else {}
+    try:
+        lg = float(doc.get('latexGrossWeight') or meta_doc.get('latexGrossWeight') or 0)
+        cg = float(doc.get('coagGrossWeight') or meta_doc.get('coagGrossWeight') or 0)
+    except (TypeError, ValueError):
+        lg = cg = 0
+    if (lg > 0 and cg > 0) or doc.get('coagByType') or meta_doc.get('coagByType'):
+        doc['materialType'] = 'mixed'
+
+
+def _normalize_rubber_material_type(val):
+    """Enum Postgres material_type không có 'mixed' — phiếu GN hỗn hợp lưu latex + coag trong metadata."""
+    if val is None or val == '':
+        return None
+    s = str(val).strip().lower()
+    if s in ('latex', 'coagulum', 'misc'):
+        return s
+    if s == 'mixed':
+        return 'latex'
+    return 'latex'
+
+
+def _prepare_rubber_delivery_write(data, doc_id=None):
+    """Chuyển phiếu GN camelCase → cột rubber_deliveries; field phụ vào metadata."""
+    data = dict(data or {})
+    existing_meta = _fetch_row_metadata('rubber_deliveries', doc_id) if doc_id else {}
+    meta = dict(existing_meta) if isinstance(existing_meta, dict) else {}
+    incoming_meta = data.pop('metadata', None)
+    if isinstance(incoming_meta, dict):
+        meta.update(incoming_meta)
+    row = {}
+    skip = {'id', 'metadata'}
+    for key, val in data.items():
+        if key in skip or _is_delete_marker(val):
+            continue
+        if key == 'updatedAt':
+            row['updated_at'] = val
+            continue
+        if key == 'createdAt':
+            row['created_at'] = val
+            continue
+        dest = _RUBBER_DELIVERY_FIELD_MAP.get(key, key)
+        if dest in _RUBBER_DELIVERY_COLUMNS and dest != 'metadata':
+            if dest == 'tapping_date':
+                row[dest] = _normalize_date(val)
+            elif dest == 'material_type':
+                norm_mt = _normalize_rubber_material_type(val)
+                if norm_mt:
+                    row[dest] = norm_mt
+            elif dest == 'garden_id':
+                # Trạm SX (team-lk…) thường không có trong rubber_gardens — tránh lỗi FK.
+                meta['gardenId'] = val
+            elif dest == 'created_by':
+                meta['createdBy'] = val
+            else:
+                row[dest] = val
+        elif _is_delete_marker(val) or val is None:
+            meta.pop(key, None)
+        else:
+            meta[key] = val
+    if meta:
+        row['metadata'] = meta
+    return row
+
+
+def _prepare_field_weighing_write(data):
+    """Chuẩn hóa ghi cân mủ — audit nằm trong metadata, không có cột updated_by."""
+    data = dict(data or {})
+    meta = data.get('metadata') or {}
+    if not isinstance(meta, dict):
+        meta = {}
+    for key in _FIELD_WEIGHING_AUDIT_KEYS:
+        if key in data:
+            meta[key] = data.pop(key)
+    data['metadata'] = meta
+    return {k: v for k, v in data.items() if k in _FIELD_WEIGHING_COLUMNS}
+
+
+def _find_field_weighing_id(row):
+    record_date = row.get('record_date')
+    section_id = row.get('tapping_section_id')
+    worker_id = row.get('worker_id')
+    session_no = row.get('session_no') if row.get('session_no') is not None else 1
+    if not record_date or not section_id or not worker_id:
+        return None
+    try:
+        res = (
+            supabase.table('field_worker_weighings')
+            .select('id')
+            .eq('record_date', record_date)
+            .eq('tapping_section_id', section_id)
+            .eq('worker_id', worker_id)
+            .eq('session_no', session_no)
+            .limit(1)
+            .execute()
+        )
+        if res.data:
+            return res.data[0]['id']
+    except Exception as e:
+        print(f'_find_field_weighing_id: {e}')
+    return None
+
+
+def _upsert_field_weighing(data, doc_id=None):
+    row = _prepare_field_weighing_write(data)
+    existing_id = _find_field_weighing_id(row)
+    use_id = existing_id or doc_id or row.get('id') or str(uuid.uuid4())
+    supabase.table('field_worker_weighings').upsert({'id': use_id, **row}).execute()
+    return use_id
+
+
 def _prepare_table_write(table, data, doc_id=None):
     """Chuyển field Firestore (hoTen, updatedAt…) → cột Supabase trước khi ghi."""
     if not data:
@@ -638,6 +851,12 @@ def _prepare_table_write(table, data, doc_id=None):
 
     if table == 'role_definitions':
         return _prepare_role_definition_write(data, doc_id=doc_id)
+
+    if table == 'field_worker_weighings':
+        return _prepare_field_weighing_write(data)
+
+    if table == 'rubber_deliveries':
+        return _prepare_rubber_delivery_write(data, doc_id=doc_id)
 
     return data
 
@@ -675,6 +894,57 @@ def _apply_where(docs, where_list):
     return result
 
 
+def _load_erp_collection_docs(collection, where=None, order_by=None, order_dir='desc', limit=None):
+    """Đọc collection legacy trong erp_collections (fallback khi bảng chuyên biệt trống)."""
+    tapping_date = None
+    for cond in where or []:
+        if len(cond) == 3 and cond[0] in ('tappingDate', 'tapping_date', 'tappingTime') and cond[1] == '==':
+            tapping_date = _normalize_date(cond[2])
+            break
+    try:
+        q = supabase.table('erp_collections').select('*').eq('collection', collection)
+        if tapping_date:
+            q = q.or_(
+                f'data->>tappingDate.eq.{tapping_date},'
+                f'data->>tapping_date.eq.{tapping_date},'
+                f'data->>tappingTime.eq.{tapping_date}'
+            )
+        else:
+            q = q.limit(200)
+        res = q.execute()
+    except Exception as e:
+        print(f'_load_erp_collection_docs {collection}: {e}')
+        return []
+    docs = []
+    for row in res.data or []:
+        doc = _row_to_doc(row, use_data_field=True)
+        if doc:
+            docs.append(doc)
+    docs = _apply_where(docs, where)
+    reverse = (order_dir or 'desc').lower() == 'desc'
+    if order_by:
+        ob = order_by
+        db_ob = _resolve_query_field(order_by)
+        docs.sort(key=lambda d: d.get(ob) or d.get(db_ob) or '', reverse=reverse)
+    else:
+        docs.sort(key=lambda d: d.get('createdAt') or d.get('created_at') or '', reverse=True)
+    if limit:
+        docs = docs[: int(limit)]
+    return docs
+
+
+def _merge_delivery_docs(primary, legacy):
+    """Gộp phiếu GN bảng mới + erp_collections (ưu tiên bản trong bảng)."""
+    by_id = {}
+    for d in legacy or []:
+        if d and d.get('id'):
+            by_id[d['id']] = d
+    for d in primary or []:
+        if d and d.get('id'):
+            by_id[d['id']] = d
+    return list(by_id.values())
+
+
 def _load_collection_docs(collection, where=None, order_by=None, order_dir='desc', limit=None):
     table = TABLE_MAP.get(collection)
     docs = []
@@ -688,7 +958,8 @@ def _load_collection_docs(collection, where=None, order_by=None, order_dir='desc
             field, op, value = cond
             db_field = _resolve_query_field(field)
             if op == '==':
-                q = q.eq(db_field, value)
+                norm_val = _normalize_date(value) if db_field == 'tapping_date' else value
+                q = q.eq(db_field, norm_val)
             else:
                 post_filters.append(cond)
         if order_by:
@@ -701,12 +972,10 @@ def _load_collection_docs(collection, where=None, order_by=None, order_dir='desc
             if doc:
                 docs.append(doc)
         docs = _apply_where(docs, post_filters)
+        if collection == 'rubberDeliveries' and not docs:
+            docs = _load_erp_collection_docs(collection, where, order_by, order_dir, limit)
     else:
-        res = supabase.table('erp_collections').select('*').eq('collection', collection).execute()
-        for row in res.data or []:
-            doc = _row_to_doc(row, use_data_field=True)
-            if doc:
-                docs.append(doc)
+        docs = _load_erp_collection_docs(collection, where, order_by, order_dir, limit)
 
     docs = _apply_where(docs, where)
     reverse = (order_dir or 'desc').lower() == 'desc'
@@ -1367,6 +1636,9 @@ def create_document(collection):
     try:
         table = TABLE_MAP.get(collection)
         if table:
+            if table == 'field_worker_weighings':
+                use_id = _upsert_field_weighing(data, doc_id=doc_id if body.get('id') else None)
+                return jsonify({"success": True, "id": use_id})
             row = _prepare_table_write(table, data, doc_id=doc_id if body.get('id') else None)
             if table == 'employee_assignment':
                 if body.get('id'):
@@ -1397,7 +1669,46 @@ def update_document(collection, doc_id):
         table = TABLE_MAP.get(collection)
         if table:
             patch = _prepare_table_update(table, doc_id, data)
-            supabase.table(table).update(patch).eq('id', doc_id).execute()
+            if table == 'rubber_deliveries':
+                rubber_ok = False
+                try:
+                    res = supabase.table(table).update(patch).eq('id', doc_id).execute()
+                    if res.data and len(res.data) > 0:
+                        rubber_ok = True
+                    else:
+                        supabase.table(table).upsert({'id': doc_id, **patch}).execute()
+                        rubber_ok = True
+                except Exception as rd_err:
+                    print(f'rubber_deliveries write ({collection}/{doc_id}): {rd_err}')
+                erp_ok = False
+                try:
+                    existing = (
+                        supabase.table('erp_collections')
+                        .select('data')
+                        .eq('collection', collection)
+                        .eq('id', doc_id)
+                        .limit(1)
+                        .execute()
+                    )
+                    if existing.data:
+                        merged = dict(existing.data[0].get('data') or {})
+                        merged.update(data)
+                        supabase.table('erp_collections').update({'data': merged}).eq('id', doc_id).execute()
+                    else:
+                        supabase.table('erp_collections').insert({
+                            'id': doc_id,
+                            'collection': collection,
+                            'data': data,
+                            'created_by': data.get('updatedBy') or data.get('createdBy') or 'system',
+                            'updated_by': data.get('updatedBy') or data.get('createdBy') or 'system',
+                        }).execute()
+                    erp_ok = True
+                except Exception as sync_err:
+                    print(f'erp_collections sync ({collection}/{doc_id}): {sync_err}')
+                if not rubber_ok and not erp_ok:
+                    raise RuntimeError('Không ghi được phiếu GN lên Supabase')
+            else:
+                supabase.table(table).update(patch).eq('id', doc_id).execute()
         else:
             existing = supabase.table('erp_collections').select('data').eq('collection', collection).eq('id', doc_id).limit(1).execute()
             merged = {}
@@ -1416,7 +1727,7 @@ def delete_document(collection, doc_id):
         table = TABLE_MAP.get(collection)
         if table:
             supabase.table(table).delete().eq('id', doc_id).execute()
-        else:
+        if collection == 'rubberDeliveries' or not table:
             supabase.table('erp_collections').delete().eq('collection', collection).eq('id', doc_id).execute()
         return jsonify({"success": True})
     except Exception as e:
@@ -1527,6 +1838,80 @@ def harvest_weighings_range():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
+@app.route('/api/harvest/delivery-totals', methods=['GET'])
+def harvest_delivery_totals():
+    """Tổng sản lượng phiếu GN theo ngày cạo — view Supabase (có lọc trạm + phiên)."""
+    date_str = request.args.get('date') or request.args.get('tapping_date')
+    team_id = request.args.get('team') or request.args.get('team_id')
+    session = (request.args.get('session') or request.args.get('tapping_session') or '').strip()
+    by_date_only = request.args.get('by_date') in ('1', 'true', 'yes')
+
+    def _aggregate_gn_rows(rows):
+        if not rows:
+            return None
+        keys = (
+            'latex_fresh_kg', 'coag_fresh_kg', 'total_fresh_kg',
+            'latex_dry_kg', 'coag_dry_kg', 'total_dry_kg',
+        )
+        out = {k: 0.0 for k in keys}
+        out['receipt_count'] = 0
+        for row in rows:
+            out['receipt_count'] += int(row.get('receipt_count') or 0)
+            for k in keys:
+                out[k] += float(row.get(k) or 0)
+        for k in keys:
+            out[k] = round(out[k], 3)
+        out['tapping_date'] = date_str
+        if team_id:
+            out['team'] = team_id
+        if session:
+            out['tapping_session'] = session
+        return out
+
+    if not date_str:
+        return jsonify({"success": False, "message": "Thiếu tham số date (YYYY-MM-DD)"}), 400
+    try:
+        if by_date_only:
+            res = (
+                supabase.table('v_rubber_delivery_daily_totals_by_date')
+                .select('*')
+                .eq('tapping_date', date_str)
+                .execute()
+            )
+            rows = res.data or []
+            row = rows[0] if rows else None
+            return jsonify({"success": True, "date": date_str, "data": row, "sessions": []})
+
+        q = (
+            supabase.table('v_rubber_delivery_daily_totals_by_session')
+            .select('*')
+            .eq('tapping_date', date_str)
+        )
+        if team_id:
+            q = q.eq('team', team_id)
+        if session and session != '__all__':
+            q = q.eq('tapping_session', session)
+        res = q.execute()
+        session_rows = res.data or []
+
+        if session and session != '__all__':
+            row = session_rows[0] if session_rows else None
+        else:
+            row = _aggregate_gn_rows(session_rows)
+
+        return jsonify({
+            "success": True,
+            "date": date_str,
+            "team": team_id,
+            "session": session or '__all__',
+            "data": row,
+            "sessions": session_rows,
+        })
+    except Exception as e:
+        print(f"harvest_delivery_totals: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 @app.route('/api/data/batch', methods=['POST'])
 def batch_write():
     body = request.json or {}
@@ -1558,7 +1943,9 @@ def batch_write():
                 table = TABLE_MAP.get(coll)
                 if table:
                     row = _prepare_table_write(table, data, doc_id=doc_id if op.get('docId') else None)
-                    if table == 'employee_assignment':
+                    if table == 'field_worker_weighings':
+                        _upsert_field_weighing(data, doc_id=doc_id if op.get('docId') else None)
+                    elif table == 'employee_assignment':
                         supabase.table(table).insert(row).execute()
                     else:
                         supabase.table(table).upsert({

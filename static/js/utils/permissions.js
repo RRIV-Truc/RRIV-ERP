@@ -277,6 +277,11 @@ const Permissions = (function () {
   }
 
   function getEffectiveAppData(appId) {
+    if (!_cache) {
+      const u = getCurrentUser();
+      const raw = u?.appRolesCache || u?.app_roles_cache;
+      if (raw) _cache = _normalizeAppRolesCache(raw);
+    }
     const base = (_cache || {})[appId];
     if (!base || !isAppPermActive(base)) {
       return { roles: [], scopes: {}, customPermissions: { granted: [], denied: [] } };
@@ -470,6 +475,52 @@ const Permissions = (function () {
     };
   }
 
+  function todayDateStr() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+
+  function _normalizeIsoDate(dateStr) {
+    if (!dateStr) return '';
+    const s = String(dateStr).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    const d = parseTs(s);
+    if (!d) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+
+  /** Chỉ admin SX (hoặc quản trị hệ thống) được sửa dữ liệu ngày trước. */
+  function isSanxuatAdmin(user) {
+    user = user || getCurrentUser();
+    if (isSuperAdmin(user)) return true;
+    // Chỉ role admin trong app Sản xuất — không dùng user.role legacy 'admin'
+    return (getAppRoles(APP_IDS.SANXUAT) || []).includes('admin');
+  }
+
+  /**
+   * Người nhập / quản lý / đội trưởng chỉ ghi trong ngày hiện tại.
+   * Admin SX được ghi mọi ngày.
+   */
+  function canWriteSanxuatDate(dateStr, user) {
+    user = user || getCurrentUser();
+    const iso = _normalizeIsoDate(dateStr);
+    if (!iso) return false;
+    if (isSanxuatAdmin(user)) return true;
+    return iso === todayDateStr();
+  }
+
+  function sanxuatDateWriteMessage(dateStr) {
+    const iso = _normalizeIsoDate(dateStr) || dateStr || '—';
+    return 'Chỉ được nhập/sửa dữ liệu ngày ' + todayDateStr() +
+      '. Ngày ' + iso + ' chỉ admin mới được chỉnh (bảo vệ dữ liệu cũ).';
+  }
+
   function canWriteFieldHarvest() {
     return hasPermissionWithOverrides('sanxuat', 'harvest:assign') ||
       hasPermissionWithOverrides('sanxuat', 'harvest:weigh') ||
@@ -538,6 +589,10 @@ const Permissions = (function () {
     hasPermission,
     hasPermissionWithOverrides,
     resolveTeamScope,
+    todayDateStr,
+    isSanxuatAdmin,
+    canWriteSanxuatDate,
+    sanxuatDateWriteMessage,
     canWriteFieldHarvest,
     canManageStationPersonnel,
     isAppPermActive,

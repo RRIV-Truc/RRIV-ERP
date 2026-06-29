@@ -19,7 +19,6 @@ const TabFieldHarvest = (function () {
   let quickWeighActive = false;
   /** @type {Array<object>} */
   let quickWeighRows = [];
-  var FH_QUICK_COAG_TARE_KG = 0;
   /** Ngày làm việc trước khi đổi (để hủy đổi ngày khi còn bản nháp). */
   let _fhLastRecordDate = '';
   let _fhSaveInProgress = false;
@@ -44,9 +43,28 @@ const TabFieldHarvest = (function () {
     { v: 2, l: 'Loại 2' },
     { v: 3, l: 'Loại 3' }
   ];
+  /** Cân nhanh — 4 loại mủ đông (KL tươi trực tiếp, không trừ bì). */
+  var FH_QUICK_COAG_TYPES = [
+    { key: 'block', field: 'block_kg', label: 'Đông khối' },
+    { key: 'cup', field: 'cup_kg', label: 'Chén' },
+    { key: 'scrap', field: 'scrap_kg', label: 'Dây' },
+    { key: 'misc', field: 'misc_kg', label: 'Tạp' }
+  ];
   var FH_SESSION_KEY = 'fh_last_tapping_session';
   var FH_TEAM_KEY = 'fh_last_production_team';
   var FH_DEFAULT_TEAM_ID = 'team-lk';
+  var FH_SUMMARY_TAB_KEY = 'rriv_fh_summary_panel_tab';
+  var summaryPanelTab = 'original';
+  /** Ngày đã tải phân công + cân mủ (đồng bộ với ô chọn ngày). */
+  var _loadedRecordDate = '';
+  var _dateChangeBusy = false;
+  var _dateChangePending = false;
+  var _weighLoadSeq = 0;
+  var _gnFooterSeq = 0;
+  var _allocatedGnFooterCache = null;
+  var _allocatedGnFooterCacheKey = '';
+  var _SUMMARY_KG_COLS = ['latex_fresh', 'coag_fresh', 'total_fresh', 'latex_dry', 'coag_dry', 'total_dry'];
+  var _fhInitDone = false;
   /** Tăng khi đổi cách lưu/lọc phân công — buộc xóa cache cũ trên máy. */
   var FH_ASSIGNMENTS_CACHE_VER = '8';
   var WORK_MODES = [
@@ -137,7 +155,7 @@ const TabFieldHarvest = (function () {
 
   async function loadSummaryWeighings() {
     _readSummaryFilters();
-    var range = _summaryDateRange(summaryPeriod, _dateVal());
+    var range = _summaryDateRange(summaryPeriod, _recordDate());
     summaryRangeLabel = range.label;
     if (summaryPeriod === 'day') {
       summaryWeighings = weighings.slice();
@@ -164,7 +182,260 @@ const TabFieldHarvest = (function () {
 
   async function _refreshYieldSummary() {
     await loadSummaryWeighings();
-    renderYieldSummary();
+    _refreshSummaryTablesNow();
+  }
+
+  /** Đếm phiếu GN theo ngày cạo — chỉ đọc cache local, không gọi API. */
+  function _countGnReceiptsForDate(dateStr) {
+    dateStr = String(dateStr || _recordDate()).slice(0, 10);
+    var seen = {};
+    var count = 0;
+    _gnDeliveriesList().forEach(function (d) {
+      if (_gnTappingDate(d) !== dateStr) return;
+      var key = d.id || d.deliveryNo || String(count);
+      if (seen[key]) return;
+      seen[key] = true;
+      count++;
+    });
+    return count;
+  }
+
+  function _summaryGnReceiptHintLine() {
+    var dateLabel = 'Ngày ' + _formatDateShort(_recordDate());
+    if (_countGnReceiptsForDate(_recordDate()) > 0) {
+      return dateLabel + ' · Có phiếu giao nhận mủ · fh63';
+    }
+    return dateLabel + ' · Không có phiếu giao nhận mủ · fh63';
+  }
+
+  function _gnTotalsRowToWeighTotals(row) {
+    if (!row) return _emptyWeighTotals();
+    var lf = parseFloat(row.latex_fresh_kg) || 0;
+    var cf = parseFloat(row.coag_fresh_kg) || 0;
+    var ld = parseFloat(row.latex_dry_kg) || 0;
+    var cd = parseFloat(row.coag_dry_kg) || 0;
+    return {
+      latex_fresh: lf,
+      coag_fresh: cf,
+      latex_dry: ld,
+      coag_dry: cd,
+      total_fresh: parseFloat(row.total_fresh_kg) || (lf + cf),
+      total_dry: parseFloat(row.total_dry_kg) || (ld + cd),
+      row_count: parseInt(row.receipt_count, 10) || 0
+    };
+  }
+
+  function _allocatedGnHintSuffix(row) {
+    if (!row || !(parseInt(row.receipt_count, 10) > 0)) return '';
+    var sessLabel = summarySession === '__all__' ? 'Tất cả phiên' : ('Phiên ' + summarySession);
+    return ' · GN ' + sessLabel + ': ' + row.receipt_count + ' phiếu';
+  }
+
+  async function _fetchGnDeliveryTotalsFromView(dateStr, teamId, sessionFilter) {
+    if (!dateStr || !teamId || !_isOnline()) return null;
+    var url = '/api/harvest/delivery-totals?date=' + encodeURIComponent(dateStr) +
+      '&team=' + encodeURIComponent(teamId);
+    if (sessionFilter && sessionFilter !== '__all__') {
+      url += '&session=' + encodeURIComponent(sessionFilter);
+    }
+    try {
+      var res = await fetch(url);
+      var body = await res.json().catch(function () { return {}; });
+      if (!res.ok || body.success === false) return null;
+      return body.data || null;
+    } catch (e) {
+      console.warn('fetchGnDeliveryTotals:', e.message);
+      return null;
+    }
+  }
+
+  function _allocFooterCacheKey() {
+    return [_recordDate(), summarySession, _summaryTeamIdForAllocation() || ''].join('|');
+  }
+
+  /** kg sau phân bổ = kg dòng gốc × (tổng GN cột ÷ tổng tab gốc cột). */
+  function _scaleSummaryTotalsByFooterRatio(t, origGrand, allocGrand) {
+    var out = { row_count: t.row_count || 0 };
+    _SUMMARY_KG_COLS.forEach(function (k) {
+      var origCol = parseFloat(origGrand[k]) || 0;
+      var allocCol = parseFloat(allocGrand[k]) || 0;
+      var val = parseFloat(t[k]) || 0;
+      out[k] = origCol > 0 ? val * allocCol / origCol : 0;
+    });
+    return out;
+  }
+
+  function _renderAllocatedKgBodyRows(rows, mode, origGrand, allocGrand) {
+    var showTeam = summaryTeam === '__all__';
+    var html = [];
+    var stt = 0;
+    var lastTeam = null;
+    var labelColspan = _summaryLabelColspan(mode);
+    var teamSub = _emptyWeighTotals();
+
+    function _kgCells(t) {
+      var cells = '';
+      _SUMMARY_KG_COLS.forEach(function (k) {
+        cells += '<td>' + _fmtSummaryKg(t[k]) + '</td>';
+      });
+      return cells;
+    }
+
+    function _flushSubtotal(teamId) {
+      if (!showTeam || !lastTeam) return;
+      html.push('<tr class="fh-summary-subtotal">' +
+        '<td colspan="' + labelColspan + '" class="fh-sum-text">Cộng ' + _escapeHtml(_teamNameById(teamId)) + '</td>' +
+        _kgCells(teamSub) + '</tr>');
+      teamSub = _emptyWeighTotals();
+    }
+
+    rows.forEach(function (row) {
+      var tid = row.team_id || '';
+      if (showTeam && lastTeam !== null && tid !== lastTeam) _flushSubtotal(lastTeam);
+      lastTeam = tid;
+      stt++;
+      var scaled = _scaleSummaryTotalsByFooterRatio(row.totals, origGrand, allocGrand);
+      if (showTeam) _mergeWeighTotals(teamSub, scaled);
+
+      html.push('<tr>');
+      html.push('<td style="text-align:center;">' + stt + '</td>');
+      if (showTeam) html.push('<td class="fh-sum-text">' + _escapeHtml(row.team_name) + '</td>');
+      if (mode === 'section') {
+        html.push('<td class="fh-sum-text"><strong>' + _escapeHtml(row.section_code) + '</strong></td>');
+        html.push('<td class="fh-sum-text">' + _escapeHtml(row.lot_code || '—') + '</td>');
+        html.push('<td style="text-align:center;">' + _sessionBadge(row.session) + '</td>');
+      } else if (mode === 'lot') {
+        html.push('<td class="fh-sum-text"><strong>' + _escapeHtml(row.lot_code) + '</strong></td>');
+      } else {
+        html.push('<td class="fh-sum-text">' + _escapeHtml(row.worker_id) + '</td>');
+        html.push('<td class="fh-sum-text">' + _escapeHtml(row.worker_name) + '</td>');
+      }
+      html.push(_kgCells(scaled));
+      html.push('</tr>');
+    });
+
+    if (showTeam && lastTeam) _flushSubtotal(lastTeam);
+    return { html: html.join(''), labelColspan: labelColspan };
+  }
+
+  function _paintAllocatedSummaryBodyRows() {
+    var body = _el('fhSummaryAllocatedBody');
+    if (!body) return;
+    _readSummaryFilters();
+    var view = _buildSummaryRowsForView();
+    var mode = view.mode;
+    var rows = view.rows;
+    if (!rows.length) {
+      var colSpan = _summaryLabelColspan(mode) + 6;
+      body.innerHTML = '<tr class="fh-sum-empty"><td colspan="' + colSpan + '">' +
+        _escapeHtml('Chưa có sản lượng cân — ' + _summaryDateLabelNow()) + '</td></tr>';
+      return;
+    }
+    var origGrand = _renderSummaryBodyRows(rows, mode, false).grand;
+    var cacheKey = _allocFooterCacheKey();
+    if (_allocatedGnFooterCache && _allocatedGnFooterCacheKey === cacheKey) {
+      body.innerHTML = _renderAllocatedKgBodyRows(rows, mode, origGrand, _allocatedGnFooterCache).html;
+    } else {
+      body.innerHTML = _renderSummaryBodyRows(rows, mode, true).html;
+    }
+  }
+
+  function _updateAllocatedSummaryFooter(totals, blankKg) {
+    var foot = _el('fhSummaryAllocatedFoot');
+    if (!foot) return;
+    _readSummaryFilters();
+    var mode = summaryViewMode === 'worker' ? 'worker'
+      : (summaryViewMode === 'lot' ? 'lot' : 'section');
+    foot.innerHTML = '<tr class="fh-summary-grand fh-summary-grand-allocated">' +
+      _summaryTotalsCells(totals || _emptyWeighTotals(), _summaryLabelColspan(mode),
+        'TỔNG CỘNG (sau phân bổ)', !!blankKg) + '</tr>';
+  }
+
+  /** Tab sau phân bổ — kg dòng = kg tab gốc × tỉ lệ cột (tổng GN ÷ tổng gốc); footer vẫn từ GN. */
+  function _renderAllocatedSummaryPlaceholder() {
+    var head = _el('fhSummaryAllocatedHead');
+    var body = _el('fhSummaryAllocatedBody');
+    var hint = _el('fhSummaryHintAllocated');
+    if (!head || !body) return;
+
+    _readSummaryFilters();
+    var view = _buildSummaryRowsForView();
+    var mode = view.mode;
+    var showTeam = view.showTeam;
+
+    if (hint) {
+      hint.textContent = _summaryGnReceiptHintLine();
+    }
+    head.innerHTML = _summaryHeadHtml(mode, showTeam);
+    body.setAttribute('data-fh-allocated', '1');
+    _paintAllocatedSummaryBodyRows();
+
+    _updateAllocatedSummaryFooter(_emptyWeighTotals(), true);
+    _refreshAllocatedGnFooterFromView();
+  }
+
+  function _refreshAllocatedGnFooterFromView() {
+    var seq = ++_gnFooterSeq;
+    var snapshotDate = _recordDate();
+    var snapshotSession = summarySession;
+    _readSummaryFilters();
+    var teamId = _summaryTeamIdForAllocation();
+
+    _updateAllocatedSummaryFooter(_emptyWeighTotals(), true);
+
+    if (!teamId) {
+      var hintEl = _el('fhSummaryHintAllocated');
+      if (hintEl) {
+        hintEl.textContent = _summaryGnReceiptHintLine() + ' · Chọn trạm SX để tổng GN';
+      }
+      return;
+    }
+    if (!_isOnline()) return;
+
+    _fetchGnDeliveryTotalsFromView(snapshotDate, teamId, snapshotSession).then(function (row) {
+      if (seq !== _gnFooterSeq) return;
+      if (_recordDate() !== snapshotDate) return;
+      if (summarySession !== snapshotSession) return;
+      var hintEl = _el('fhSummaryHintAllocated');
+      if (hintEl) {
+        hintEl.textContent = _summaryGnReceiptHintLine() + _allocatedGnHintSuffix(row);
+      }
+      if (row && parseInt(row.receipt_count, 10) > 0) {
+        var gnTotals = _gnTotalsRowToWeighTotals(row);
+        _allocatedGnFooterCache = gnTotals;
+        _allocatedGnFooterCacheKey = _allocFooterCacheKey();
+        _updateAllocatedSummaryFooter(gnTotals, false);
+        _paintAllocatedSummaryBodyRows();
+      } else {
+        _allocatedGnFooterCache = null;
+        _allocatedGnFooterCacheKey = '';
+        _updateAllocatedSummaryFooter(_emptyWeighTotals(), true);
+      }
+    }).catch(function () { /* ignore */ });
+  }
+
+  function _syncSummaryFiltersFromToolbar() {
+    var teamEl = _el('fhTeamFilter');
+    var sumTeamEl = _el('fhSummaryTeam');
+    if (!teamEl || !teamEl.value || !sumTeamEl) return;
+    var tid = teamEl.value;
+    var opts = sumTeamEl.options;
+    for (var i = 0; i < opts.length; i++) {
+      if (opts[i].value === tid) {
+        sumTeamEl.value = tid;
+        summaryTeam = tid;
+        return;
+      }
+    }
+  }
+
+  function _refreshSummaryTablesNow() {
+    _readSummaryFilters();
+    _syncSummaryFiltersFromToolbar();
+    _resolveSummaryPanelTab();
+    _syncSummaryTabUi(_isSummaryTabAllocated());
+    _renderOriginalYieldSummary();
+    _renderAllocatedYieldSummaryShell();
   }
 
   function _setSaveButtonBusy(busy) {
@@ -175,7 +446,89 @@ const TabFieldHarvest = (function () {
     btn.textContent = busy ? '⏳ Đang lưu...' : '💾 Lưu phân công';
   }
   function _el(id) { return document.getElementById(id); }
-  function _today() { return new Date().toISOString().slice(0, 10); }
+  function _today() {
+    if (typeof Permissions !== 'undefined' && Permissions.todayDateStr) {
+      return Permissions.todayDateStr();
+    }
+    return _isoDate(new Date());
+  }
+
+  function _canWriteRecordDate(dateStr) {
+    dateStr = String(dateStr || _dateVal()).slice(0, 10);
+    var today = _today();
+    if (dateStr === today) return true;
+    if (typeof Permissions !== 'undefined') {
+      if (typeof Permissions.isSanxuatAdmin === 'function' && Permissions.isSanxuatAdmin()) {
+        return true;
+      }
+      if (typeof Permissions.canWriteSanxuatDate === 'function') {
+        return Permissions.canWriteSanxuatDate(dateStr);
+      }
+    }
+    return false;
+  }
+
+  function _isRecordDayReadOnly() {
+    return !_canWriteRecordDate(_dateVal());
+  }
+
+  function _assertRecordDayWrite(actionLabel) {
+    if (!_isRecordDayReadOnly()) return true;
+    var msg = typeof Permissions.sanxuatDateWriteMessage === 'function'
+      ? Permissions.sanxuatDateWriteMessage(_dateVal())
+      : ('Không được ' + (actionLabel || 'sửa') + ' dữ liệu ngày trước — liên hệ admin.');
+    _toast(msg, 'error');
+    return false;
+  }
+
+  function _auditUserSnapshot(existingMeta) {
+    var u = _user();
+    var now = new Date().toISOString();
+    var uid = u ? (u.id || u.uid || u.username || null) : null;
+    var uname = u ? (u.display_name || u.ho_ten || u.fullName || u.username || String(uid || '')) : null;
+    var prev = existingMeta && typeof existingMeta === 'object' ? existingMeta : {};
+    var hadCreate = !!(prev.created_by || prev.created_at);
+    return {
+      created_by: hadCreate ? prev.created_by : uid,
+      created_by_name: hadCreate ? prev.created_by_name : uname,
+      created_at: hadCreate ? prev.created_at : now,
+      updated_by: uid,
+      updated_by_name: uname,
+      updated_at: now
+    };
+  }
+
+  function _syncRecordDayGuard() {
+    var readonly = _isRecordDayReadOnly();
+    var panel = _el('fhAssignPanel');
+    var quickPanel = _el('fhQuickWeighPanel');
+    var weighPanel = _el('fhWeighPanel');
+    if (panel) panel.classList.toggle('fh-day-readonly', readonly);
+    if (quickPanel) quickPanel.classList.toggle('fh-day-readonly', readonly);
+    if (weighPanel) weighPanel.classList.toggle('fh-day-readonly', readonly);
+
+    ['fhDayReadonlyBanner', 'fhWeighReadonlyBanner', 'fhQuickReadonlyBanner'].forEach(function (id) {
+      var b = _el(id);
+      if (!b) return;
+      b.style.display = readonly ? 'block' : 'none';
+      if (readonly) {
+        b.textContent = typeof Permissions !== 'undefined' && Permissions.sanxuatDateWriteMessage
+          ? Permissions.sanxuatDateWriteMessage(_dateVal())
+          : ('Ngày ' + _formatDateShort(_dateVal()) + ' — chỉ xem, không được sửa.');
+      }
+    });
+
+    document.querySelectorAll('.fh-write-action').forEach(function (btn) {
+      if (readonly) {
+        btn.style.display = 'none';
+        btn.disabled = true;
+      } else {
+        btn.style.display = '';
+        btn.disabled = false;
+      }
+    });
+
+  }
 
   function _offlineReady() {
     return typeof FieldHarvestOffline !== 'undefined';
@@ -592,6 +945,22 @@ const TabFieldHarvest = (function () {
     return meta;
   }
 
+  /** Chỉ lấy dòng cân của công nhân cạo — tránh cộng trùng trút/bốc khi tổng hợp theo phần cạo/lô. */
+  function _isTapperWeighing(w) {
+    var meta = _weighingMeta(w);
+    var roles = meta.roles || [];
+    if (roles.length) {
+      return roles.some(function (r) { return r.role === 'tapper'; });
+    }
+    return !!(meta.weigh_detail || meta.section_total_fresh_kg);
+  }
+
+  function _weighingsForAggregatedSummary() {
+    var pool = _weighingsForSummary();
+    if (summaryViewMode === 'worker') return pool;
+    return pool.filter(_isTapperWeighing);
+  }
+
   /** Luôn có trạm SX (mặc định Trạm Lai Khê) trước khi render phân công. */
   function _ensureProductionTeamSelected() {
     var el = _el('fhTeamFilter');
@@ -654,7 +1023,7 @@ const TabFieldHarvest = (function () {
     _ensureProductionTeamSelected();
     if (!assignments.length) {
       if (!_assignDraftCount()) {
-        _setSessionFilter(_sessionForRecordDate(_dateVal()));
+        _setSessionFilter(_sessionForRecordDate(_recordDate()));
       }
       return;
     }
@@ -744,7 +1113,11 @@ const TabFieldHarvest = (function () {
       var num = String(team.name || '').match(/\d+/);
       if (num) keys[num[0]] = true;
     }
-    if (tid === 'team-lk') keys.LK = true;
+    if (tid === 'team-lk') {
+      keys.LK = true;
+      keys['Trạm Lai Khê'] = true;
+      keys['Tram Lai Khe'] = true;
+    }
     return Object.keys(keys);
   }
 
@@ -1730,7 +2103,50 @@ const TabFieldHarvest = (function () {
 
   function _dateVal() {
     var el = _el('fhRecordDate');
-    return (el && el.value) ? el.value : _today();
+    if (el && el.value) return el.value;
+    if (_fhLastRecordDate) return _fhLastRecordDate;
+    return _today();
+  }
+
+  /** Ngày trên ô chọn — luôn ưu tiên picker, không dùng ngày cũ trong bộ nhớ. */
+  function _recordDate() {
+    return _dateVal();
+  }
+
+  function _dateNeedsReload() {
+    return _recordDate() !== _loadedRecordDate;
+  }
+
+  function _markRecordDateLoaded(dateStr) {
+    dateStr = String(dateStr || _recordDate()).slice(0, 10);
+    _loadedRecordDate = dateStr;
+    _fhLastRecordDate = dateStr;
+    var dateEl = _el('fhRecordDate');
+    if (dateEl) dateEl.value = dateStr;
+  }
+
+  function _summaryDateLabelNow() {
+    _readSummaryFilters();
+    return _summaryDateRange(summaryPeriod, _recordDate()).label;
+  }
+
+  function _shiftIsoDate(iso, deltaDays) {
+    var parts = String(iso || _today()).split('-');
+    var y = parseInt(parts[0], 10);
+    var m = parseInt(parts[1], 10) - 1;
+    var d = parseInt(parts[2], 10);
+    var dt = new Date(y, m, d);
+    dt.setDate(dt.getDate() + deltaDays);
+    return dt.getFullYear() + '-' +
+      String(dt.getMonth() + 1).padStart(2, '0') + '-' +
+      String(dt.getDate()).padStart(2, '0');
+  }
+
+  async function shiftRecordDate(deltaDays) {
+    var dateEl = _el('fhRecordDate');
+    if (!dateEl || !deltaDays) return;
+    dateEl.value = _shiftIsoDate(dateEl.value || _today(), deltaDays);
+    await onDateChange();
   }
 
   function _drcFromTsc(materialType, tsc) {
@@ -1906,7 +2322,7 @@ const TabFieldHarvest = (function () {
 
   async function loadAssignments(opts) {
     opts = opts || {};
-    var date = _dateVal();
+    var date = _recordDate();
     var memDraft = (!opts.clearDraft && _assignDraftCount())
       ? JSON.parse(JSON.stringify(assignDraft)) : null;
     assignDraft = {};
@@ -1962,12 +2378,14 @@ const TabFieldHarvest = (function () {
   }
 
   async function loadWeighings() {
+    var seq = ++_weighLoadSeq;
     weighDraft = {};
-    var date = _dateVal();
+    var date = _recordDate();
     var fromCache = false;
     try {
       if (_isOnline()) {
         var snap = await _db().collection('fieldWorkerWeighings').where('record_date', '==', date).get();
+        if (seq !== _weighLoadSeq) return;
         weighings = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
         if (_offlineReady()) await FieldHarvestOffline.saveWeighingsForDate(date, weighings);
       } else {
@@ -1976,17 +2394,21 @@ const TabFieldHarvest = (function () {
     } catch (e) {
       fromCache = true;
     }
+    if (seq !== _weighLoadSeq) return;
     if (fromCache && _offlineReady()) {
       weighings = await FieldHarvestOffline.getWeighingsForDate(date);
     } else if (fromCache) {
       weighings = [];
     }
+    if (seq !== _weighLoadSeq) return;
     try {
       renderAssignmentStats();
     } catch (e) {
       console.warn('renderAssignmentStats:', e.message);
     }
     await _refreshYieldSummary();
+    if (seq !== _weighLoadSeq) return;
+    _markRecordDateLoaded(date);
     if (weighSectionId) {
       weighDraft[weighSectionId] = _buildWeighDraft(weighSectionId);
       renderSectionWeighPanel();
@@ -2323,6 +2745,7 @@ const TabFieldHarvest = (function () {
     tbody.innerHTML = html.join('');
     _bindAssignRowEvents();
     renderAssignmentStats();
+    _syncRecordDayGuard();
   }
 
   function _weighingsForSection(sectionId) {
@@ -2541,6 +2964,8 @@ const TabFieldHarvest = (function () {
 
   function _renderWeighBinRows(wid, kind, bins) {
     var isLatex = kind === 'latex';
+    var ro = _isRecordDayReadOnly();
+    var roAttr = ro ? ' disabled readonly' : '';
     var html = [];
     var i;
     for (i = 0; i < bins.length; i++) {
@@ -2551,22 +2976,22 @@ const TabFieldHarvest = (function () {
         : _parseCoagDrcPct(b.drc_pct);
       html.push('<tr data-wid="' + wid + '" data-kind="' + kind + '" data-bin="' + i + '">' +
         '<td>' + (i + 1) + '</td>' +
-        '<td><select class="fh-w-sel" data-wid="' + wid + '" data-kind="' + kind + '" data-bin="' + i + '" data-weigh-field="material_type">' +
+        '<td><select class="fh-w-sel" data-wid="' + wid + '" data-kind="' + kind + '" data-bin="' + i + '" data-weigh-field="material_type"' + (ro ? ' disabled' : '') + '>' +
         _matTypeOptions(b.material_type) + '</select></td>' +
         '<td><input type="number" step="' + FH_WEIGH_KG_STEP + '" min="0" class="fh-w-inp" data-wid="' + wid + '" data-kind="' + kind + '" data-bin="' + i +
-        '" data-weigh-field="gross_kg" value="' + (b.gross_kg !== '' && b.gross_kg != null ? _formatWeighKg(b.gross_kg) : '') + '"></td>' +
+        '" data-weigh-field="gross_kg" value="' + (b.gross_kg !== '' && b.gross_kg != null ? _formatWeighKg(b.gross_kg) : '') + '"' + roAttr + '></td>' +
         '<td><input type="number" step="' + FH_WEIGH_KG_STEP + '" min="0" class="fh-w-inp" data-wid="' + wid + '" data-kind="' + kind + '" data-bin="' + i +
-        '" data-weigh-field="tare_kg" value="' + (b.tare_kg != null && b.tare_kg !== '' ? _formatWeighKg(b.tare_kg) : _formatWeighKg(FH_DEFAULT_TARE_KG)) + '"></td>' +
+        '" data-weigh-field="tare_kg" value="' + (b.tare_kg != null && b.tare_kg !== '' ? _formatWeighKg(b.tare_kg) : _formatWeighKg(FH_DEFAULT_TARE_KG)) + '"' + roAttr + '></td>' +
         '<td class="fh-w-net"><span class="fh-w-net-val">' + (net > 0 ? net.toFixed(1) : '—') + '</span></td>');
       if (isLatex) {
         html.push('<td><input type="number" step="0.1" min="0" max="100" class="fh-w-inp fh-w-inp-tsc" data-wid="' + wid +
           '" data-kind="' + kind + '" data-bin="' + i + '" data-weigh-field="tsc_pct" value="' +
-          (b.tsc_pct !== '' && b.tsc_pct != null ? b.tsc_pct : '') + '"></td>' +
+          (b.tsc_pct !== '' && b.tsc_pct != null ? b.tsc_pct : '') + '"' + roAttr + '></td>' +
           '<td class="fh-w-drc"><span class="fh-w-drc-val">' + (net > 0 ? Number(drc || 0).toFixed(1) : '—') + '</span></td>');
       } else {
         html.push('<td><input type="number" step="0.1" min="0" max="100" class="fh-w-inp fh-w-inp-tsc" data-wid="' + wid +
           '" data-kind="' + kind + '" data-bin="' + i + '" data-weigh-field="drc_pct" value="' +
-          (b.drc_pct != null && b.drc_pct !== '' ? b.drc_pct : FH_DEFAULT_COAG_DRC) + '"></td>');
+          (b.drc_pct != null && b.drc_pct !== '' ? b.drc_pct : FH_DEFAULT_COAG_DRC) + '"' + roAttr + '></td>');
       }
       html.push('</tr>');
     }
@@ -2591,8 +3016,12 @@ const TabFieldHarvest = (function () {
     var code = section ? (section.section_code || section.id) : weighSectionId;
     if (title) {
       var lot = section ? _lotFromCfg(assignDraft[weighSectionId] || _configForSection(section), section) : '';
-      title.textContent = '⚖️ Cân mủ — ' + code + (lot ? (' · Lô ' + lot) : '');
+      var roSuffix = _isRecordDayReadOnly() ? ' · chỉ xem' : '';
+      title.textContent = '⚖️ Cân mủ — ' + code + (lot ? (' · Lô ' + lot) : '') + roSuffix;
     }
+
+    var hint = _el('fhWeighPanelHint');
+    if (hint) hint.style.display = _isRecordDayReadOnly() ? 'none' : '';
 
     if (!weighDraft[weighSectionId]) {
       weighDraft[weighSectionId] = _buildWeighDraft(weighSectionId);
@@ -2604,6 +3033,7 @@ const TabFieldHarvest = (function () {
     }
 
     var html = [];
+    var readonly = _isRecordDayReadOnly();
     workers.forEach(function (w) {
       var wdata = weighDraft[weighSectionId].workers[w.worker_id];
       if (!wdata) {
@@ -2613,11 +3043,11 @@ const TabFieldHarvest = (function () {
       html.push('<div class="fh-weigh-worker-block" id="fh-worker-' + w.worker_id + '">' +
         '<div class="fh-weigh-worker-title">' +
         '<h4>👤 ' + _escapeHtml(w.name) + ' <span style="font-weight:normal;color:#64748b;">(' + (w.yield_share_pct || 0) + '%)</span></h4>' +
-        '<div class="fh-weigh-bin-ctrl">Thùng chứa: ' +
+        (readonly ? '' : ('<div class="fh-weigh-bin-ctrl">Thùng chứa: ' +
         '<button type="button" onclick="TabFieldHarvest.setWorkerBinCount(\'' + weighSectionId + '\',\'' + w.worker_id + '\',-1)">−</button>' +
         '<strong>' + wdata.binCount + '</strong>' +
         '<button type="button" onclick="TabFieldHarvest.setWorkerBinCount(\'' + weighSectionId + '\',\'' + w.worker_id + '\',1)">+</button>' +
-        '</div></div>');
+        '</div>')) + '</div>');
 
       html.push('<div class="fh-weigh-subtitle latex">Mủ nước</div>' +
         '<table class="fh-weigh-table"><thead><tr>' +
@@ -2637,9 +3067,11 @@ const TabFieldHarvest = (function () {
     });
     content.innerHTML = html.join('');
     _bindWeighPanelEvents();
+    _syncRecordDayGuard();
   }
 
   function setWorkerBinCount(sectionId, workerId, delta) {
+    if (_isRecordDayReadOnly()) return;
     _collectWeighDraftFromDom();
     if (!weighDraft[sectionId] || !weighDraft[sectionId].workers[workerId]) return;
     var w = weighDraft[sectionId].workers[workerId];
@@ -2673,6 +3105,7 @@ const TabFieldHarvest = (function () {
     if (assignPanel) assignPanel.style.display = 'none';
     if (weighPanel) weighPanel.style.display = 'block';
     renderSectionWeighPanel();
+    _syncRecordDayGuard();
   }
 
   function closeSectionWeigh() {
@@ -2690,8 +3123,59 @@ const TabFieldHarvest = (function () {
     return String(sectionId) + '|' + String(workerId);
   }
 
-  function _emptyQuickCoagBin() {
-    return { material_type: 1, gross_kg: '', tare_kg: FH_QUICK_COAG_TARE_KG, drc_pct: FH_DEFAULT_COAG_DRC };
+  function _emptyQuickCoag() {
+    return {
+      block_kg: '',
+      cup_kg: '',
+      scrap_kg: '',
+      misc_kg: '',
+      drc_pct: FH_DEFAULT_COAG_DRC
+    };
+  }
+
+  /** KL tươi mủ đông: cân nhanh nhập trực tiếp (tare=0); bản cũ có bì thì lấy ròng. */
+  function _coagBinFreshKg(b) {
+    if (!b) return 0;
+    var tare = parseFloat(b.tare_kg);
+    if (isNaN(tare) || tare <= 0) {
+      if (b.gross_kg === '' || b.gross_kg == null) return 0;
+      return parseFloat(b.gross_kg) || 0;
+    }
+    return _netKg(b.gross_kg, b.tare_kg);
+  }
+
+  function _quickCoagFromCoagBins(bins, fallbackDrc) {
+    var out = _emptyQuickCoag();
+    (bins || []).forEach(function (b) {
+      var fresh = _coagBinFreshKg(b);
+      if (!(fresh > 0)) return;
+      var type = b.coag_type;
+      if (type) {
+        FH_QUICK_COAG_TYPES.forEach(function (t) {
+          if (t.key === type) out[t.field] = fresh;
+        });
+      } else {
+        out.block_kg = (parseFloat(out.block_kg) || 0) + fresh;
+      }
+      if (b.drc_pct != null && b.drc_pct !== '') out.drc_pct = b.drc_pct;
+    });
+    if (fallbackDrc != null && fallbackDrc !== '' && !isNaN(parseFloat(fallbackDrc))) {
+      out.drc_pct = parseFloat(fallbackDrc);
+    }
+    return out;
+  }
+
+  function _coagBinsFromQuickCoag(coag) {
+    var drc = coag.drc_pct != null && coag.drc_pct !== '' ? coag.drc_pct : FH_DEFAULT_COAG_DRC;
+    return FH_QUICK_COAG_TYPES.map(function (t) {
+      return {
+        coag_type: t.key,
+        material_type: 1,
+        gross_kg: coag[t.field] !== '' && coag[t.field] != null ? coag[t.field] : '',
+        tare_kg: 0,
+        drc_pct: drc
+      };
+    });
   }
 
   function _quickRowFromWorker(sectionId, sectionCode, worker) {
@@ -2705,24 +3189,18 @@ const TabFieldHarvest = (function () {
       worker_name: worker.name,
       yield_share_pct: worker.yield_share_pct,
       latex: _emptyLatexBin(),
-      coag: _emptyQuickCoagBin()
+      coag: _emptyQuickCoag()
     };
     if (!rec) return row;
     var wdata = _workerWeighFromRecord(rec);
     var lb = wdata.latex_bins[0] || _emptyLatexBin();
-    var cb = wdata.coag_bins[0] || _emptyQuickCoagBin();
     row.latex = {
       material_type: parseInt(lb.material_type, 10) || 1,
       gross_kg: lb.gross_kg !== '' && lb.gross_kg != null ? lb.gross_kg : '',
       tare_kg: lb.tare_kg != null && lb.tare_kg !== '' ? lb.tare_kg : FH_DEFAULT_TARE_KG,
       tsc_pct: lb.tsc_pct != null && lb.tsc_pct !== '' ? lb.tsc_pct : ''
     };
-    row.coag = {
-      material_type: parseInt(cb.material_type, 10) || 1,
-      gross_kg: cb.gross_kg !== '' && cb.gross_kg != null ? cb.gross_kg : '',
-      tare_kg: cb.tare_kg != null && cb.tare_kg !== '' ? cb.tare_kg : FH_QUICK_COAG_TARE_KG,
-      drc_pct: cb.drc_pct != null && cb.drc_pct !== '' ? cb.drc_pct : FH_DEFAULT_COAG_DRC
-    };
+    row.coag = _quickCoagFromCoagBins(wdata.coag_bins, rec.coag_drc_pct);
     return row;
   }
 
@@ -2750,12 +3228,18 @@ const TabFieldHarvest = (function () {
       tr.querySelectorAll('[data-qfield]').forEach(function (el) {
         var kind = el.getAttribute('data-kind');
         var field = el.getAttribute('data-qfield');
-        var bin = kind === 'coag' ? row.coag : row.latex;
-        if (field === 'material_type') bin[field] = parseInt(el.value, 10) || 1;
-        else if (field === 'gross_kg' || field === 'tare_kg') {
-          bin[field] = el.value === '' ? '' : _roundWeighKg(el.value);
-        } else if (field === 'drc_pct') bin[field] = el.value === '' ? '' : parseFloat(el.value);
-        else if (field === 'tsc_pct') bin[field] = el.value;
+        if (kind === 'latex') {
+          var bin = row.latex;
+          if (field === 'material_type') bin[field] = parseInt(el.value, 10) || 1;
+          else if (field === 'gross_kg' || field === 'tare_kg') {
+            bin[field] = el.value === '' ? '' : _roundWeighKg(el.value);
+          } else if (field === 'tsc_pct') bin[field] = el.value;
+        } else if (kind === 'coag') {
+          if (field === 'drc_pct') row.coag.drc_pct = el.value === '' ? '' : parseFloat(el.value);
+          else if (row.coag[field] !== undefined) {
+            row.coag[field] = el.value === '' ? '' : _roundWeighKg(el.value);
+          }
+        }
       });
     });
   }
@@ -2779,7 +3263,8 @@ const TabFieldHarvest = (function () {
       });
       el.addEventListener('change', function () {
         var field = el.getAttribute('data-qfield');
-        if (field === 'gross_kg' || field === 'tare_kg') {
+        if (field === 'gross_kg' || field === 'tare_kg' ||
+            field === 'block_kg' || field === 'cup_kg' || field === 'scrap_kg' || field === 'misc_kg') {
           var rounded = _roundWeighKg(el.value);
           if (rounded !== '') el.value = _formatWeighKg(rounded);
         }
@@ -2792,6 +3277,11 @@ const TabFieldHarvest = (function () {
   function _renderQuickWeighRow(row) {
     var key = _quickRowKey(row.section_id, row.worker_id);
     var latexNet = _netKg(row.latex.gross_kg, row.latex.tare_kg);
+    var coagCells = FH_QUICK_COAG_TYPES.map(function (t) {
+      var val = row.coag[t.field];
+      return '<td><input type="number" step="' + FH_WEIGH_KG_STEP + '" min="0" class="fh-q-inp fh-q-inp-kl" data-kind="coag" data-qfield="' + t.field + '" value="' +
+        (val !== '' && val != null ? _formatWeighKg(val) : '') + '"></td>';
+    }).join('');
     return '<tr data-qkey="' + _escapeHtml(key) + '">' +
       '<td class="fh-q-pc">' + _escapeHtml(row.section_code || row.section_id) + '</td>' +
       '<td class="fh-q-worker">' + _escapeHtml(row.worker_name) +
@@ -2805,12 +3295,7 @@ const TabFieldHarvest = (function () {
       '<td class="fh-q-net fh-q-latex-net">' + (latexNet > 0 ? latexNet.toFixed(1) : '—') + '</td>' +
       '<td><input type="number" step="0.1" min="0" max="100" class="fh-q-inp fh-q-inp-tsc" data-kind="latex" data-qfield="tsc_pct" value="' +
       (row.latex.tsc_pct !== '' && row.latex.tsc_pct != null ? row.latex.tsc_pct : '') + '"></td>' +
-      '<td><input type="number" step="' + FH_WEIGH_KG_STEP + '" min="0" class="fh-q-inp fh-q-inp-kl" data-kind="coag" data-qfield="gross_kg" value="' +
-      (row.coag.gross_kg !== '' && row.coag.gross_kg != null ? _formatWeighKg(row.coag.gross_kg) : '') + '"></td>' +
-      '<td><select class="fh-q-sel" data-kind="coag" data-qfield="material_type">' +
-      _matTypeOptions(row.coag.material_type) + '</select></td>' +
-      '<td><input type="number" step="' + FH_WEIGH_KG_STEP + '" min="0" class="fh-q-inp" data-kind="coag" data-qfield="tare_kg" value="' +
-      _formatWeighKg(row.coag.tare_kg != null && row.coag.tare_kg !== '' ? row.coag.tare_kg : FH_QUICK_COAG_TARE_KG) + '"></td>' +
+      coagCells +
       '<td><input type="number" step="0.1" min="0" max="100" class="fh-q-inp fh-q-inp-tsc" data-kind="coag" data-qfield="drc_pct" value="' +
       (row.coag.drc_pct != null && row.coag.drc_pct !== '' ? row.coag.drc_pct : FH_DEFAULT_COAG_DRC) + '"></td>' +
       '</tr>';
@@ -2824,11 +3309,12 @@ const TabFieldHarvest = (function () {
       title.textContent = '⚡ Cân nhanh — Phiên ' + selectedSession + ' · ' + quickWeighRows.length + ' công nhân cạo';
     }
     if (!quickWeighRows.length) {
-      body.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#64748b;">Chưa có phân công cạo. Phân công và lưu trước khi cân nhanh.</td></tr>';
+      body.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#64748b;">Chưa có phân công cạo. Phân công và lưu trước khi cân nhanh.</td></tr>';
       return;
     }
     body.innerHTML = quickWeighRows.map(_renderQuickWeighRow).join('');
     _bindQuickWeighEvents();
+    _syncRecordDayGuard();
   }
 
   function _weighDraftFromQuickSectionRows(sectionId, rows) {
@@ -2842,12 +3328,7 @@ const TabFieldHarvest = (function () {
           tare_kg: r.latex.tare_kg,
           tsc_pct: r.latex.tsc_pct
         }],
-        coag_bins: [{
-          material_type: r.coag.material_type,
-          gross_kg: r.coag.gross_kg,
-          tare_kg: r.coag.tare_kg,
-          drc_pct: r.coag.drc_pct
-        }]
+        coag_bins: _coagBinsFromQuickCoag(r.coag)
       };
     });
     return draft;
@@ -2855,6 +3336,7 @@ const TabFieldHarvest = (function () {
 
   function openQuickWeigh() {
     if (!selectedTeam) { _toast('Chọn đội sản xuất trước', 'warning'); return; }
+    if (!_assertRecordDayWrite('cân nhanh')) return;
     assignDraft = _collectAllAssignStates();
     quickWeighRows = _buildQuickWeighRows();
     if (!quickWeighRows.length) {
@@ -2870,6 +3352,7 @@ const TabFieldHarvest = (function () {
     if (weighPanel) weighPanel.style.display = 'none';
     if (quickPanel) quickPanel.style.display = 'block';
     renderQuickWeighPanel();
+    _syncRecordDayGuard();
   }
 
   function closeQuickWeigh() {
@@ -2885,6 +3368,7 @@ const TabFieldHarvest = (function () {
 
   async function saveQuickWeigh() {
     if (!quickWeighActive) return;
+    if (!_assertRecordDayWrite('lưu cân nhanh')) return;
     if (!selectedTeam) { _toast('Chọn đội sản xuất trước', 'warning'); return; }
     if (!_assertTeamAllowed(selectedTeam, 'cân nhanh')) return;
     if (typeof Permissions !== 'undefined' && Permissions.canWriteFieldHarvest && !Permissions.canWriteFieldHarvest()) {
@@ -3069,21 +3553,22 @@ const TabFieldHarvest = (function () {
     return { merged: merged, notes: notes };
   }
 
-  function _assignmentPayload(date, sectionId, wid, m, notes, cfg) {
+  function _assignmentPayload(date, sectionId, wid, m, notes, cfg, existingRow) {
+    var prevMeta = existingRow ? _parseMeta(existingRow.metadata) : null;
     return {
       record_date: date,
       tapping_section_id: sectionId,
       worker_id: wid,
       assignment_role: m.roles[0].role,
       notes: notes,
-      metadata: {
+      metadata: Object.assign({
         tapping_session: selectedSession,
         work_mode: cfg.work_mode,
         slots: cfg.slots,
         roles: m.roles,
         yield_share_pct: m.roles[0].yield_share_pct,
         lot_code: cfg.lot_code || null
-      }
+      }, _auditUserSnapshot(prevMeta))
     };
   }
 
@@ -3141,10 +3626,11 @@ const TabFieldHarvest = (function () {
     var pack = _mergeWorkersFromCfg(cfg);
     Object.keys(pack.merged).forEach(function (wid) {
       var m = pack.merged[wid];
+      var existingRow = (existingRows || []).find(function (r) { return String(r.worker_id) === String(wid); });
       ops.push({
         type: 'set',
         ref: _db().collection('sectionWorkerAssignments').doc(_assignmentDocId(date, sectionId, wid)),
-        data: _assignmentPayload(date, sectionId, wid, m, pack.notes, cfg)
+        data: _assignmentPayload(date, sectionId, wid, m, pack.notes, cfg, existingRow)
       });
     });
     return ops;
@@ -3206,9 +3692,10 @@ const TabFieldHarvest = (function () {
       var pack = _mergeWorkersFromCfg(cfg);
       var upsertRows = Object.keys(pack.merged).map(function (wid) {
         var m = pack.merged[wid];
+        var existingRow = rows.find(function (r) { return String(r.worker_id) === String(wid); });
         return Object.assign(
           { id: _assignmentDocId(date, sectionId, wid) },
-          _assignmentPayload(date, sectionId, wid, m, pack.notes, cfg)
+          _assignmentPayload(date, sectionId, wid, m, pack.notes, cfg, existingRow)
         );
       });
       items.push({ sectionId: sectionId, deleteIds: deleteIds, rows: upsertRows });
@@ -3239,6 +3726,7 @@ const TabFieldHarvest = (function () {
       _toast('Bạn không có quyền lưu phân công', 'error');
       return;
     }
+    if (!_assertRecordDayWrite('lưu phân công')) return;
 
     var date = _dateVal();
     var priorDraft = JSON.parse(JSON.stringify(assignDraft));
@@ -3433,6 +3921,7 @@ const TabFieldHarvest = (function () {
   }
 
   async function deleteSection(sectionId) {
+    if (!_assertRecordDayWrite('xóa phân công')) return;
     var section = _findSectionById(sectionId);
     var code = (section && (section.section_code || section.section_no)) || sectionId;
     var date = _dateVal();
@@ -3497,6 +3986,7 @@ const TabFieldHarvest = (function () {
 
   async function copyFromDate() {
     if (!selectedTeam) { _toast('Chọn đội sản xuất trước', 'warning'); return; }
+    if (!_assertRecordDayWrite('nạp phân công')) return;
     if (!_assertTeamAllowed(selectedTeam, 'nạp phân công')) return;
     var srcEl = _el('fhCopyFromDate');
     var srcDate = (srcEl && srcEl.value) ? srcEl.value : '';
@@ -3583,6 +4073,9 @@ const TabFieldHarvest = (function () {
     if (data.coag_tsc_pct != null && data.coag_tsc_pct !== '') {
       meta.coag_tsc_pct = data.coag_tsc_pct;
     }
+    ['created_by_name', 'updated_by', 'updated_by_name', 'created_at', 'updated_at'].forEach(function (k) {
+      if (data[k] != null && data[k] !== '' && meta[k] == null) meta[k] = data[k];
+    });
     var out = {
       record_date: data.record_date,
       tapping_section_id: data.tapping_section_id,
@@ -3603,38 +4096,102 @@ const TabFieldHarvest = (function () {
     return out;
   }
 
+  function _weighingSessionNo(w) {
+    return w && w.session_no != null ? w.session_no : 1;
+  }
+
+  function _findWeighingLocal(sectionId, workerId, date, sessionNo) {
+    date = date || _dateVal();
+    sessionNo = sessionNo != null ? sessionNo : 1;
+    return weighings.find(function (w) {
+      return w.record_date === date &&
+        w.tapping_section_id === sectionId &&
+        String(w.worker_id) === String(workerId) &&
+        _weighingSessionNo(w) === sessionNo;
+    });
+  }
+
+  function _weighingDocId(date, sectionId, workerId, sessionNo) {
+    sessionNo = sessionNo != null ? sessionNo : 1;
+    return 'fww-' + String(date || '').replace(/-/g, '') + '-' + sectionId + '-' + workerId + '-s' + sessionNo;
+  }
+
+  async function _resolveWeighingDocId(row) {
+    var date = row.record_date;
+    var sectionId = row.tapping_section_id;
+    var workerId = row.worker_id;
+    var sessionNo = row.session_no != null ? row.session_no : 1;
+
+    var local = _findWeighingLocal(sectionId, workerId, date, sessionNo);
+    if (local && local.id && String(local.id).indexOf('local-') !== 0) {
+      return local.id;
+    }
+
+    if (_isOnline()) {
+      try {
+        var snap = await _db().collection('fieldWorkerWeighings')
+          .where('record_date', '==', date)
+          .where('tapping_section_id', '==', sectionId)
+          .where('worker_id', '==', workerId)
+          .get();
+        var i;
+        for (i = 0; i < snap.docs.length; i++) {
+          var doc = snap.docs[i];
+          if (_weighingSessionNo(doc.data()) === sessionNo) return doc.id;
+        }
+      } catch (e) {
+        console.warn('_resolveWeighingDocId:', e.message);
+      }
+    }
+
+    return _weighingDocId(date, sectionId, workerId, sessionNo);
+  }
+
   async function _saveWorkerWeighing(sectionId, workerId, payload) {
     var row = _normalizeWeighingPayload(payload);
-    var existing = weighings.find(function (w) {
-      return w.tapping_section_id === sectionId && w.worker_id === workerId;
-    });
-    if (existing && existing.id && !String(existing.id).startsWith('local-fw-')) {
-      await _db().collection('fieldWorkerWeighings').doc(existing.id).update(row);
-    } else if (_isOnline()) {
-      await _db().collection('fieldWorkerWeighings').add(row);
+    var existing = _findWeighingLocal(sectionId, workerId, row.record_date, row.session_no);
+    var prevMeta = existing ? _parseMeta(existing.metadata) : null;
+    var audit = _auditUserSnapshot(prevMeta);
+    row.metadata = Object.assign({}, row.metadata || {}, audit);
+    if (existing && existing.created_by) {
+      row.created_by = existing.created_by;
+    } else {
+      row.created_by = audit.created_by;
+    }
+    var docId = await _resolveWeighingDocId(row);
+    await _db().collection('fieldWorkerWeighings').doc(docId).set(row, { merge: true });
+    var saved = Object.assign({ id: docId }, row);
+    if (existing) {
+      var idx = weighings.indexOf(existing);
+      if (idx >= 0) weighings[idx] = saved;
+    } else {
+      weighings.push(saved);
     }
   }
 
   function _applyWeighingLocal(sectionId, workerId, payload) {
     var row = _normalizeWeighingPayload(payload);
-    var existingIdx = -1;
-    var i;
-    for (i = 0; i < weighings.length; i++) {
-      if (weighings[i].tapping_section_id === sectionId && weighings[i].worker_id === workerId) {
-        existingIdx = i;
-        break;
-      }
+    var existing = _findWeighingLocal(sectionId, workerId, row.record_date, row.session_no);
+    var localRow = Object.assign({
+      id: existing && existing.id ? existing.id : _localId('local-fw-')
+    }, row, { _offlinePending: true });
+    if (existing) {
+      var idx = weighings.indexOf(existing);
+      if (idx >= 0) weighings[idx] = localRow;
+    } else {
+      weighings.push(localRow);
     }
-    var localRow = Object.assign({ id: existingIdx >= 0 ? weighings[existingIdx].id : _localId('local-fw-') }, row, {
-      _offlinePending: true
-    });
-    if (existingIdx >= 0) weighings[existingIdx] = localRow;
-    else weighings.push(localRow);
     return localRow;
   }
 
   async function _persistSectionWeighings(sectionId, draft, opts) {
     opts = opts || {};
+    if (!_canWriteRecordDate(_dateVal())) {
+      var msg = typeof Permissions !== 'undefined' && Permissions.sanxuatDateWriteMessage
+        ? Permissions.sanxuatDateWriteMessage(_dateVal())
+        : 'Không được lưu cân mủ cho ngày trước — liên hệ admin.';
+      throw new Error(msg);
+    }
     var row = _getSectionWeighRow(sectionId);
     if (!row) throw new Error('Không tìm thấy phần cạo');
 
@@ -3663,6 +4220,11 @@ const TabFieldHarvest = (function () {
       sectionLatexDry += agg.latex_dry_kg;
       sectionCoagDry += agg.coag_dry_kg;
 
+      var prevWeigh = weighings.find(function (w) {
+        return w.tapping_section_id === sectionId && String(w.worker_id) === String(wid);
+      });
+      var weighAudit = _auditUserSnapshot(prevWeigh ? _parseMeta(prevWeigh.metadata) : null);
+
       var tapPayload = {
         record_date: date,
         tapping_section_id: sectionId,
@@ -3677,12 +4239,12 @@ const TabFieldHarvest = (function () {
         coag_dry_kg: agg.coag_dry_kg,
         total_fresh_kg: agg.total_fresh_kg,
         total_dry_kg: agg.total_dry_kg,
-        created_by: _user() ? _user().id : null,
-        metadata: {
+        created_by: prevWeigh && prevWeigh.created_by ? prevWeigh.created_by : weighAudit.created_by,
+        metadata: Object.assign({
           roles: [{ role: 'tapper', yield_share_pct: workers[wi].yield_share_pct }],
           weigh_detail: agg.weigh_detail,
           section_total_fresh_kg: agg.total_fresh_kg
-        }
+        }, weighAudit)
       };
       if (offline) {
         _applyWeighingLocal(sectionId, wid, tapPayload);
@@ -3738,6 +4300,10 @@ const TabFieldHarvest = (function () {
     for (wi = 0; wi < extraWids.length; wi++) {
       var ew = extraWids[wi];
       var b = byWorker[ew];
+      var prevExtra = weighings.find(function (w) {
+        return w.tapping_section_id === sectionId && String(w.worker_id) === String(ew);
+      });
+      var extraAudit = _auditUserSnapshot(prevExtra ? _parseMeta(prevExtra.metadata) : null);
       var extraPayload = {
         record_date: date,
         tapping_section_id: sectionId,
@@ -3752,8 +4318,11 @@ const TabFieldHarvest = (function () {
         coag_dry_kg: parseFloat(b.coag_dry_kg.toFixed(3)),
         total_fresh_kg: parseFloat(((b.latex_fresh_kg || 0) + (b.coag_fresh_kg || 0)).toFixed(3)),
         total_dry_kg: parseFloat(((b.latex_dry_kg || 0) + (b.coag_dry_kg || 0)).toFixed(3)),
-        created_by: _user() ? _user().id : null,
-        metadata: { roles: b.roles, section_total_fresh_kg: sectionLatex + sectionCoag }
+        created_by: prevExtra && prevExtra.created_by ? prevExtra.created_by : extraAudit.created_by,
+        metadata: Object.assign({
+          roles: b.roles,
+          section_total_fresh_kg: sectionLatex + sectionCoag
+        }, extraAudit)
       };
       if (offline || usedFallback) {
         _applyWeighingLocal(sectionId, ew, extraPayload);
@@ -3797,6 +4366,7 @@ const TabFieldHarvest = (function () {
 
   async function saveSectionWeigh() {
     if (!weighSectionId) return;
+    if (!_assertRecordDayWrite('lưu cân mủ')) return;
     if (!selectedTeam) { _toast('Chọn đội sản xuất trước', 'warning'); return; }
     if (!_assertTeamAllowed(selectedTeam, 'cân mủ')) return;
     if (typeof Permissions !== 'undefined' && Permissions.canWriteFieldHarvest && !Permissions.canWriteFieldHarvest()) {
@@ -3815,13 +4385,33 @@ const TabFieldHarvest = (function () {
   }
 
   async function onDateChange() {
+    if (_dateChangeBusy) {
+      _dateChangePending = true;
+      return;
+    }
+    _dateChangeBusy = true;
+    try {
+      do {
+        _dateChangePending = false;
+        await _onDateChangeCore();
+      } while (_dateChangePending);
+    } finally {
+      _dateChangeBusy = false;
+    }
+  }
+
+  async function _onDateChangeCore() {
     var dateEl = _el('fhRecordDate');
     if (_fhSaveInProgress) {
       _toast('Đang lưu phân công — vui lòng đợi xong rồi mới đổi ngày', 'warning');
       if (dateEl && _fhLastRecordDate) dateEl.value = _fhLastRecordDate;
       return;
     }
-    var newDate = (dateEl && dateEl.value) ? dateEl.value : _today();
+    var newDate = _recordDate();
+    if (newDate === _loadedRecordDate) {
+      _refreshSummaryTablesNow();
+      return;
+    }
     var draftN = _assignDraftCount();
     if (draftN > 0) {
       var discard = await showConfirm(
@@ -3839,8 +4429,15 @@ const TabFieldHarvest = (function () {
     if (weighSectionId) closeSectionWeigh();
     if (quickWeighActive) closeQuickWeigh();
     _fhLastRecordDate = newDate;
-    await loadAssignments({ clearDraft: true });
-    await loadWeighings();
+    if (dateEl) dateEl.value = newDate;
+    _refreshSummaryTablesNow();
+    var assignPromise = loadAssignments({ clearDraft: true });
+    var weighPromise = loadWeighings();
+    await weighPromise;
+    if (_recordDate() !== newDate) return;
+    await assignPromise;
+    if (_recordDate() !== newDate) return;
+    _syncRecordDayGuard();
   }
 
   async function onTeamChange() {
@@ -3915,6 +4512,87 @@ const TabFieldHarvest = (function () {
     };
   }
 
+  function _gnNormalizeDate(val) {
+    if (val == null || val === '') return '';
+    if (typeof val === 'object') {
+      if (typeof val.toDate === 'function') val = val.toDate();
+      else if (val.seconds != null) val = new Date(Number(val.seconds) * 1000);
+    }
+    if (val instanceof Date && !isNaN(val.getTime())) {
+      return val.getFullYear() + '-' +
+        String(val.getMonth() + 1).padStart(2, '0') + '-' +
+        String(val.getDate()).padStart(2, '0');
+    }
+    var s = String(val).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    var d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      return d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0');
+    }
+    return '';
+  }
+
+  function _gnDeliveriesList() {
+    var list = [];
+    if (typeof TabDelivery !== 'undefined' && TabDelivery.getDeliveries) {
+      list = TabDelivery.getDeliveries() || [];
+    }
+    if (!list.length) {
+      try {
+        list = JSON.parse(localStorage.getItem('rubberDeliveries') || '[]');
+      } catch (e) { list = []; }
+    }
+    return list;
+  }
+
+  function _gnTappingDate(d) {
+    if (!d) return '';
+    if (typeof d.tappingDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(String(d.tappingDate).trim())) {
+      return String(d.tappingDate).trim();
+    }
+    if (typeof d.tapping_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(String(d.tapping_date).trim())) {
+      return String(d.tapping_date).trim();
+    }
+    var fromDate = d.tappingDate ? _gnNormalizeDate(d.tappingDate) :
+      (d.tapping_date ? _gnNormalizeDate(d.tapping_date) : '');
+    if (fromDate) return fromDate;
+    if (typeof d.tappingTime === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(String(d.tappingTime).trim())) {
+      return String(d.tappingTime).trim();
+    }
+    return d.tappingTime ? _gnNormalizeDate(d.tappingTime) : '';
+  }
+
+  function _syncSummaryTeamForAllocation() {
+    if (summaryTeam && summaryTeam !== '__all__') return summaryTeam;
+    var toolbar = _el('fhTeamFilter');
+    if (toolbar && toolbar.value) {
+      summaryTeam = toolbar.value;
+      var sumEl = _el('fhSummaryTeam');
+      if (sumEl) {
+        var opt = sumEl.querySelector('option[value="' + summaryTeam + '"]');
+        if (opt) sumEl.value = summaryTeam;
+      }
+      return summaryTeam;
+    }
+    if (selectedTeam && selectedTeam !== '__all__') return selectedTeam;
+    return summaryTeam;
+  }
+
+  function _summaryTeamIdForAllocation() {
+    _syncSummaryTeamForAllocation();
+    if (summaryTeam && summaryTeam !== '__all__') return summaryTeam;
+    if (selectedTeam && selectedTeam !== '__all__') return selectedTeam;
+    var teamEl = _el('fhTeamFilter');
+    if (teamEl && teamEl.value) return teamEl.value;
+    return '';
+  }
+
+  function _totalsFromWeighingForSummary(w, sec) {
+    return _totalsFromWeighing(w);
+  }
+
   function _fmtSummaryKg(n) {
     var v = parseFloat(n) || 0;
     return v > 0 ? v.toFixed(2) : '—';
@@ -3984,19 +4662,21 @@ const TabFieldHarvest = (function () {
     return showTeam ? 5 : 4;
   }
 
-  function _summaryTotalsCells(t, labelColspan, label) {
+  function _summaryTotalsCells(t, labelColspan, label, blankKg) {
+    blankKg = !!blankKg;
+    var kgCell = function (n) { return blankKg ? '—' : _fmtSummaryKg(n); };
     return '<td colspan="' + labelColspan + '" class="fh-sum-text">' + _escapeHtml(label) + '</td>' +
-      '<td>' + _fmtSummaryKg(t.latex_fresh) + '</td>' +
-      '<td>' + _fmtSummaryKg(t.coag_fresh) + '</td>' +
-      '<td>' + _fmtSummaryKg(t.total_fresh) + '</td>' +
-      '<td>' + _fmtSummaryKg(t.latex_dry) + '</td>' +
-      '<td>' + _fmtSummaryKg(t.coag_dry) + '</td>' +
-      '<td>' + _fmtSummaryKg(t.total_dry) + '</td>';
+      '<td>' + kgCell(t.latex_fresh) + '</td>' +
+      '<td>' + kgCell(t.coag_fresh) + '</td>' +
+      '<td>' + kgCell(t.total_fresh) + '</td>' +
+      '<td>' + kgCell(t.latex_dry) + '</td>' +
+      '<td>' + kgCell(t.coag_dry) + '</td>' +
+      '<td>' + kgCell(t.total_dry) + '</td>';
   }
 
   function _buildSectionSummaryData() {
     var map = {};
-    _weighingsForSummary().forEach(function (w) {
+    _weighingsForAggregatedSummary().forEach(function (w) {
       var sid = w.tapping_section_id;
       if (!map[sid]) {
         var sec = _sectionForSummaryWeighing(sid);
@@ -4013,7 +4693,8 @@ const TabFieldHarvest = (function () {
           totals: _emptyWeighTotals()
         };
       }
-      _mergeWeighTotals(map[sid].totals, _totalsFromWeighing(w));
+      var secRow = _sectionForSummaryWeighing(sid);
+      _mergeWeighTotals(map[sid].totals, _totalsFromWeighingForSummary(w, secRow));
     });
     return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) {
       var tc = a.team_name.localeCompare(b.team_name, undefined, { numeric: true });
@@ -4042,7 +4723,7 @@ const TabFieldHarvest = (function () {
           totals: _emptyWeighTotals()
         };
       }
-      _mergeWeighTotals(map[wid].totals, _totalsFromWeighing(w));
+      _mergeWeighTotals(map[wid].totals, _totalsFromWeighingForSummary(w, sec));
     });
     return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) {
       var tc = a.team_name.localeCompare(b.team_name, undefined, { numeric: true });
@@ -4053,7 +4734,7 @@ const TabFieldHarvest = (function () {
 
   function _buildLotSummaryData() {
     var map = {};
-    _weighingsForSummary().forEach(function (w) {
+    _weighingsForAggregatedSummary().forEach(function (w) {
       var sec = _sectionForSummaryWeighing(w.tapping_section_id);
       var wMeta = _weighingMeta(w);
       var lotCode = _sectionLotCode(sec) || wMeta.lot_code || '(Chưa gán lô)';
@@ -4067,7 +4748,7 @@ const TabFieldHarvest = (function () {
           totals: _emptyWeighTotals()
         };
       }
-      _mergeWeighTotals(map[lotCode].totals, _totalsFromWeighing(w));
+      _mergeWeighTotals(map[lotCode].totals, _totalsFromWeighingForSummary(w, sec));
     });
     return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) {
       var tc = a.team_name.localeCompare(b.team_name, undefined, { numeric: true });
@@ -4076,7 +4757,8 @@ const TabFieldHarvest = (function () {
     });
   }
 
-  function _renderSummaryBodyRows(rows, mode) {
+  function _renderSummaryBodyRows(rows, mode, blankKg) {
+    blankKg = !!blankKg;
     var showTeam = summaryTeam === '__all__';
     var grand = _emptyWeighTotals();
     var teamSub = _emptyWeighTotals();
@@ -4084,11 +4766,12 @@ const TabFieldHarvest = (function () {
     var html = [];
     var stt = 0;
     var labelColspan = _summaryLabelColspan(mode);
+    var kgCell = function (n) { return blankKg ? '—' : _fmtSummaryKg(n); };
 
     function _flushSubtotal(teamId) {
       if (!showTeam || !lastTeam) return;
       html.push('<tr class="fh-summary-subtotal">' +
-        _summaryTotalsCells(teamSub, labelColspan, 'Cộng ' + _teamNameById(teamId)) + '</tr>');
+        _summaryTotalsCells(teamSub, labelColspan, 'Cộng ' + _teamNameById(teamId), blankKg) + '</tr>');
       teamSub = _emptyWeighTotals();
     }
 
@@ -4097,8 +4780,10 @@ const TabFieldHarvest = (function () {
       if (showTeam && lastTeam !== null && tid !== lastTeam) _flushSubtotal(lastTeam);
       lastTeam = tid;
       stt++;
-      _mergeWeighTotals(teamSub, row.totals);
-      _mergeWeighTotals(grand, row.totals);
+      if (!blankKg) {
+        _mergeWeighTotals(teamSub, row.totals);
+        _mergeWeighTotals(grand, row.totals);
+      }
 
       html.push('<tr>');
       html.push('<td style="text-align:center;">' + stt + '</td>');
@@ -4113,12 +4798,12 @@ const TabFieldHarvest = (function () {
         html.push('<td class="fh-sum-text">' + _escapeHtml(row.worker_id) + '</td>');
         html.push('<td class="fh-sum-text">' + _escapeHtml(row.worker_name) + '</td>');
       }
-      html.push('<td>' + _fmtSummaryKg(row.totals.latex_fresh) + '</td>');
-      html.push('<td>' + _fmtSummaryKg(row.totals.coag_fresh) + '</td>');
-      html.push('<td>' + _fmtSummaryKg(row.totals.total_fresh) + '</td>');
-      html.push('<td>' + _fmtSummaryKg(row.totals.latex_dry) + '</td>');
-      html.push('<td>' + _fmtSummaryKg(row.totals.coag_dry) + '</td>');
-      html.push('<td>' + _fmtSummaryKg(row.totals.total_dry) + '</td>');
+      html.push('<td>' + kgCell(row.totals.latex_fresh) + '</td>');
+      html.push('<td>' + kgCell(row.totals.coag_fresh) + '</td>');
+      html.push('<td>' + kgCell(row.totals.total_fresh) + '</td>');
+      html.push('<td>' + kgCell(row.totals.latex_dry) + '</td>');
+      html.push('<td>' + kgCell(row.totals.coag_dry) + '</td>');
+      html.push('<td>' + kgCell(row.totals.total_dry) + '</td>');
       html.push('</tr>');
     });
 
@@ -4127,28 +4812,71 @@ const TabFieldHarvest = (function () {
   }
 
   function renderYieldSummary() {
-    var head = _el('fhSummaryHead');
-    var body = _el('fhSummaryBody');
-    var foot = _el('fhSummaryFoot');
-    var hint = _el('fhSummaryHint');
-    if (!head || !body || !foot) return;
+    _refreshSummaryTablesNow();
+  }
 
-    _readSummaryFilters();
-    var range = _summaryDateRange(summaryPeriod, _dateVal());
-    summaryRangeLabel = range.label;
-    var mode = summaryViewMode === 'worker' ? 'worker' : (summaryViewMode === 'lot' ? 'lot' : 'section');
-    var showTeam = summaryTeam === '__all__';
-    var rows = mode === 'worker'
-      ? _buildWorkerSummaryData()
-      : (mode === 'lot' ? _buildLotSummaryData() : _buildSectionSummaryData());
+  function renderAllocatedYieldSummary() {
+    _syncSummaryFiltersFromToolbar();
+    _renderAllocatedSummaryPlaceholder();
+  }
 
-    if (hint) {
-      var sessLabel = summarySession === '__all__' ? 'Tất cả phiên' : ('Phiên ' + summarySession);
-      var offlineNote = (summaryPeriod !== 'day' && !_isOnline()) ? ' · Cần mạng để tải kỳ dài' : '';
-      hint.textContent = summaryRangeLabel + ' · ' + sessLabel + ' · ' +
-        (rows.length ? rows.length + ' dòng' : 'Chưa có dữ liệu cân') + offlineNote;
+  function showSummaryTab(tab) {
+    summaryPanelTab = tab === 'allocated' ? 'allocated' : 'original';
+    try { sessionStorage.setItem(FH_SUMMARY_TAB_KEY, summaryPanelTab); } catch (e) { /* ignore */ }
+    _syncSummaryTabUi(summaryPanelTab === 'allocated');
+    if (_dateNeedsReload()) {
+      onDateChange();
+      return;
     }
+    _refreshSummaryTablesNow();
+  }
 
+  function _resolveSummaryPanelTab() {
+    try {
+      var stored = sessionStorage.getItem(FH_SUMMARY_TAB_KEY);
+      if (stored === 'allocated' || stored === 'original') summaryPanelTab = stored;
+    } catch (e) { /* ignore */ }
+    return summaryPanelTab;
+  }
+
+  function _isSummaryTabAllocated() {
+    _resolveSummaryPanelTab();
+    if (summaryPanelTab === 'allocated') return true;
+    var panel = _el('fhSummaryPanel');
+    if (panel && panel.getAttribute('data-fh-summary-mode') === 'allocated') return true;
+    var btn = _el('fhSummaryTabAllocated');
+    return !!(btn && btn.classList.contains('btn-primary'));
+  }
+
+  function _syncSummaryTabUi(isAllocated) {
+    var btnOrig = _el('fhSummaryTabOriginal');
+    var btnAlloc = _el('fhSummaryTabAllocated');
+    var title = _el('fhSummaryTitle');
+    var origWrap = _el('fhSummaryOriginalWrap');
+    var allocWrap = _el('fhSummaryAllocatedWrap');
+    var hintOrig = _el('fhSummaryHintOriginal');
+    var hintAlloc = _el('fhSummaryHintAllocated');
+    var panel = _el('fhSummaryPanel');
+    if (btnOrig && btnAlloc) {
+      btnOrig.className = 'btn btn-sm ' + (!isAllocated ? 'btn-primary' : 'btn-secondary');
+      btnAlloc.className = 'btn btn-sm ' + (isAllocated ? 'btn-primary' : 'btn-secondary');
+    }
+    if (title) {
+      title.textContent = isAllocated
+        ? '📊 Tổng hợp sản lượng sau phân bổ'
+        : '📊 Tổng hợp sản lượng';
+    }
+    if (origWrap) origWrap.classList.toggle('fh-summary-view-hidden', !!isAllocated);
+    if (allocWrap) allocWrap.classList.toggle('fh-summary-view-hidden', !isAllocated);
+    if (hintOrig) hintOrig.classList.toggle('fh-summary-view-hidden', !!isAllocated);
+    if (hintAlloc) hintAlloc.classList.toggle('fh-summary-view-hidden', !isAllocated);
+    if (panel) {
+      panel.setAttribute('data-fh-summary-mode', isAllocated ? 'allocated' : 'original');
+      panel.setAttribute('data-fh-record-date', _recordDate());
+    }
+  }
+
+  function _summaryHeadHtml(mode, showTeam) {
     var headCols = '<tr><th>STT</th>';
     if (showTeam) headCols += '<th>Đội SX</th>';
     if (mode === 'section') {
@@ -4164,7 +4892,41 @@ const TabFieldHarvest = (function () {
       '<th class="fh-sum-col-latex">Mủ nước (khô)</th>' +
       '<th class="fh-sum-col-coag">Mủ đông (khô)</th>' +
       '<th class="fh-sum-col-total">Tổng khô</th></tr>';
-    head.innerHTML = headCols;
+    return headCols;
+  }
+
+  function _buildSummaryRowsForView() {
+    _readSummaryFilters();
+    var mode = summaryViewMode === 'worker' ? 'worker' : (summaryViewMode === 'lot' ? 'lot' : 'section');
+    var rows = mode === 'worker'
+      ? _buildWorkerSummaryData()
+      : (mode === 'lot' ? _buildLotSummaryData() : _buildSectionSummaryData());
+    return { mode: mode, rows: rows, showTeam: summaryTeam === '__all__' };
+  }
+
+  function _renderOriginalYieldSummary() {
+    var head = _el('fhSummaryOriginalHead');
+    var body = _el('fhSummaryOriginalBody');
+    var foot = _el('fhSummaryOriginalFoot');
+    var hint = _el('fhSummaryHintOriginal');
+    if (!head || !body || !foot) return;
+
+    _readSummaryFilters();
+    summaryRangeLabel = _summaryDateLabelNow();
+    var view = _buildSummaryRowsForView();
+    var rows = view.rows;
+    var mode = view.mode;
+    var showTeam = view.showTeam;
+
+    if (hint) {
+      var sessLabel = summarySession === '__all__' ? 'Tất cả phiên' : ('Phiên ' + summarySession);
+      var offlineNote = (summaryPeriod !== 'day' && !_isOnline()) ? ' · Cần mạng để tải kỳ dài' : '';
+      hint.textContent = summaryRangeLabel + ' · ' + sessLabel + ' · ' +
+        (rows.length ? rows.length + ' dòng' : 'Chưa có dữ liệu cân') + offlineNote + ' · fh63';
+    }
+
+    head.innerHTML = _summaryHeadHtml(mode, showTeam);
+    body.removeAttribute('data-fh-allocated');
 
     if (!rows.length) {
       var colSpan = _summaryLabelColspan(mode) + 6;
@@ -4179,10 +4941,14 @@ const TabFieldHarvest = (function () {
       return;
     }
 
-    var rendered = _renderSummaryBodyRows(rows, mode);
+    var rendered = _renderSummaryBodyRows(rows, mode, false);
     body.innerHTML = rendered.html;
     foot.innerHTML = '<tr class="fh-summary-grand">' +
-      _summaryTotalsCells(rendered.grand, rendered.labelColspan, 'TỔNG CỘNG') + '</tr>';
+      _summaryTotalsCells(rendered.grand, rendered.labelColspan, 'TỔNG CỘNG', false) + '</tr>';
+  }
+
+  function _renderAllocatedYieldSummaryShell() {
+    _renderAllocatedSummaryPlaceholder();
   }
 
   async function onSummaryFilterChange() {
@@ -4202,13 +4968,30 @@ const TabFieldHarvest = (function () {
 
   function _getSummaryExportContext() {
     _readSummaryFilters();
-    var range = _summaryDateRange(summaryPeriod, _dateVal());
+    var range = _summaryDateRange(summaryPeriod, _recordDate());
 
     var mode = summaryViewMode === 'worker' ? 'worker'
       : (summaryViewMode === 'lot' ? 'lot' : 'section');
     var showTeam = summaryTeam === '__all__';
     var rows = mode === 'worker' ? _buildWorkerSummaryData()
       : (mode === 'lot' ? _buildLotSummaryData() : _buildSectionSummaryData());
+    var isAllocatedExport = _resolveSummaryPanelTab() === 'allocated';
+    var exportRows = rows;
+    var grand;
+    if (isAllocatedExport && rows.length) {
+      var origGrand = _renderSummaryBodyRows(rows, mode, false).grand;
+      var allocGrand = (_allocatedGnFooterCache && _allocatedGnFooterCacheKey === _allocFooterCacheKey())
+        ? _allocatedGnFooterCache
+        : origGrand;
+      exportRows = rows.map(function (row) {
+        return Object.assign({}, row, {
+          totals: _scaleSummaryTotalsByFooterRatio(row.totals, origGrand, allocGrand)
+        });
+      });
+      grand = allocGrand;
+    } else {
+      grand = rows.length ? _renderSummaryBodyRows(rows, mode, false).grand : _emptyWeighTotals();
+    }
     var teamLabel = summaryTeam === '__all__' ? 'Tất cả đội' : _teamNameById(summaryTeam);
     var sessionLabel = summarySession === '__all__' ? 'Tất cả phiên' : ('Phiên ' + summarySession);
 
@@ -4227,7 +5010,7 @@ const TabFieldHarvest = (function () {
     );
 
     var body = [];
-    rows.forEach(function (row, i) {
+    exportRows.forEach(function (row, i) {
       var r = [i + 1];
       if (showTeam) r.push(row.team_name || '');
       if (mode === 'section') {
@@ -4245,9 +5028,8 @@ const TabFieldHarvest = (function () {
       body.push(r);
     });
 
-    var grand = rows.length ? _renderSummaryBodyRows(rows, mode).grand : _emptyWeighTotals();
     var labelCols = headers.length - 6;
-    var footer = ['TỔNG CỘNG'];
+    var footer = [isAllocatedExport ? 'TỔNG CỘNG (sau phân bổ)' : 'TỔNG CỘNG'];
     for (var p = 1; p < labelCols; p++) footer.push('');
     footer.push(
       _kgExportNum(grand.latex_fresh), _kgExportNum(grand.coag_fresh), _kgExportNum(grand.total_fresh),
@@ -4255,7 +5037,7 @@ const TabFieldHarvest = (function () {
     );
 
     return {
-      date: _dateVal(),
+      date: _recordDate(),
       dateFrom: range.from,
       dateTo: range.to,
       period: summaryPeriod,
@@ -4422,6 +5204,8 @@ const TabFieldHarvest = (function () {
   }
 
   function _initSummaryPanel() {
+    _resolveSummaryPanelTab();
+    _syncSummaryTabUi(_isSummaryTabAllocated());
     _refreshSummaryTeamOptions();
     var periodEl = _el('fhSummaryPeriod');
     if (periodEl) summaryPeriod = periodEl.value || 'day';
@@ -4450,6 +5234,10 @@ const TabFieldHarvest = (function () {
     for (var qi = 0; qi < queue.length; qi++) {
       var item = queue[qi];
       try {
+        if (item.date && !_canWriteRecordDate(item.date)) {
+          console.warn('[FieldHarvest] bỏ qua đồng bộ ngày cũ:', item.date);
+          continue;
+        }
         if (item.type === 'assignments') {
           await _upsertSectionAssignments(item.sectionId, item.cfg, item.date);
           await _saveSectionLot(item.sectionId, (item.cfg && item.cfg.lot_code) || '');
@@ -4544,6 +5332,9 @@ const TabFieldHarvest = (function () {
   function _bindPermissionRefresh() {
     if (window._fhPermRefreshBound) return;
     window._fhPermRefreshBound = true;
+    window.addEventListener('rriv:user-updated', function () {
+      _syncRecordDayGuard();
+    });
     window.addEventListener('focus', function () {
       _loadTeamScope().then(function () {
         _refreshTeamFilterOptions();
@@ -4557,9 +5348,20 @@ const TabFieldHarvest = (function () {
   }
 
   async function init() {
+    if (_fhInitDone) {
+      _resolveSummaryPanelTab();
+      _syncSummaryTabUi(_isSummaryTabAllocated());
+      if (_dateNeedsReload()) {
+        await onDateChange();
+      } else {
+        await loadWeighings();
+      }
+      return;
+    }
+    _fhInitDone = true;
     var dateEl = _el('fhRecordDate');
     if (dateEl && !dateEl.value) dateEl.value = _today();
-    _fhLastRecordDate = (dateEl && dateEl.value) ? dateEl.value : _today();
+    _markRecordDateLoaded((dateEl && dateEl.value) ? dateEl.value : _today());
     _initSessionFilter();
     if (_offlineReady()) {
       try { await FieldHarvestOffline.init(); } catch (e) { console.warn('Offline DB:', e.message); }
@@ -4590,12 +5392,16 @@ const TabFieldHarvest = (function () {
     await loadWeighings();
     if (_isOnline()) await _syncPending();
     _updateOfflineUI();
+    _syncRecordDayGuard();
   }
 
   return {
-    init: init, onDateChange: onDateChange, onTeamChange: onTeamChange,
-    onSessionFilterChange: onSessionFilterChange, onSummaryFilterChange: onSummaryFilterChange,
+    init: init, onDateChange: onDateChange, shiftRecordDate: shiftRecordDate, onTeamChange: onTeamChange,
+    onSessionFilterChange: onSessionFilterChange,     onSummaryFilterChange: onSummaryFilterChange,
+    showSummaryTab: showSummaryTab,
+    getSummaryPanelTab: function () { return summaryPanelTab; },
     renderYieldSummary: renderYieldSummary,
+    renderAllocatedYieldSummary: renderAllocatedYieldSummary,
     exportSummaryExcel: exportSummaryExcel,
     exportSummaryPdf: exportSummaryPdf,
     saveAllAssignments: saveAllAssignments,

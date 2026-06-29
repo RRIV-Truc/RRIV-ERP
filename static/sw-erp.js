@@ -4,9 +4,9 @@
 
  */
 
-var SHELL_CACHE = 'rriv-erp-shell-v9';
+var SHELL_CACHE = 'rriv-erp-shell-v32';
 
-var RUNTIME_CACHE = 'rriv-erp-runtime-v9';
+var RUNTIME_CACHE = 'rriv-erp-runtime-v32';
 
 var OFFLINE_URL = '/offline.html';
 
@@ -78,7 +78,9 @@ var PRECACHE = [
 
   '/static/js/sanxuat/services/FieldHarvestOffline.js',
 
-  '/static/js/sanxuat/tabs/field-harvest.js?v=9'
+  '/static/js/sanxuat/tabs/delivery.js?v=38',
+
+  '/static/js/sanxuat/tabs/field-harvest.js?v=59'
 
 ];
 
@@ -221,6 +223,21 @@ self.addEventListener('fetch', function (event) {
 
 
   if (isStatic || isRootAsset || url.pathname === '/manifest.json') {
+
+    var isSanxuatTabJs = url.pathname.indexOf('/static/js/sanxuat/tabs/') === 0;
+
+    if (isSanxuatTabJs) {
+      event.respondWith(
+        fetch(req).then(function (res) {
+          if (res && res.status === 200) {
+            var clone = res.clone();
+            caches.open(RUNTIME_CACHE).then(function (c) { c.put(req, clone); });
+          }
+          return res;
+        }).catch(function () { return caches.match(req); })
+      );
+      return;
+    }
 
     event.respondWith(
 

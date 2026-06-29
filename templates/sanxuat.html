@@ -291,6 +291,34 @@ tr:hover { background: rgba(0,104,255,0.04); }
 .fh-stat { font-size: 13px; color: #64748b; }
 .fh-stat strong { color: #0f172a; }
 .fh-drc-cell { font-weight: 600; color: #7c3aed; font-size: 13px; text-align: center; }
+.fh-day-readonly-banner,
+.delivery-readonly-banner {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  color: #92400e;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+#fhAssignPanel.fh-day-readonly .fh-assign-table select,
+#fhAssignPanel.fh-day-readonly .fh-assign-table input,
+#fhQuickWeighPanel.fh-day-readonly input,
+#fhWeighPanel.fh-day-readonly input,
+#fhWeighPanel.fh-day-readonly select {
+  pointer-events: none;
+  background: #f8fafc;
+}
+#fhAssignPanel.fh-day-readonly .fh-section-del { display: none; }
+#fhWeighPanel.fh-day-readonly .fh-write-action,
+#fhQuickWeighPanel.fh-day-readonly .fh-write-action,
+#fhAssignPanel.fh-day-readonly .fh-write-action { display: none !important; }
+#fhWeighPanel.fh-day-readonly .fh-weigh-bin-ctrl { display: none; }
+.delivery-readonly .modal-body input,
+.delivery-readonly .modal-body select,
+.delivery-readonly .modal-body textarea {
+  background: #f8fafc;
+}
 .fh-assign-table {
   border-collapse: collapse;
   margin-top: 0 !important;
@@ -506,6 +534,16 @@ tr:hover { background: rgba(0,104,255,0.04); }
 .fh-offline-ok { background: #dcfce7; color: #166534; }
 .fh-offline-warn { background: #fef3c7; color: #92400e; }
 .fh-offline-pending { background: #dbeafe; color: #1e40af; }
+#tab1-harvest .fh-date-nav { display: inline-flex; align-items: center; gap: 2px; vertical-align: middle; }
+#tab1-harvest .fh-date-nav-btn {
+  width: 24px; height: 24px; padding: 0; line-height: 1;
+  border: 1px solid #cbd5e1; border-radius: 6px;
+  background: #f8fafc; color: #475569; font-size: 15px; font-weight: 700;
+  cursor: pointer; flex-shrink: 0;
+}
+#tab1-harvest .fh-date-nav-btn:hover { background: #e2e8f0; color: #0f172a; border-color: #94a3b8; }
+#tab1-harvest .fh-date-nav-btn:active { background: #cbd5e1; }
+#tab1-harvest .fh-date-nav input[type="date"] { padding: 6px 8px; }
 .fh-assign-table .fh-weigh-done { font-size: 10px; color: #15803d; font-weight: 600; }
 /* Tab Sản lượng CN — nền sáng, chữ đậm (tránh th kế thừa th { color:#fff } toàn trang) */
 #tab1-harvest { color: #0f172a; }
@@ -548,8 +586,68 @@ tr:hover { background: rgba(0,104,255,0.04); }
 .fh-weigh-summary th { background: #e2e8f0 !important; color: #0f172a !important; text-align: left; font-weight: 700; }
 .fh-weigh-summary td { background: #fff !important; color: #0f172a !important; font-weight: 600; }
 .fh-weigh-summary .fh-w-tt { font-weight: 800; color: #0f172a !important; background: #fde047 !important; }
+.delivery-coag-table { width: 100%; max-width: 420px; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+.delivery-coag-table th, .delivery-coag-table td { padding: 7px 10px; vertical-align: middle; border: 1px solid var(--border-color, #cbd5e1); }
+.delivery-coag-table th { background: #fff7ed; color: #9a3412; font-size: 12px; font-weight: 600; text-align: center; }
+.delivery-coag-table td:first-child { width: 92px; font-weight: 600; color: #b45309; white-space: nowrap; background: #fff; }
+.delivery-coag-table td input { width: 100%; box-sizing: border-box; padding: 7px 8px; border: 1px solid #94a3b8; border-radius: 6px; font-size: 13px; text-align: right; }
+/* Mủ nước — phiếu giao nhận (nền vàng/trắng, dễ đọc) */
+.delivery-latex-panel {
+  background: #fefce8;
+  border: 1px solid #fde047;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 4px;
+}
+.delivery-latex-panel .delivery-latex-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #854d0e;
+  margin-bottom: 8px;
+}
+.delivery-latex-panel .form-group input,
+.delivery-latex-panel .form-group select {
+  background: #fff !important;
+  color: #0f172a !important;
+  border-color: #ca8a04;
+}
+.delivery-latex-panel .form-group input::placeholder {
+  color: #78716c;
+}
+.delivery-latex-panel .form-group input.delivery-latex-drc-readonly {
+  background: #fffbeb !important;
+  color: #92400e !important;
+  font-weight: 700;
+  border-color: #eab308;
+  cursor: default;
+}
+.delivery-latex-panel .form-group label span {
+  color: #78716c !important;
+}
+.delivery-readonly .delivery-latex-panel .form-group input,
+.delivery-readonly .delivery-latex-panel .form-group select {
+  background: #fff !important;
+  color: #0f172a !important;
+}
+.status-badge.info {
+  background: #fef9c3;
+  color: #854d0e;
+  border: 1px solid #fde047;
+}
+.material-type-card.latex {
+  background: #fefce8;
+  border-left: 4px solid #eab308;
+}
+.material-type-card.latex .mt-stat {
+  background: #fff;
+}
+.summary-card.latex {
+  background: #fefce8;
+  border-color: #fde047;
+}
+.summary-card.latex h3 { color: #a16207; }
 .fh-quick-weigh-scroll { overflow-x: auto; margin-bottom: 12px; }
-.fh-quick-weigh-table { min-width: 980px; font-size: 12px; }
+.fh-quick-weigh-table { min-width: 1120px; font-size: 12px; }
 .fh-quick-weigh-table th { background: #bfdbfe !important; color: #1e3a8a !important; font-weight: 700; white-space: nowrap; }
 .fh-quick-weigh-table td { vertical-align: middle; }
 .fh-quick-weigh-table .fh-q-inp { width: 58px; padding: 5px 6px; border: 1px solid #64748b; border-radius: 5px; font-size: 12px; text-align: right; }
@@ -578,7 +676,9 @@ tr:hover { background: rgba(0,104,255,0.04); }
 .fh-summary-panel > h3 { margin: 0 0 12px; font-size: 17px; color: #0f172a !important; font-weight: 700; }
 .fh-summary-panel .toolbar label { font-size: 13px; margin-right: 12px; }
 .fh-summary-panel .toolbar select { padding: 6px 10px; border-radius: 6px; border: 1px solid #94a3b8; min-width: 140px; }
-#fhSummaryHint { font-size: 12px; color: #64748b !important; }
+#fhSummaryHint { font-size: 12px; color: #64748b !important; flex: 1 1 160px; min-width: 0; }
+.fh-summary-panel .fh-summary-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 12px; }
+.fh-summary-panel .fh-export-btns { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; margin-left: auto; white-space: nowrap; }
 .fh-summary-table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 13px; table-layout: auto; }
 .fh-summary-table th.fh-sum-text,
 .fh-summary-table td.fh-sum-text { white-space: nowrap; min-width: 140px; }
@@ -591,6 +691,8 @@ tr:hover { background: rgba(0,104,255,0.04); }
 .fh-summary-table tr.fh-summary-subtotal td { background: #f1f5f9 !important; font-weight: 700; border-top: 2px solid #64748b; }
 .fh-summary-table tr.fh-summary-grand td { background: #fef08a !important; font-weight: 800; font-size: 14px; border-top: 3px solid #ca8a04; }
 .fh-summary-table .fh-sum-empty td { text-align: center; color: #64748b !important; padding: 20px; }
+.fh-summary-view-hidden { display: none !important; }
+.fh-summary-panel .fh-summary-hint { font-size: 13px; color: #475569; }
 .process-stage { color: #000; }
 .production-line-pill { color: #000; }
 
@@ -825,8 +927,12 @@ tr:hover { background: rgba(0,104,255,0.04); }
     <p style="color:#64748b;font-size:13px;margin:-8px 0 16px;">Chọn <strong>tổ/đội SX</strong> → <strong>phiên cạo</strong> → chọn <strong>Lô</strong> rồi <strong>Phần cạo</strong> → phân công &amp; cân mủ → <strong>Lưu</strong>. <strong>Mất mạng vẫn nhập được</strong> (lưu trên máy); có sóng lại sẽ <strong>tự đồng bộ</strong>.</p>
 
     <div class="toolbar" style="flex-wrap:wrap;gap:12px;margin-bottom:16px;">
-      <label style="font-size:13px;">Ngày:
-        <input type="date" id="fhRecordDate" onchange="TabFieldHarvest.onDateChange()" style="padding:8px;border-radius:8px;border:1px solid #e2e8f0;">
+      <label style="font-size:13px;display:inline-flex;align-items:center;gap:4px;">Ngày:
+        <span class="fh-date-nav">
+          <button type="button" class="fh-date-nav-btn" onclick="TabFieldHarvest.shiftRecordDate(-1)" title="Ngày trước" aria-label="Ngày trước">‹</button>
+          <input type="date" id="fhRecordDate" onchange="TabFieldHarvest.onDateChange()">
+          <button type="button" class="fh-date-nav-btn" onclick="TabFieldHarvest.shiftRecordDate(1)" title="Ngày sau" aria-label="Ngày sau">›</button>
+        </span>
       </label>
       <label style="font-size:13px;font-weight:600;" title="Chọn trạm sản xuất (vd. Trạm Lai Khê)">Trạm SX *
         <select id="fhTeamFilter" onchange="TabFieldHarvest.onTeamChange()" style="padding:8px 12px;border-radius:8px;border:2px solid #f59e0b;min-width:200px;font-weight:600;">
@@ -848,17 +954,18 @@ tr:hover { background: rgba(0,104,255,0.04); }
     </div>
 
     <div id="fhAssignPanel">
+      <div id="fhDayReadonlyBanner" class="fh-day-readonly-banner" style="display:none;" role="status"></div>
       <div class="toolbar" style="margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-        <button class="btn btn-primary btn-sm" onclick="TabFieldHarvest.saveAllAssignments()">💾 Lưu phân công</button>
-        <button class="btn btn-secondary btn-sm" onclick="TabFieldHarvest.openQuickWeigh()">⚡ Cân nhanh</button>
+        <button class="btn btn-primary btn-sm fh-write-action" onclick="TabFieldHarvest.saveAllAssignments()">💾 Lưu phân công</button>
+        <button class="btn btn-secondary btn-sm fh-write-action" onclick="TabFieldHarvest.openQuickWeigh()">⚡ Cân nhanh</button>
         <label style="font-size:13px;margin:0;">Sao chép từ ngày:
-          <input type="date" id="fhCopyFromDate" style="padding:6px 8px;border-radius:6px;border:1px solid #e2e8f0;">
+          <input type="date" id="fhCopyFromDate" class="fh-write-action" style="padding:6px 8px;border-radius:6px;border:1px solid #e2e8f0;">
         </label>
-        <button class="btn btn-secondary btn-sm" onclick="TabFieldHarvest.copyFromDate()">📋 Nạp phân công</button>
+        <button class="btn btn-secondary btn-sm fh-write-action" onclick="TabFieldHarvest.copyFromDate()">📋 Nạp phân công</button>
         <button class="btn btn-secondary btn-sm" onclick="TabFieldHarvest.prefetchOfflineData()">📥 Cập nhật bản sao máy</button>
         <button class="btn btn-secondary btn-sm" id="fhSyncBtn" style="display:none;" onclick="TabFieldHarvest.syncNow()">🔄 Đồng bộ</button>
-        <button class="btn btn-secondary btn-sm" onclick="TabFieldHarvest.openAssignRowModal()">+ Thêm phân công</button>
-        <button class="btn btn-secondary btn-sm" onclick="TabFieldHarvest.openSectionModal()">+ Thêm phần cạo</button>
+        <button class="btn btn-secondary btn-sm fh-write-action" onclick="TabFieldHarvest.openAssignRowModal()">+ Thêm phân công</button>
+        <button class="btn btn-secondary btn-sm fh-write-action" onclick="TabFieldHarvest.openSectionModal()">+ Thêm phần cạo</button>
       </div>
       <p class="fh-scroll-hint">← Vuốt ngang bảng để xem đủ họ tên công nhân →</p>
       <div class="table-container fh-assign-scroll">
@@ -896,16 +1003,18 @@ tr:hover { background: rgba(0,104,255,0.04); }
     </div>
 
     <div id="fhQuickWeighPanel" class="fh-weigh-panel" style="display:none;">
+      <div id="fhQuickReadonlyBanner" class="fh-day-readonly-banner" style="display:none;" role="status"></div>
       <div class="fh-weigh-panel-header">
         <h3 id="fhQuickWeighTitle">⚡ Cân nhanh — tất cả phần cạo</h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button type="button" class="btn btn-secondary btn-sm" onclick="TabFieldHarvest.closeQuickWeigh()">← Quay về</button>
-          <button type="button" class="btn btn-primary btn-sm" onclick="TabFieldHarvest.saveQuickWeigh()">💾 Lưu cân nhanh</button>
+          <button type="button" class="btn btn-primary btn-sm fh-write-action" onclick="TabFieldHarvest.saveQuickWeigh()">💾 Lưu cân nhanh</button>
         </div>
       </div>
       <p style="font-size:12px;color:#64748b;margin:0 0 12px;">
-        Một dòng = một công nhân cạo (1 thùng mủ nước + 1 thùng mủ đông). KL làm tròn 0,1 kg.
-        Mủ nước: bì mặc định 1 kg, TSC% → DRC%. Mủ đông: bì mặc định 0 kg, DRC% mặc định 40.
+        Một dòng = một công nhân cạo. KL làm tròn 0,1 kg.
+        Mủ nước: bì mặc định 1 kg, TSC% → DRC%.
+        Mủ đông: nhập trực tiếp KL tươi 4 loại (khối/chén/dây/tạp), <strong>không trừ bì</strong>, DRC% chung (mặc định 40) → quy khô = tổng 4 loại × DRC/100.
         Dùng cân chi tiết khi một người có nhiều thùng.
       </p>
       <p class="fh-scroll-hint">← Vuốt ngang bảng nếu màn hình hẹp →</p>
@@ -920,37 +1029,45 @@ tr:hover { background: rgba(0,104,255,0.04); }
               <th>Bì</th>
               <th>KL thực</th>
               <th>TSC%</th>
-              <th>KL đông</th>
-              <th>Loại NL</th>
-              <th>Bì</th>
-              <th>DRC%</th>
+              <th style="background:#fed7aa;color:#9a3412;">Đông khối</th>
+              <th style="background:#fed7aa;color:#9a3412;">Chén</th>
+              <th style="background:#fed7aa;color:#9a3412;">Dây</th>
+              <th style="background:#fed7aa;color:#9a3412;">Tạp</th>
+              <th style="background:#fdba74;color:#9a3412;">DRC%</th>
             </tr>
           </thead>
           <tbody id="fhQuickWeighBody">
-            <tr><td colspan="11" style="text-align:center;color:#64748b;">Đang tải...</td></tr>
+            <tr><td colspan="12" style="text-align:center;color:#64748b;">Đang tải...</td></tr>
           </tbody>
         </table>
       </div>
     </div>
 
     <div id="fhWeighPanel" class="fh-weigh-panel" style="display:none;">
+      <div id="fhWeighReadonlyBanner" class="fh-day-readonly-banner" style="display:none;" role="status"></div>
       <div class="fh-weigh-panel-header">
         <h3 id="fhWeighTitle">⚖️ Cân mủ</h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button type="button" class="btn btn-secondary btn-sm" onclick="TabFieldHarvest.closeSectionWeigh()">← Quay về</button>
-          <button type="button" class="btn btn-primary btn-sm" onclick="TabFieldHarvest.saveSectionWeigh()">💾 Lưu cân mủ</button>
+          <button type="button" class="btn btn-primary btn-sm fh-write-action" onclick="TabFieldHarvest.saveSectionWeigh()">💾 Lưu cân mủ</button>
         </div>
       </div>
-      <p style="font-size:12px;color:#64748b;margin:0 0 12px;">
+      <p id="fhWeighPanelHint" style="font-size:12px;color:#64748b;margin:0 0 12px;">
         Nhập <strong>khối lượng</strong> và <strong>bì</strong> (mặc định 1,1 kg) → <strong>ròng = KL − bì</strong>.
-        Mủ nước: TSC% → DRC%. Mủ đông: chỉ DRC% (mặc định 40).
+        Mủ nước: TSC% → DRC%. Mủ đông: khối/chén/dây/tạp — mỗi loại nhập KL và DRC% (mặc định 40).
       </p>
       <div id="fhWeighContent"></div>
     </div>
 
     <div id="fhSummaryPanel" class="fh-summary-panel">
-      <h3>📊 Tổng hợp sản lượng</h3>
-      <div class="toolbar" style="flex-wrap:wrap;gap:12px;margin-bottom:12px;align-items:center;">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:12px;">
+        <h3 id="fhSummaryTitle" style="margin:0;">📊 Tổng hợp sản lượng</h3>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button type="button" class="btn btn-sm btn-primary" id="fhSummaryTabOriginal" onclick="TabFieldHarvest.showSummaryTab('original')">Tổng hợp sản lượng</button>
+          <button type="button" class="btn btn-sm btn-secondary" id="fhSummaryTabAllocated" onclick="TabFieldHarvest.showSummaryTab('allocated')">Tổng hợp sau phân bổ</button>
+        </div>
+      </div>
+      <div class="toolbar fh-summary-toolbar">
         <label>Kỳ tổng hợp
           <select id="fhSummaryPeriod" onchange="TabFieldHarvest.onSummaryFilterChange()" style="margin-left:4px;">
             <option value="day" selected>Trong ngày</option>
@@ -980,15 +1097,25 @@ tr:hover { background: rgba(0,104,255,0.04); }
             <option value="worker">Công nhân</option>
           </select>
         </label>
-        <span id="fhSummaryHint" style="flex:1;min-width:160px;"></span>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="TabFieldHarvest.exportSummaryExcel()">📥 Xuất Excel</button>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="TabFieldHarvest.exportSummaryPdf()">📄 Xuất PDF</button>
+        <span id="fhSummaryHintOriginal" class="fh-summary-hint"></span>
+        <span id="fhSummaryHintAllocated" class="fh-summary-hint fh-summary-view-hidden"></span>
+        <div class="fh-export-btns">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="TabFieldHarvest.exportSummaryExcel()">📥 Xuất Excel</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="TabFieldHarvest.exportSummaryPdf()">📄 Xuất PDF</button>
+        </div>
       </div>
-      <div class="table-container fh-summary-scroll">
-        <table class="fh-summary-table">
-          <thead id="fhSummaryHead"></thead>
-          <tbody id="fhSummaryBody"></tbody>
-          <tfoot id="fhSummaryFoot"></tfoot>
+      <div id="fhSummaryOriginalWrap" class="table-container fh-summary-scroll">
+        <table class="fh-summary-table" aria-label="Tổng hợp sản lượng vườn">
+          <thead id="fhSummaryOriginalHead"></thead>
+          <tbody id="fhSummaryOriginalBody"></tbody>
+          <tfoot id="fhSummaryOriginalFoot"></tfoot>
+        </table>
+      </div>
+      <div id="fhSummaryAllocatedWrap" class="table-container fh-summary-scroll fh-summary-view-hidden">
+        <table class="fh-summary-table" aria-label="Tổng hợp sản lượng sau phân bổ">
+          <thead id="fhSummaryAllocatedHead"></thead>
+          <tbody id="fhSummaryAllocatedBody"></tbody>
+          <tfoot id="fhSummaryAllocatedFoot"></tfoot>
         </table>
       </div>
     </div>
@@ -1037,7 +1164,7 @@ tr:hover { background: rgba(0,104,255,0.04); }
         <h3 id="todayDeliveries">0</h3>
         <p>Phiếu Giao Hôm Nay</p>
       </div>
-      <div class="summary-card">
+      <div class="summary-card latex">
         <h3 id="totalLatexDelivered">0</h3>
         <p>Mủ Nước (kg)</p>
         <div class="sub">DRC TB: <span id="avgLatexDRC">0%</span></div>
@@ -3421,6 +3548,7 @@ tr:hover { background: rgba(0,104,255,0.04); }
       <button class="modal-close" onclick="closeDeliveryModal()">×</button>
     </div>
     <div class="modal-body">
+      <div id="deliveryReadonlyBanner" class="delivery-readonly-banner" style="display:none;" role="status"></div>
       <input type="hidden" id="deliveryId">
 
       <!-- Thông tin chung -->
@@ -3431,20 +3559,15 @@ tr:hover { background: rgba(0,104,255,0.04); }
           <input type="text" id="deliveryNo" placeholder="Tự động sinh">
         </div>
         <div class="form-group">
-          <label>Ngày *</label>
-          <input type="date" id="deliveryDateTime">
+          <label>Ngày lập phiếu *</label>
+          <input type="date" id="deliveryDateTime" onchange="TabDelivery.onDeliveryDateChange()">
         </div>
       </div>
       <div class="form-row">
         <div class="form-group">
           <label>Đội Sản Xuất *</label>
-          <select id="deliveryTeam">
-            <option value="">-- Chọn đội --</option>
-            <option value="doi1">Đội 1</option>
-            <option value="doi2">Đội 2</option>
-            <option value="doi3">Đội 3</option>
-            <option value="doi4">Đội 4</option>
-            <option value="doi5">Đội 5</option>
+          <select id="deliveryTeam" onchange="TabDelivery.onDeliveryTeamChange()">
+            <option value="">-- Chọn trạm --</option>
           </select>
         </div>
         <div class="form-group">
@@ -3455,8 +3578,8 @@ tr:hover { background: rgba(0,104,255,0.04); }
       <div class="form-row">
         <div class="form-group">
           <label>Mã Vườn Cây (EUDR)</label>
-          <select id="deliveryGardenId" onchange="onDeliveryGardenChange()">
-            <option value="">-- Chọn vườn cây --</option>
+          <select id="deliveryGardenId" onchange="TabDelivery.onDeliveryGardenChange()">
+            <option value="">-- Chọn trạm (EUDR) --</option>
           </select>
         </div>
         <div class="form-group">
@@ -3473,23 +3596,25 @@ tr:hover { background: rgba(0,104,255,0.04); }
         <div class="form-row">
           <div class="form-group">
             <label>Phiên Cạo</label>
-            <select id="deliveryTappingSession" onchange="onTappingSessionChange()">
-              <option value="">-- Chọn phiên (tùy chọn) --</option>
-              <option value="A">Phiên A - Sáng sớm</option>
-              <option value="B">Phiên B - Sáng</option>
-              <option value="C">Phiên C - Chiều</option>
-              <option value="D">Phiên D - Tối</option>
+            <select id="deliveryTappingSession" onchange="TabDelivery.onTappingSessionChange()">
+              <option value="">-- Chọn trạm &amp; ngày cạo trước --</option>
             </select>
           </div>
           <div class="form-group">
-            <label>Ngày Cạo</label>
-            <input type="date" id="deliveryTappingDate">
+            <label>Ngày Cạo * <span style="font-weight:400;color:#64748b;font-size:11px;">(dùng phân bổ sản lượng)</span></label>
+            <input type="date" id="deliveryTappingDate" onchange="TabDelivery.onDeliveryTappingDateChange()">
           </div>
         </div>
         <div class="form-group">
-          <label>Chọn Lô Thu Hoạch *</label>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px;">
+            <label style="margin:0;">Chọn Lô Thu Hoạch *</label>
+            <label id="deliverySelectAllPlotsWrap" style="display:none;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;margin:0;user-select:none;">
+              <input type="checkbox" id="deliverySelectAllPlots" onchange="TabDelivery.onSelectAllPlotsChange(this)">
+              Chọn tất cả
+            </label>
+          </div>
           <div id="deliveryPlotsContainer" class="plot-checkboxes">
-            <div class="no-plots-message">Chọn vườn cây/đội sản xuất để hiển thị danh sách lô</div>
+            <div class="no-plots-message">Chọn trạm SX để hiển thị danh sách lô</div>
           </div>
         </div>
         <div class="plots-summary" id="deliveryPlotsSummary" style="display:none;">
@@ -3527,16 +3652,10 @@ tr:hover { background: rgba(0,104,255,0.04); }
 
       <!-- Loại mủ và khối lượng -->
       <div class="section-title">Loại Mủ & Khối Lượng</div>
+      <input type="hidden" id="deliveryMaterialType" value="mixed">
       <div class="form-row">
         <div class="form-group">
-          <label>Loại Nguyên Liệu *</label>
-          <select id="deliveryMaterialType" onchange="toggleMaterialFields()">
-            <option value="latex">Mủ Nước (Field Latex)</option>
-            <option value="coagulum">Mủ Đông (Coagulum)</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Phân Loại Chất Lượng *</label>
+          <label>Phân Loại Chất Lượng (mủ nước)</label>
           <select id="deliveryGrade">
             <option value="grade1">Loại 1 - Đạt chuẩn</option>
             <option value="grade2">Loại 2 - Chưa đạt một số chỉ tiêu</option>
@@ -3544,16 +3663,23 @@ tr:hover { background: rgba(0,104,255,0.04); }
         </div>
       </div>
 
-      <!-- Mủ Nước Fields -->
-      <div id="latexFields">
+      <!-- Mủ Nước -->
+      <div id="latexFields" class="delivery-latex-panel">
+        <div class="delivery-latex-title">💧 Mủ nước</div>
         <div class="form-row">
           <div class="form-group">
             <label>Khối Lượng Thô (kg) *</label>
             <input type="number" id="deliveryLatexGross" step="0.1" onchange="calculateDeliveryDry()">
           </div>
           <div class="form-group">
-            <label>DRC/TSC (%) *</label>
-            <input type="number" id="deliveryLatexDRC" step="0.1" min="15" max="55" onchange="calculateDeliveryDry()" placeholder="20-35%">
+            <label>TSC (%) *</label>
+            <input type="number" id="deliveryLatexTSC" step="0.1" min="1" max="60" placeholder="Nhập TSC%" oninput="TabDelivery.onLatexTscChange()">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>DRC (%) <span style="font-weight:400;color:#64748b;font-size:12px;">tự quy đổi</span></label>
+            <input type="number" id="deliveryLatexDRC" step="0.01" readonly tabindex="-1" class="delivery-latex-drc-readonly">
           </div>
         </div>
         <div class="form-row">
@@ -3626,46 +3752,48 @@ tr:hover { background: rgba(0,104,255,0.04); }
         </div>
       </div>
 
-      <!-- Mủ Đông Fields -->
-      <div id="coagulumFields" class="hidden">
-        <div class="form-row">
-          <div class="form-group">
-            <label>Loại Mủ Đông</label>
-            <select id="deliveryCoagType" onchange="updateCoagQualityHint()">
-              <option value="block">Mủ Đông Khối</option>
-              <option value="cup">Mủ Đông Chén</option>
-              <option value="scrap">Mủ Dây</option>
-              <option value="misc">Mủ Tạp</option>
-              <option value="earth">Mủ Đất</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Khối Lượng Thô (kg) *</label>
-            <input type="number" id="deliveryCoagGross" step="0.1" onchange="calculateDeliveryDry()">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>DRC (%) *</label>
-            <input type="number" id="deliveryCoagDRC" step="0.1" min="40" max="80" onchange="calculateDeliveryDry()" placeholder="40-70%">
-          </div>
-          <div class="form-group">
-            <label>Tình Trạng Tạp Chất</label>
-            <select id="deliveryCoagImpurity">
-              <option value="clean">Sạch - Không tạp chất</option>
-              <option value="slight">Ít tạp chất</option>
-              <option value="moderate">Tạp chất trung bình</option>
-              <option value="heavy">Nhiều tạp chất</option>
-            </select>
-          </div>
-        </div>
-        <!-- Tiêu chí chất lượng mủ đông (TCCS 111 Điều 12) -->
-        <div id="coagQualityCriteria" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;"></div>
+      <!-- Mủ Đông -->
+      <div id="coagulumFields">
+        <div style="font-size:13px;font-weight:700;color:#b45309;margin:16px 0 8px;padding-top:12px;border-top:1px dashed var(--border-color);">🧱 Mủ đông</div>
+        <table class="delivery-coag-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Khối lượng (kg)</th>
+              <th>DRC (%)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Mủ khối</td>
+              <td><input type="number" id="deliveryCoagBlockGross" step="0.1" min="0" placeholder="0" oninput="calculateDeliveryDry()"></td>
+              <td><input type="number" id="deliveryCoagBlockDRC" step="0.1" min="1" max="80" value="40" oninput="calculateDeliveryDry()"></td>
+            </tr>
+            <tr>
+              <td>Mủ chén</td>
+              <td><input type="number" id="deliveryCoagCupGross" step="0.1" min="0" placeholder="0" oninput="calculateDeliveryDry()"></td>
+              <td><input type="number" id="deliveryCoagCupDRC" step="0.1" min="1" max="80" value="40" oninput="calculateDeliveryDry()"></td>
+            </tr>
+            <tr>
+              <td>Mủ dây</td>
+              <td><input type="number" id="deliveryCoagScrapGross" step="0.1" min="0" placeholder="0" oninput="calculateDeliveryDry()"></td>
+              <td><input type="number" id="deliveryCoagScrapDRC" step="0.1" min="1" max="80" value="40" oninput="calculateDeliveryDry()"></td>
+            </tr>
+            <tr>
+              <td>Mủ tạp</td>
+              <td><input type="number" id="deliveryCoagMiscGross" step="0.1" min="0" placeholder="0" oninput="calculateDeliveryDry()"></td>
+              <td><input type="number" id="deliveryCoagMiscDRC" step="0.1" min="1" max="80" value="40" oninput="calculateDeliveryDry()"></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- Kết quả tính toán -->
       <div class="drc-result" id="deliveryDryResult">
         <h3>Trọng Lượng Quy Khô</h3>
+        <div class="drc-result-breakdown">
+          Mủ nước: <strong id="deliveryLatexDryWeight">0</strong> kg · Mủ đông: <strong id="deliveryCoagDryWeight">0</strong> kg
+        </div>
         <div class="value" id="deliveryDryWeight">0 kg</div>
       </div>
 
@@ -3683,6 +3811,10 @@ tr:hover { background: rgba(0,104,255,0.04); }
           <label>Người Giao</label>
           <input type="text" id="deliveryPerson" placeholder="Họ tên người giao">
         </div>
+        <div class="form-group">
+          <label>Người Nhận</label>
+          <input type="text" id="deliveryReceivePerson" placeholder="Họ tên người nhận tại NM">
+        </div>
       </div>
       <div class="form-group">
         <label>Ghi Chú</label>
@@ -3690,8 +3822,8 @@ tr:hover { background: rgba(0,104,255,0.04); }
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeDeliveryModal()">Hủy</button>
-      <button class="btn btn-primary" onclick="saveDelivery()">Lưu Phiếu</button>
+      <button class="btn btn-secondary delivery-modal-close" onclick="closeDeliveryModal()">Hủy</button>
+      <button class="btn btn-primary delivery-save-btn" onclick="saveDelivery()">Lưu Phiếu</button>
     </div>
   </div>
 </div>
@@ -3836,7 +3968,7 @@ tr:hover { background: rgba(0,104,255,0.04); }
 
 <!-- Reusable Components -->
 <script src="/static/js/components/searchable-select.js"></script>
-<script src="/static/js/components/DataTable.js"></script>
+<script src="/static/js/components/DataTable.js?v=2"></script>
 <script src="/static/js/components/ModalForm.js"></script>
 <script src="/static/js/components/StatsCards.js"></script>
 
@@ -3856,8 +3988,8 @@ tr:hover { background: rgba(0,104,255,0.04); }
 <!-- Sanxuat Tab Modules -->
 <script src="/static/js/sanxuat/tabs/gardens.js"></script>
 <script src="/static/js/sanxuat/services/FieldHarvestOffline.js"></script>
-<script src="/static/js/sanxuat/tabs/field-harvest.js?v=10"></script>
-<script src="/static/js/sanxuat/tabs/delivery.js"></script>
+<script src="/static/js/sanxuat/tabs/delivery.js?v=40"></script>
+<script src="/static/js/sanxuat/tabs/field-harvest.js?v=64"></script>
 <script src="/static/js/sanxuat/tabs/reception.js"></script>
 <script src="/static/js/sanxuat/tabs/mes.js"></script>
 <script src="/static/js/sanxuat/tabs/quality.js"></script>
@@ -9220,11 +9352,15 @@ function formatNumber(num) {
   return Number(num).toLocaleString('vi-VN');
 }
 
-function generateCode(prefix) {
-  const now = new Date();
-  const y = now.getFullYear().toString().slice(-2);
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
+function generateCode(prefix, refDate) {
+  var base = new Date();
+  if (refDate) {
+    var parsed = new Date(String(refDate).slice(0, 10) + 'T12:00:00');
+    if (!isNaN(parsed.getTime())) base = parsed;
+  }
+  const y = base.getFullYear().toString().slice(-2);
+  const m = String(base.getMonth() + 1).padStart(2, '0');
+  const d = String(base.getDate()).padStart(2, '0');
   const r = Math.random().toString(36).substring(2, 6).toUpperCase();
   return `${prefix}${y}${m}${d}${r}`;
 }
@@ -9453,7 +9589,9 @@ function getDeliveryStatusBadge(status) {
   return map[status] || map['pending'];
 }
 
-function updateDeliveryStats() { /* handled by TabDelivery module */ }
+function updateDeliveryStats() {
+  if (typeof TabDelivery !== 'undefined' && TabDelivery.updateDeliveryStats) TabDelivery.updateDeliveryStats();
+}
 
 function updateDeliveryTimeline() {
   // Update timeline step counts
@@ -9480,43 +9618,11 @@ function editDelivery(id) {
 }
 
 function toggleMaterialFields(type) {
-  const latexFields = document.getElementById('latexFields');
-  const coagFields = document.getElementById('coagulumFields');
-
-  if (latexFields && coagFields) {
-    if (type === 'latex') {
-      latexFields.style.display = 'block';
-      coagFields.style.display = 'none';
-    } else {
-      latexFields.style.display = 'none';
-      coagFields.style.display = 'block';
-    }
-  }
+  if (typeof TabDelivery !== 'undefined') TabDelivery.toggleMaterialFields(type);
 }
 
 function calculateDeliveryDry() {
-  const materialType = document.getElementById('deliveryMaterialType')?.value || 'latex';
-  let grossWeight = 0;
-  let drc = 0;
-
-  if (materialType === 'latex') {
-    grossWeight = parseFloat(document.getElementById('deliveryLatexGross')?.value) || 0;
-    drc = parseFloat(document.getElementById('deliveryLatexDRC')?.value) || 0;
-  } else {
-    grossWeight = parseFloat(document.getElementById('deliveryCoagGross')?.value) || 0;
-    drc = parseFloat(document.getElementById('deliveryCoagDRC')?.value) || 0;
-  }
-
-  const dryWeight = (grossWeight * drc / 100).toFixed(1);
-  const dryEl = document.getElementById('deliveryDryWeight');
-  if (dryEl) {
-    dryEl.textContent = formatNumber(dryWeight) + ' kg';
-  }
-
-  const resultEl = document.getElementById('deliveryDryResult');
-  if (resultEl) {
-    resultEl.style.display = drc > 0 ? 'block' : 'none';
-  }
+  if (typeof TabDelivery !== 'undefined') TabDelivery.calculateDeliveryDry();
 }
 
 // === TCCS 111 - Bảo quản NH3 & Latex cô đặc ===
@@ -9616,6 +9722,7 @@ function exportDeliveries() {
     'Niêm Phong': d.sealStatus === 'sealed' ? 'Còn nguyên' : (d.sealStatus === 'unsealed' ? 'Đã mở' : 'Bị hỏng'),
     'Trạng Thái': d.status === 'received' ? 'Đã tiếp nhận' : (d.status === 'in_transit' ? 'Đang vận chuyển' : 'Chờ nghiệm thu'),
     'Người Giao': d.deliveryPerson,
+    'Người Nhận': d.receivePerson || d.deliveryReceivePerson || '',
     'Ghi Chú': d.notes
   }));
 
@@ -9626,182 +9733,27 @@ function exportDeliveries() {
   showToast('Đã xuất file Excel!');
 }
 
-// Plots state for delivery
-let deliveryPlots = [];
-let selectedPlotIds = [];
-
-// Load plots when garden/squad is selected
+// Delivery plot helpers — logic in TabDelivery module
 function onDeliveryGardenChange() {
-  const squadId = document.getElementById('deliveryGardenId').value;
-  const container = document.getElementById('deliveryPlotsContainer');
-  const summary = document.getElementById('deliveryPlotsSummary');
-
-  if (!squadId) {
-    container.innerHTML = '<div class="no-plots-message">Chọn Đội SX để hiển thị danh sách lô</div>';
-    summary.style.display = 'none';
-    deliveryPlots = [];
-    selectedPlotIds = [];
-    return;
-  }
-
-  container.innerHTML = '<div class="no-plots-message">Đang tải danh sách lô...</div>';
-
-  // Lọc lô từ mapPlots theo Đội SX (squad)
-  const filteredPlots = mapPlots.filter(p => p.squad === squadId || p.doi === squadId);
-
-  if (filteredPlots.length > 0) {
-    deliveryPlots = filteredPlots.map(p => ({
-      id: p.id || p.code,
-      code: p.code,
-      name: p.name || p.code,
-      squad: p.squad,
-      team: p.team, // Tổ
-      area: p.area || 0,
-      variety: p.variety,
-      plantingYear: p.plantingYear,
-      eudrStatus: 'compliant', // Lô từ GeoJSON đều tuân thủ EUDR
-      eudrCompliant: true
-    }));
-  } else {
-    // Fallback: Nếu không có lô trong mapPlots, thử lấy từ gardens
-    const garden = gardens.find(g => g.id === squadId);
-    if (garden && garden.plots && garden.plots.length > 0) {
-      deliveryPlots = garden.plots.map((p, idx) => ({
-        id: p.id || `plot_${idx}`,
-        name: p.name || `Lô ${idx + 1}`,
-        area: p.area || 0,
-        eudrStatus: p.eudrStatus || 'compliant'
-      }));
-    } else {
-      deliveryPlots = [];
-    }
-  }
-
-  renderDeliveryPlots();
+  if (typeof TabDelivery !== 'undefined') TabDelivery.onDeliveryGardenChange();
 }
-
-function renderDeliveryPlots() {
-  const container = document.getElementById('deliveryPlotsContainer');
-  const summary = document.getElementById('deliveryPlotsSummary');
-
-  if (deliveryPlots.length === 0) {
-    container.innerHTML = '<div class="no-plots-message">Không có lô nào trong vườn này</div>';
-    summary.style.display = 'none';
-    return;
-  }
-
-  let html = '';
-  deliveryPlots.forEach(plot => {
-    const isChecked = selectedPlotIds.includes(plot.id);
-    const eudrIcon = plot.eudrStatus === 'compliant' ? '✓' : '⚠';
-    const eudrClass = plot.eudrStatus === 'compliant' ? 'compliant' : 'pending';
-
-    html += `
-      <label class="plot-checkbox ${isChecked ? 'checked' : ''}" data-plot-id="${plot.id}">
-        <input type="checkbox" value="${plot.id}" ${isChecked ? 'checked' : ''} onchange="onPlotCheckboxChange(this)">
-        <span class="plot-name">${plot.name}</span>
-        ${plot.area ? `<span class="plot-area">(${plot.area} ha)</span>` : ''}
-        <span class="eudr-icon ${eudrClass}" title="EUDR: ${plot.eudrStatus}">${eudrIcon}</span>
-      </label>
-    `;
-  });
-
-  container.innerHTML = html;
-  summary.style.display = 'flex';
-  updatePlotsSummary();
-}
-
-function onPlotCheckboxChange(checkbox) {
-  const plotId = checkbox.value;
-  const label = checkbox.closest('.plot-checkbox');
-
-  if (checkbox.checked) {
-    if (!selectedPlotIds.includes(plotId)) {
-      selectedPlotIds.push(plotId);
-    }
-    label.classList.add('checked');
-  } else {
-    selectedPlotIds = selectedPlotIds.filter(id => id !== plotId);
-    label.classList.remove('checked');
-  }
-
-  updatePlotsSummary();
-}
-
-function updatePlotsSummary() {
-  const countEl = document.getElementById('selectedPlotsCount');
-  const areaEl = document.getElementById('selectedPlotsArea');
-
-  countEl.textContent = selectedPlotIds.length;
-
-  const totalArea = selectedPlotIds.reduce((sum, plotId) => {
-    const plot = deliveryPlots.find(p => p.id === plotId);
-    return sum + (plot?.area || 0);
-  }, 0);
-
-  areaEl.textContent = totalArea.toFixed(2);
-}
-
-// Handle tapping session selection
 function onTappingSessionChange() {
-  const session = document.getElementById('deliveryTappingSession').value;
-
-  if (!session) return;
-
-  // Auto-select plots based on session (if tappingSessions collection exists)
-  loadPlotsForSession(session);
+  if (typeof TabDelivery !== 'undefined') TabDelivery.onTappingSessionChange();
 }
-
-async function loadPlotsForSession(session) {
-  const gardenId = document.getElementById('deliveryGardenId').value;
-  if (!gardenId) return;
-
-  try {
-    // Try to find tapping session config for this garden/team
-    const snapshot = await db.collection('tappingSessions')
-      .where('gardenId', '==', gardenId)
-      .where('name', '==', session)
-      .where('isActive', '==', true)
-      .limit(1)
-      .get();
-
-    if (!snapshot.empty) {
-      const sessionData = snapshot.docs[0].data();
-      if (sessionData.plotIds && sessionData.plotIds.length > 0) {
-        // Auto-check plots belonging to this session
-        selectedPlotIds = sessionData.plotIds;
-        renderDeliveryPlots();
-        showToast(`Đã chọn ${selectedPlotIds.length} lô theo phiên ${session}`, 'success');
-      }
-    }
-  } catch (error) {
-    console.log('Tapping sessions not configured, manual selection required');
-  }
+function onPlotCheckboxChange(checkbox) {
+  if (typeof TabDelivery !== 'undefined') TabDelivery.onPlotCheckboxChange(checkbox);
 }
-
-// Select all plots
 function selectAllPlots() {
-  selectedPlotIds = deliveryPlots.map(p => p.id);
-  renderDeliveryPlots();
+  if (typeof TabDelivery !== 'undefined') TabDelivery.selectAllPlots();
 }
-
-// Deselect all plots
 function deselectAllPlots() {
-  selectedPlotIds = [];
-  renderDeliveryPlots();
+  if (typeof TabDelivery !== 'undefined') TabDelivery.deselectAllPlots();
 }
-
-// Get selected plot IDs for saving
 function getSelectedPlotIds() {
-  return selectedPlotIds;
+  return typeof TabDelivery !== 'undefined' ? TabDelivery.getSelectedPlotIds() : [];
 }
-
-// Get selected plot names for display
 function getSelectedPlotNames() {
-  return selectedPlotIds.map(id => {
-    const plot = deliveryPlots.find(p => p.id === id);
-    return plot?.name || id;
-  });
+  return typeof TabDelivery !== 'undefined' ? TabDelivery.getSelectedPlotNames() : [];
 }
 
 // ============================================

@@ -1,7 +1,7 @@
 /**
  * Service Worker — cache shell Sản xuất + tab Sản lượng CN (mở lại khi không có mạng).
  */
-var CACHE = 'rriv-sanxuat-v4';
+var CACHE = 'rriv-sanxuat-v27';
 var SHELL = [
   '/',
   '/sanxuat',
@@ -21,7 +21,8 @@ var SHELL = [
   '/static/css/app-sanxuat.css',
   '/static/js/sanxuat/services/TscDrcConverter.js',
   '/static/js/sanxuat/services/FieldHarvestOffline.js',
-  '/static/js/sanxuat/tabs/field-harvest.js',
+  '/static/js/sanxuat/tabs/delivery.js?v=38',
+  '/static/js/sanxuat/tabs/field-harvest.js?v=59',
   '/static/manifest.json',
   '/static/icon-192.png',
   '/static/icon-512.png'
@@ -59,22 +60,32 @@ self.addEventListener('fetch', function (event) {
 
   if (!isSanxuatPage && !isStatic) return;
 
+  var isTabJs = url.pathname.indexOf('/static/js/sanxuat/tabs/') === 0;
+
   event.respondWith(
-    caches.match(req).then(function (cached) {
-      if (cached) return cached;
-      return fetch(req).then(function (res) {
-        if (res && res.status === 200 && (isStatic || isSanxuatPage)) {
-          var clone = res.clone();
-          caches.open(CACHE).then(function (c) { c.put(req, clone); });
-        }
-        return res;
-      }).catch(function () {
-        if (isSanxuatPage) {
-          return caches.match('/sanxuat').then(function (p) {
-            return p || caches.match('/');
-          });
-        }
-        return cached;
+    (isTabJs ? fetch(req) : Promise.resolve(null)).catch(function () { return null; }).then(function (networkRes) {
+      if (networkRes && networkRes.status === 200) {
+        var clone = networkRes.clone();
+        caches.open(CACHE).then(function (c) { c.put(req, clone); });
+        return networkRes;
+      }
+      return caches.match(req).then(function (cached) {
+        if (cached) return cached;
+        if (networkRes) return networkRes;
+        return fetch(req).then(function (res) {
+          if (res && res.status === 200 && (isStatic || isSanxuatPage)) {
+            var c2 = res.clone();
+            caches.open(CACHE).then(function (c) { c.put(req, c2); });
+          }
+          return res;
+        }).catch(function () {
+          if (isSanxuatPage) {
+            return caches.match('/sanxuat').then(function (p) {
+              return p || caches.match('/');
+            });
+          }
+          return cached;
+        });
       });
     })
   );
