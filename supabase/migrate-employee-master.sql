@@ -103,11 +103,28 @@ ALTER TABLE employee ADD COLUMN IF NOT EXISTS app_roles_cache JSONB DEFAULT '{}'
 ALTER TABLE employee ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
 ALTER TABLE employee ADD COLUMN IF NOT EXISTS erp_role TEXT DEFAULT 'user';
 
--- Gán UUID chính = user_id (cột user_id kiểu UUID hoặc TEXT đều được)
-UPDATE employee
-SET uuid_id = user_id::uuid
-WHERE uuid_id IS NULL
-  AND user_id IS NOT NULL;
+-- Gán uuid_id: ưu tiên user_id (legacy), sau đó id UUID, cuối cùng gen_random_uuid()
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'employee' AND column_name = 'user_id'
+  ) THEN
+    EXECUTE $sql$
+      UPDATE employee
+      SET uuid_id = user_id::uuid
+      WHERE uuid_id IS NULL AND user_id IS NOT NULL
+    $sql$;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'employee'
+      AND column_name = 'id' AND udt_name = 'uuid'
+  ) THEN
+    UPDATE employee SET uuid_id = id WHERE uuid_id IS NULL;
+  END IF;
+END $$;
 
 UPDATE employee
 SET uuid_id = gen_random_uuid()
@@ -186,26 +203,37 @@ WHERE ua.employee_id IS NULL
   AND ua.employee_legacy_id IS NOT NULL
   AND e.id = ua.employee_legacy_id;
 
--- Gắn employee_id qua user_id
-UPDATE user_accounts ua
-SET employee_id = e.uuid_id
-FROM employee e
-WHERE ua.employee_id IS NULL
-  AND e.user_id IS NOT NULL
-  AND lower(trim(ua.username)) = lower(trim(
-    COALESCE(
-      e.username,
-      (SELECT cp.username FROM category_personnel cp WHERE cp.id = e.user_id::text LIMIT 1)
-    )
-  ));
+-- Gắn employee_id qua user_id (chỉ khi bảng employee còn cột user_id legacy)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'employee' AND column_name = 'user_id'
+  ) THEN
+    EXECUTE $sql$
+      UPDATE user_accounts ua
+      SET employee_id = e.uuid_id
+      FROM employee e
+      WHERE ua.employee_id IS NULL
+        AND e.user_id IS NOT NULL
+        AND lower(trim(ua.username)) = lower(trim(
+          COALESCE(
+            e.username,
+            (SELECT cp.username FROM category_personnel cp WHERE cp.id = e.user_id::text LIMIT 1)
+          )
+        ))
+    $sql$;
 
--- Gắn thêm qua category_personnel.username
-UPDATE user_accounts ua
-SET employee_id = e.uuid_id
-FROM employee e
-JOIN category_personnel cp ON cp.id = e.user_id::text
-WHERE ua.employee_id IS NULL
-  AND lower(trim(ua.username)) = lower(trim(cp.username));
+    EXECUTE $sql$
+      UPDATE user_accounts ua
+      SET employee_id = e.uuid_id
+      FROM employee e
+      JOIN category_personnel cp ON cp.id = e.user_id::text
+      WHERE ua.employee_id IS NULL
+        AND lower(trim(ua.username)) = lower(trim(cp.username))
+    $sql$;
+  END IF;
+END $$;
 
 -- Gắn qua email
 UPDATE user_accounts ua
@@ -226,16 +254,26 @@ WHERE e.username IS NULL
 -- -----------------------------------------------------------------------------
 -- 4. Chuyển system_role_id từ employee → user_system_role
 -- -----------------------------------------------------------------------------
-INSERT INTO user_system_role (username, system_role_id, assigned_by, metadata)
-SELECT DISTINCT
-  ua.username,
-  e.system_role_id,
-  'migrate-employee-master',
-  jsonb_build_object('migrated_from', 'employee.system_role_id')
-FROM employee e
-JOIN user_accounts ua ON ua.employee_id = e.uuid_id
-WHERE e.system_role_id IS NOT NULL
-ON CONFLICT (username, system_role_id) DO NOTHING;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'employee' AND column_name = 'system_role_id'
+  ) THEN
+    EXECUTE $sql$
+      INSERT INTO user_system_role (username, system_role_id, assigned_by, metadata)
+      SELECT DISTINCT
+        ua.username,
+        e.system_role_id,
+        'migrate-employee-master',
+        jsonb_build_object('migrated_from', 'employee.system_role_id')
+      FROM employee e
+      JOIN user_accounts ua ON ua.employee_id = e.uuid_id
+      WHERE e.system_role_id IS NOT NULL
+      ON CONFLICT (username, system_role_id) DO NOTHING
+    $sql$;
+  END IF;
+END $$;
 
 -- -----------------------------------------------------------------------------
 -- 5. Import category_personnel → employee (những người chưa có trong employee)
@@ -374,11 +412,43 @@ WHERE (
     cp.id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     AND e.uuid_id = cp.id::uuid
   )
-   OR (e.user_id IS NOT NULL AND e.user_id::text = cp.id)
    OR (
      e.username IS NOT NULL AND cp.username IS NOT NULL
      AND lower(trim(e.username)) = lower(trim(cp.username))
    );
+
+-- Khớp thêm qua user_id legacy (nếu cột còn tồn tại)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'employee' AND column_name = 'user_id'
+  ) THEN
+    EXECUTE $sql$
+      UPDATE employee e
+      SET
+        username = COALESCE(e.username, cp.username),
+        department_name = COALESCE(e.department_name, cp.department),
+        position_name = COALESCE(e.position_name, cp.position),
+        team_name = COALESCE(e.team_name, cp.team),
+        phone_number = COALESCE(e.phone_number, cp.phone),
+        company_email = COALESCE(e.company_email, cp.email),
+        personal_email = COALESCE(e.personal_email, cp.email),
+        app_roles_cache = CASE
+          WHEN cp.app_roles_cache IS NOT NULL AND cp.app_roles_cache <> '{}'::jsonb THEN cp.app_roles_cache
+          ELSE e.app_roles_cache
+        END,
+        erp_role = COALESCE(NULLIF(cp.role, ''), e.erp_role),
+        disabled = COALESCE(cp.disabled, e.disabled),
+        account_locked = COALESCE(cp.account_locked, e.account_locked),
+        lock_until = COALESCE(cp.lock_until, e.lock_until),
+        metadata = e.metadata || jsonb_build_object('synced_from_category_personnel', cp.id),
+        updated_at = now()
+      FROM category_personnel cp
+      WHERE e.user_id IS NOT NULL AND e.user_id::text = cp.id
+    $sql$;
+  END IF;
+END $$;
 
 -- Gắn user_accounts cho nhân sự mới import (chưa có employee_id)
 UPDATE user_accounts ua
@@ -476,14 +546,39 @@ SELECT
   e.lock_until,
   COALESCE(e.erp_role, 'user'),
   COALESCE(e.app_roles_cache, '{}'::jsonb),
-  COALESCE(e.metadata, '{}'::jsonb) || jsonb_build_object(
-    'legacy_user_id', e.user_id,
-    'legacy_system_role_id', e.system_role_id
-  ),
+  COALESCE(e.metadata, '{}'::jsonb),
   COALESCE(e.created_at, now()),
   COALESCE(e.updated_at, now())
 FROM employee e
 ON CONFLICT (id) DO NOTHING;
+
+-- Bổ sung metadata legacy (chỉ khi cột user_id / system_role_id còn trên employee cũ)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'employee' AND column_name = 'user_id'
+  ) THEN
+    EXECUTE $sql$
+      UPDATE employee_new en
+      SET metadata = en.metadata || jsonb_build_object('legacy_user_id', e.user_id)
+      FROM employee e
+      WHERE en.id = e.uuid_id AND e.user_id IS NOT NULL
+    $sql$;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'employee' AND column_name = 'system_role_id'
+  ) THEN
+    EXECUTE $sql$
+      UPDATE employee_new en
+      SET metadata = en.metadata || jsonb_build_object('legacy_system_role_id', e.system_role_id)
+      FROM employee e
+      WHERE en.id = e.uuid_id AND e.system_role_id IS NOT NULL
+    $sql$;
+  END IF;
+END $$;
 
 -- Cập nhật FK user_accounts → employee_new.id (UUID)
 UPDATE user_accounts ua

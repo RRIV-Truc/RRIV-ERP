@@ -2,6 +2,7 @@
   "apps": [
     { "app_id": "nhansu", "name": "Nhân sự", "scope_type": "department", "hub_enabled": true, "assignable": true, "sort_order": 10 },
     { "app_id": "sanxuat", "name": "Sản xuất", "scope_type": "team", "hub_enabled": true, "assignable": true, "sort_order": 20 },
+    { "app_id": "phonghop", "name": "Phòng họp", "scope_type": "department", "hub_enabled": true, "assignable": true, "sort_order": 25, "metadata": { "module": "meetings", "features": ["internal", "hybrid", "physical_rooms"] } },
     { "app_id": "vuoncay", "name": "Vườn cây", "scope_type": "department", "hub_enabled": false, "assignable": true, "sort_order": 30 },
     { "app_id": "baocao", "name": "Báo cáo", "scope_type": "department", "hub_enabled": false, "assignable": true, "sort_order": 40 },
     { "app_id": "thongbao", "name": "Thông báo", "scope_type": "department", "hub_enabled": false, "assignable": true, "sort_order": 50 },
@@ -86,6 +87,30 @@
       "permissions": ["harvest:view"],
       "scope_type": "team", "scopeable": {"byDepartment": false, "byTeam": true, "byFactory": false},
       "sort_order": 50
+    },
+    {
+      "app_id": "phonghop", "role_id": "admin", "role_name": "Quản trị app",
+      "description": "Toàn quyền phòng họp & quản lý phòng vật lý",
+      "permissions": ["meeting:*", "room:*"],
+      "scope_type": "all", "sort_order": 10
+    },
+    {
+      "app_id": "phonghop", "role_id": "manager", "role_name": "Quản lý phòng",
+      "description": "Tạo & quản lý cuộc họp trong phạm vi phòng ban",
+      "permissions": ["meeting:create", "meeting:edit", "meeting:cancel", "meeting:view", "meeting:join", "room:view", "room:book"],
+      "scope_type": "department", "scopeable": {"byDepartment": true}, "sort_order": 20
+    },
+    {
+      "app_id": "phonghop", "role_id": "staff", "role_name": "Nhân viên",
+      "description": "Tham gia cuộc họp được mời — không tạo cuộc họp mới",
+      "permissions": ["meeting:view", "meeting:join", "room:view"],
+      "scope_type": "department", "scopeable": {"byDepartment": true}, "sort_order": 30
+    },
+    {
+      "app_id": "phonghop", "role_id": "viewer", "role_name": "Chỉ xem",
+      "description": "Xem lịch phòng & cuộc họp được mời",
+      "permissions": ["meeting:view", "room:view"],
+      "scope_type": "department", "scopeable": {"byDepartment": true}, "sort_order": 40
     },
     {
       "app_id": "vuoncay", "role_id": "admin", "role_name": "Quản trị app",

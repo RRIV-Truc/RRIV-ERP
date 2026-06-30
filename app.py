@@ -30,6 +30,10 @@ def _no_cache_html(response):
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+app.config['SUPABASE_CLIENT'] = supabase
+
+from modules.meetings.routes import meetings_bp
+app.register_blueprint(meetings_bp)
 
 EMAIL_SENDER = os.getenv("EMAIL_SENDER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
@@ -53,7 +57,7 @@ OTP_SESSIONS = {}
 VALID_APPS = [
     'vanphongpham', 'doanhnghiep', 'dieuhanhxe', 'vanbannoibo', 'nhansu',
     'dautu', 'diemdanh', 'vuoncay', 'sanxuat', 'chatluong', 'thoitiet',
-    'baocao', 'thongbao', 'phanquyen'
+    'baocao', 'thongbao', 'phanquyen', 'phonghop'
 ]
 
 PHUOC_HOA_FILES = {
@@ -71,6 +75,7 @@ PHUOC_HOA_FILES = {
     'baocao': 'app-bctm.html',
     'thongbao': 'app-thongbao.html',
     'phanquyen': 'app-admin-roles.html',
+    'phonghop': 'phonghop.html',
 }
 
 APP_TITLES = {
@@ -88,6 +93,7 @@ APP_TITLES = {
     'baocao': 'Báo Cáo Thông Minh',
     'thongbao': 'Quản Lý Thông Báo',
     'phanquyen': 'Quản Lý Phân Quyền',
+    'phonghop': 'Phòng Họp',
 }
 
 # URL /app/<tên> → file template thực tế (tên có thể khác URL)
@@ -106,6 +112,7 @@ APP_TEMPLATES = {
     'thongbao': 'thongbao.html',
     'phanquyen': 'phanquyen.html',
     'doanhnghiep': 'doanhnghiep.html',
+    'phonghop': 'phonghop.html',
 }
 
 # Firestore collection name → bảng Supabase chuyên biệt (nếu có)
@@ -134,6 +141,9 @@ TABLE_MAP = {
     'vRubberDeliveryReceiptMetrics': 'v_rubber_delivery_receipt_metrics',
     'tscDrcConversion': 'tsc_drc_conversion',
     'employeePositions': 'employee_assignment',
+    'meetings': 'meetings',
+    'meetingParticipants': 'meeting_participants',
+    'meetingRooms': 'meeting_rooms',
 }
 
 _RUBBER_DELIVERY_COLUMNS = frozenset({

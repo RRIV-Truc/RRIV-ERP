@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+{% include 'includes/rriv_core.html' %}
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Phòng Họp</title>
+<meta name="theme-color" content="#0ea5e9">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="stylesheet" href="/static/css/app-phonghop.css">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<header class="ph-header">
+  <button class="btn-icon" id="btnHome" title="Trang chủ">🏠</button>
+  <div>
+    <h1>Phòng Họp</h1>
+    <p>Tại chỗ · Online nội bộ · Viện NC Cao su VN</p>
+  </div>
+  <div class="user-chip" id="userChip">
+    <div class="avatar">?</div>
+    <div class="name">Đang tải...</div>
+  </div>
+</header>
+
+<main class="ph-main">
+  <div class="ph-toolbar">
+    <button class="ph-btn ph-btn-primary" id="btnCreateMeeting" type="button">+ Tạo cuộc họp</button>
+    <div class="ph-join-bar">
+      <input type="text" id="joinCodeInput" placeholder="Mã cuộc họp MTG-2026-0001" autocomplete="off">
+      <button class="ph-btn ph-btn-primary" id="btnJoinByCode" type="button">Vào phòng</button>
+    </div>
+    <button class="ph-btn" id="btnRefresh" type="button">Làm mới</button>
+  </div>
+  <section id="meetingsList">
+    <div class="ph-empty">Đang tải...</div>
+  </section>
+  <div id="meetingRoomHost" class="ph-room-host"></div>
+</main>
+
+<script src="/static/js/components/ModalForm.js"></script>
+<script src="/static/js/meetings/org-directory.js"></script>
+<script src="/static/js/meetings/state.js"></script>
+<script src="/static/js/meetings/services.js"></script>
+<script src="/static/js/meetings/permissions.js"></script>
+<script src="/static/js/meetings/components/ParticipantTreePicker.js"></script>
+<script src="/static/js/meetings/components/MeetingForm.js"></script>
+<script src="/static/js/meetings/components/MeetingDetail.js"></script>
+<script src="/static/js/meetings/components/MeetingRoom.js"></script>
+<script src="/static/js/meetings/main.js"></script>
+</body>
+</html>

@@ -63,7 +63,8 @@ const Config = (function () {
     thoitiet: '/app/thoitiet',
     baocao: '/app/baocao',
     thongbao: '/app/thongbao',
-    phanquyen: '/app/phanquyen'
+    phanquyen: '/app/phanquyen',
+    phonghop: '/app/phonghop'
   };
 
   /**
@@ -84,7 +85,8 @@ const Config = (function () {
     thoitiet: false,
     baocao: false,
     thongbao: false,
-    phanquyen: false
+    phanquyen: false,
+    phonghop: true
   };
 
   function isHubAppEnabled(appId) {

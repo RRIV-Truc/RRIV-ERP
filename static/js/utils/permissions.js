@@ -15,7 +15,8 @@ const Permissions = (function () {
     CHATLUONG: 'chatluong',
     BAOCAO: 'baocao',
     THONGBAO: 'thongbao',
-    PHANQUYEN: 'phanquyen'
+    PHANQUYEN: 'phanquyen',
+    PHONGHOP: 'phonghop'
   };
 
   const BROAD_SANXUAT_ROLES = ['admin', 'supervisor', 'manager', 'director'];
