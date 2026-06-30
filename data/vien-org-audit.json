@@ -1,0 +1,278 @@
+{
+  "departments": [
+    {
+      "id": "dl-1",
+      "name": "Ban Lãnh đạo Viện",
+      "dept_type": "Ban Lãnh Đạo",
+      "metadata": {
+        "order": 1,
+        "org_type": "vien",
+        "canonical": true
+      },
+      "active": true,
+      "employee_count": 3
+    },
+    {
+      "id": "dl-6",
+      "name": "Phòng Quản trị tài chính kế toán",
+      "dept_type": "Phòng Nghiệp Vụ",
+      "metadata": {
+        "order": 2,
+        "org_type": "vien",
+        "canonical": true
+      },
+      "active": true,
+      "employee_count": 23
+    },
+    {
+      "id": "dl-5",
+      "name": "Phòng Kế hoạch và Khoa học - Công nghệ",
+      "dept_type": "Phòng Nghiệp Vụ",
+      "metadata": {
+        "order": 3,
+        "org_type": "vien",
+        "canonical": true
+      },
+      "active": true,
+      "employee_count": 7
+    },
+    {
+      "id": "dl-2",
+      "name": "Trung tâm nghiên cứu phát triển sản phẩm mới",
+      "dept_type": "Trung Tâm",
+      "metadata": {
+        "order": 4,
+        "org_type": "vien",
+        "canonical": true
+      },
+      "active": true,
+      "employee_count": 11
+    },
+    {
+      "id": "dl-3",
+      "name": "Trung tâm nghiên cứu phát triển Giống cao su",
+      "dept_type": "Trung Tâm",
+      "metadata": {
+        "order": 5,
+        "org_type": "vien",
+        "canonical": true
+      },
+      "active": true,
+      "employee_count": 213
+    },
+    {
+      "id": "dl-4",
+      "name": "Trung tâm nghiên cứu ứng dụng nông nghiệp công nghệ cao",
+      "dept_type": "Trung Tâm",
+      "metadata": {
+        "order": 6,
+        "org_type": "vien",
+        "canonical": true
+      },
+      "active": true,
+      "employee_count": 47
+    },
+    {
+      "id": "vien-10",
+      "name": "Trạm TNCS Phú Yên",
+      "dept_type": "Trung Tâm",
+      "metadata": {
+        "merged": true,
+        "retired": true
+      },
+      "active": false,
+      "employee_count": 0
+    },
+    {
+      "id": "vien-01",
+      "name": "Ban Lãnh Đạo",
+      "dept_type": "Ban Lãnh Đạo",
+      "metadata": {
+        "merged": true,
+        "retired": true
+      },
+      "active": false,
+      "employee_count": 0
+    },
+    {
+      "id": "vien-02",
+      "name": "Phòng Quản trị Nhân sự - Hành chính",
+      "dept_type": "Phòng Nghiệp Vụ",
+      "metadata": {
+        "merged": true,
+        "retired": true
+      },
+      "active": false,
+      "employee_count": 0
+    },
+    {
+      "id": "vien-03",
+      "name": "Phòng Kế hoạch và Khoa học - Công nghệ",
+      "dept_type": "Phòng Nghiệp Vụ",
+      "metadata": {
+        "merged": true,
+        "retired": true
+      },
+      "active": false,
+      "employee_count": 0
+    },
+    {
+      "id": "vien-04",
+      "name": "Phòng Tài chính - Kế toán",
+      "dept_type": "Phòng Nghiệp Vụ",
+      "metadata": {
+        "merged": true,
+        "retired": true
+      },
+      "active": false,
+      "employee_count": 0
+    },
+    {
+      "id": "vien-05",
+      "name": "Trung tâm QLCLCS Thiên nhiên",
+      "dept_type": "Trung Tâm",
+      "metadata": {
+        "merged": true,
+        "retired": true
+      },
+      "active": false,
+      "employee_count": 0
+    },
+    {
+      "id": "vien-06",
+      "name": "Trung tâm Nghiên cứu Phát triển Giống Cao su",
+      "dept_type": "Trung Tâm",
+      "metadata": {
+        "merged": true,
+        "retired": true
+      },
+      "active": false,
+      "employee_count": 0
+    },
+    {
+      "id": "vien-07",
+      "name": "Trung tâm Nghiên cứu và Chuyển giao tiến bộ kỹ thuật",
+      "dept_type": "Trung Tâm",
+      "metadata": {
+        "merged": true,
+        "retired": true
+      },
+      "active": false,
+      "employee_count": 0
+    },
+    {
+      "id": "vien-08",
+      "name": "Trung tâm NCPT Cao su Tiểu điền",
+      "dept_type": "Trung Tâm",
+      "metadata": {
+        "merged": true,
+        "retired": true
+      },
+      "active": false,
+      "employee_count": 0
+    },
+    {
+      "id": "vien-09",
+      "name": "Trung tâm NCCGKT Tây Nguyên",
+      "dept_type": "Trung Tâm",
+      "metadata": {
+        "merged": true,
+        "retired": true
+      },
+      "active": false,
+      "employee_count": 0
+    }
+  ],
+  "teams": [
+    {
+      "id": "1",
+      "name": "Đội SX 1",
+      "department": "Sản xuất",
+      "metadata": {
+        "code": "1",
+        "squad": "1"
+      }
+    },
+    {
+      "id": "2",
+      "name": "Đội SX 2",
+      "department": "Sản xuất",
+      "metadata": {
+        "code": "2",
+        "squad": "2"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Đội SX 3",
+      "department": "Sản xuất",
+      "metadata": {
+        "code": "3",
+        "squad": "3"
+      }
+    },
+    {
+      "id": "team-lk",
+      "name": "Trạm Lai Khê",
+      "department": "dl-3",
+      "metadata": {
+        "order": 1,
+        "station": "Trạm Lai Khê"
+      }
+    },
+    {
+      "id": "tram-suoi-kiet",
+      "name": "Trạm Suối Kiết",
+      "department": "dl-3",
+      "metadata": {
+        "order": 2,
+        "station": "Trạm Suối Kiết"
+      }
+    },
+    {
+      "id": "tram-csd-giong",
+      "name": "Trạm CSD giống",
+      "department": "dl-3",
+      "metadata": {
+        "order": 3,
+        "station": "Trạm CSD giống"
+      }
+    },
+    {
+      "id": "tram-tay-nguyen",
+      "name": "Trạm Tây Nguyên",
+      "department": "dl-3",
+      "metadata": {
+        "order": 4,
+        "station": "Trạm Tây Nguyên"
+      }
+    },
+    {
+      "id": "tram-phu-yen",
+      "name": "Trạm Phú Yên",
+      "department": "dl-3",
+      "metadata": {
+        "order": 5,
+        "station": "Trạm Phú Yên"
+      }
+    }
+  ],
+  "employee_by_dept_id": {
+    "dl-3": 213,
+    "Viện RRIV": 1,
+    "dl-6": 23,
+    "dl-2": 11,
+    "dl-5": 7,
+    "dl-4": 47,
+    "dl-1": 3
+  },
+  "employee_by_dept_name": {
+    "Trung tâm nghiên cứu phát triển Giống cao su": 213,
+    "Viện RRIV": 1,
+    "Phòng Quản trị tài chính kế toán": 23,
+    "Trung tâm nghiên cứu phát triển sản phẩm mới": 11,
+    "Phòng Kế hoạch và Khoa học - Công nghệ": 7,
+    "Trung tâm nghiên cứu ứng dụng nông nghiệp công nghệ cao": 47,
+    "Ban Lãnh đạo Viện": 3
+  }
+}

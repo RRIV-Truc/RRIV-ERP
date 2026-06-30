@@ -3475,6 +3475,8 @@ const TabFieldHarvest = (function () {
     };
   }
 
+  let _lotModalReturnTarget = 'section';
+
   function openSectionModal() {
     if (!selectedTeam) { _toast('Chọn tổ/đội sản xuất trước', 'warning'); return; }
     var team = companyTeams.find(function (t) { return String(t.id) === String(selectedTeam); });
@@ -3491,6 +3493,79 @@ const TabFieldHarvest = (function () {
 
   function closeSectionModal() {
     _el('fhSectionModal').classList.remove('active');
+  }
+
+  function openLotModal(returnTarget) {
+    if (!selectedTeam) { _toast('Chọn tổ/đội sản xuất trước', 'warning'); return; }
+    _lotModalReturnTarget = returnTarget === 'assign' ? 'assign' : 'section';
+    var team = companyTeams.find(function (t) { return String(t.id) === String(selectedTeam); });
+    var teamMeta = team ? _parseMeta(team.metadata) : {};
+    var hint = _el('fhLotTeamHint');
+    if (hint) {
+      hint.textContent = 'Đội SX: ' + (team ? (team.name || selectedTeam) : selectedTeam) +
+        (teamMeta.code ? (' · mã đội ' + teamMeta.code) : '');
+    }
+    var codeEl = _el('fhLotCode');
+    var nameEl = _el('fhLotName');
+    var areaEl = _el('fhLotArea');
+    if (codeEl) codeEl.value = '';
+    if (nameEl) nameEl.value = '';
+    if (areaEl) areaEl.value = '';
+    _el('fhLotModal').classList.add('active');
+    if (codeEl) codeEl.focus();
+  }
+
+  function closeLotModal() {
+    _el('fhLotModal').classList.remove('active');
+  }
+
+  async function saveLot() {
+    if (!selectedTeam) { _toast('Chọn tổ/đội sản xuất trước', 'warning'); return; }
+    if (!_isOnline()) { _toast('Cần mạng để thêm lô mới', 'warning'); return; }
+
+    var lotCode = (_el('fhLotCode') && _el('fhLotCode').value || '').trim();
+    var lotName = (_el('fhLotName') && _el('fhLotName').value || '').trim();
+    var areaHa = parseFloat((_el('fhLotArea') && _el('fhLotArea').value) || '');
+    if (!lotCode) { _toast('Nhập ID LÔ (mã lô)', 'error'); return; }
+
+    var team = companyTeams.find(function (t) { return String(t.id) === String(selectedTeam); });
+    var teamMeta = team ? _parseMeta(team.metadata) : {};
+    var squad = teamMeta.code || 'LK';
+
+    if (lotCatalog.some(function (l) { return l.lot_code === lotCode; })) {
+      _toast('Lô ' + lotCode + ' đã có trong danh mục', 'warning');
+      return;
+    }
+
+    var payload = {
+      id: lotCode,
+      lot_code: lotCode,
+      squad: squad,
+      area_ha: isNaN(areaHa) ? null : areaHa,
+      metadata: {
+        ten_lo: lotName || lotCode,
+        team_id: selectedTeam
+      }
+    };
+
+    try {
+      await _db().collection('rubberLots').doc(lotCode).set(payload, { merge: true });
+      closeLotModal();
+      await loadLotCatalog();
+      if (_lotModalReturnTarget === 'assign') {
+        _fillLotSelectEl(_el('fhAssignRowLot'), lotCode);
+        onAssignRowLotChange();
+      } else {
+        _fillLotSelectEl(_el('fhSectionLot'), lotCode);
+      }
+      _toast('Đã thêm lô ' + lotCode);
+    } catch (e) {
+      if (_isDuplicateKeyError(e)) {
+        _toast('Lô ' + lotCode + ' đã tồn tại', 'warning');
+      } else {
+        _toast('Lỗi lưu lô: ' + e.message, 'error');
+      }
+    }
   }
 
   function _findSectionByCode(code) {
@@ -5408,6 +5483,7 @@ const TabFieldHarvest = (function () {
     prefetchOfflineData: prefetchOfflineData,
     syncNow: syncNow,
     openSectionModal: openSectionModal, closeSectionModal: closeSectionModal,
+    openLotModal: openLotModal, closeLotModal: closeLotModal, saveLot: saveLot,
     saveSection: saveSection, deleteSection: deleteSection, copyFromDate: copyFromDate,
     openAssignRowModal: openAssignRowModal, closeAssignRowModal: closeAssignRowModal,
     onAssignRowLotChange: onAssignRowLotChange, confirmAssignRow: confirmAssignRow,

@@ -1,0 +1,15 @@
+﻿python : Traceback (most recent call last):
+At C:\Users\ADMIN\AppData\Local\Temp\ps-script-923607ee-ff0f-4633-b1ea-396c6e278ad1.ps1:105 char:27
++ ... \RRIV-ERP"; python scripts/import_vien_personnel.py --dry-run 2>&1 |  ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File "C:\project\RRIV-ERP\scripts\import_vien_personnel.py", line 309, in <module>
+    main()
+  File "C:\project\RRIV-ERP\scripts\import_vien_personnel.py", line 304, in main
+    print(f"\u0110\u1ecdc \u0111\u01b0\u1ee3c {len(depts)} ph≥ng ban / trung tΓm, {len(people)} nhΓn s\u1ef1")
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 0-1: character maps to <undefined>
