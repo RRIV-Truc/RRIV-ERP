@@ -81,11 +81,57 @@ const RrivHub = (function () {
 
   function init() {
     applyHubAppLocks();
+    if (redirectIfReturnUrl()) return;
     tryRestoreSession();
+    if (redirectIfReturnUrl()) return;
+  }
+
+  function getSafeReturnUrl() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var ret = params.get('return');
+      if (!ret || !ret.startsWith('/') || ret.startsWith('//')) return null;
+      return ret;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function redirectIfReturnUrl() {
+    var ret = getSafeReturnUrl();
+    if (!ret) return false;
+    var loggedIn = (typeof Auth !== 'undefined' && Auth.isLoggedIn && Auth.isLoggedIn())
+      || !!currentUser
+      || !!(typeof Auth !== 'undefined' && Auth.restoreSession && Auth.restoreSession());
+    if (loggedIn) {
+      window.location.replace(ret);
+      return true;
+    }
+    showJoinLoginHint(ret);
+    return false;
+  }
+
+  function showJoinLoginHint(returnPath) {
+    if (!returnPath || returnPath.indexOf('phonghop/join') < 0) return;
+    var login = document.getElementById('loginScreen');
+    if (!login) return;
+    var hint = document.getElementById('loginReturnHint');
+    if (!hint) {
+      hint = document.createElement('p');
+      hint.id = 'loginReturnHint';
+      hint.className = 'login-return-hint';
+      hint.textContent = 'Đăng nhập tài khoản Viện để tham gia cuộc họp qua link/QR.';
+      var form = document.getElementById('loginForm');
+      if (form && form.parentNode) form.parentNode.insertBefore(hint, form);
+    }
+    hint.style.display = 'block';
   }
 
   function onPageShow(event) {
-    if (event && event.persisted) init();
+    applyHubAppLocks();
+    if (event && event.persisted) {
+      tryRestoreSession();
+    }
   }
 
   function getCurrentUser() {
@@ -100,6 +146,8 @@ const RrivHub = (function () {
     tryRestoreSession,
     setCurrentUser,
     getCurrentUser,
+    getSafeReturnUrl,
+    redirectIfReturnUrl,
     onPageShow,
     userDisplayName
   };

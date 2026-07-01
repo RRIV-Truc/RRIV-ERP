@@ -2,53 +2,271 @@
 <html lang="vi">
 <head>
 {% include 'includes/rriv_core.html' %}
+{% if erp_join_origin %}
+<meta name="erp-public-origin" content="{{ erp_join_origin }}">
+{% endif %}
+{% if erp_lan_origin %}
+<meta name="erp-lan-origin" content="{{ erp_lan_origin }}">
+{% endif %}
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>Phòng Họp</title>
-<meta name="theme-color" content="#0ea5e9">
-<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
-<link rel="stylesheet" href="/static/css/app-phonghop.css">
+<title>Phòng Họp e-Cabinet</title>
+<meta name="theme-color" content="#0c4a6e">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="stylesheet" href="/static/css/app-phonghop.css?v=60">
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="/static/js/vendor/qrcode.min.js"></script>
 </head>
-<body>
+<body class="ph-shell-body">
 
-<header class="ph-header">
-  <button class="btn-icon" id="btnHome" title="Trang chủ">🏠</button>
-  <div>
-    <h1>Phòng Họp</h1>
-    <p>Tại chỗ · Online nội bộ · Viện NC Cao su VN</p>
-  </div>
-  <div class="user-chip" id="userChip">
-    <div class="avatar">?</div>
-    <div class="name">Đang tải...</div>
-  </div>
-</header>
+<div class="ph-shell" id="phShell">
 
-<main class="ph-main">
-  <div class="ph-toolbar">
-    <button class="ph-btn ph-btn-primary" id="btnCreateMeeting" type="button">+ Tạo cuộc họp</button>
-    <div class="ph-join-bar">
-      <input type="text" id="joinCodeInput" placeholder="Mã cuộc họp MTG-2026-0001" autocomplete="off">
-      <button class="ph-btn ph-btn-primary" id="btnJoinByCode" type="button">Vào phòng</button>
+  <header class="ph-topbar">
+    <div class="ph-topbar-left">
+      <button type="button" class="btn-icon ph-sidebar-toggle" id="phSidebarToggle" title="Menu">☰</button>
+      <button class="btn-icon" id="btnHome" title="Trang chủ">🏠</button>
+      <div class="ph-brand">
+        <span class="ph-brand-mark">e</span>
+        <div>
+          <strong>Phòng Họp e-Cabinet</strong>
+          <span>Viện NC Cao su Việt Nam</span>
+        </div>
+      </div>
     </div>
-    <button class="ph-btn" id="btnRefresh" type="button">Làm mới</button>
+    <div class="ph-topbar-search">
+      <input type="search" id="phSearchInput" placeholder="Tìm cuộc họp, mã MTG…" aria-label="Tìm kiếm">
+    </div>
+    <div class="ph-topbar-right">
+      <div class="user-chip" id="userChip">
+        <div class="avatar">?</div>
+        <div class="name">Đang tải...</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="ph-body-row">
+
+    <aside class="ph-sidebar" id="phSidebar">
+      <nav class="ph-nav">
+        <p class="ph-nav-label">Điều hướng</p>
+        <button type="button" class="ph-nav-item is-active" data-view="dashboard">
+          <span class="ph-nav-icon">📊</span> Tổng quan
+        </button>
+        <button type="button" class="ph-nav-item" data-view="meetings">
+          <span class="ph-nav-icon">📅</span> Lịch họp
+        </button>
+        <button type="button" class="ph-nav-item" data-view="documents">
+          <span class="ph-nav-icon">📁</span> Kho tài liệu
+        </button>
+        <button type="button" class="ph-nav-item" data-view="voting">
+          <span class="ph-nav-icon">🗳️</span> Biểu quyết
+        </button>
+        <button type="button" class="ph-nav-item" data-view="settings">
+          <span class="ph-nav-icon">⚙️</span> Cài đặt
+        </button>
+      </nav>
+      <div class="ph-sidebar-join">
+        <p class="ph-nav-label">Vào nhanh</p>
+        <div class="ph-join-bar ph-join-bar-stack">
+          <input type="text" id="joinCodeInput" placeholder="Mã MTG-2026-0001" autocomplete="off">
+          <button class="ph-btn ph-btn-primary" id="btnJoinByCode" type="button">Vào phòng</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="ph-main-area" id="phMainArea">
+
+      <!-- Tổng quan -->
+      <section class="ph-view is-visible" id="view-dashboard" data-view="dashboard">
+        <div class="ph-page-head">
+          <div>
+            <h1>Tổng quan</h1>
+            <p id="phTodayLabel">—</p>
+          </div>
+          <div class="ph-head-actions">
+            <button class="ph-btn" id="btnRefresh" type="button">Làm mới</button>
+            <button class="ph-btn ph-btn-primary" id="btnCreateMeeting" type="button">+ Tạo cuộc họp</button>
+          </div>
+        </div>
+
+        <div class="ph-widgets">
+          <article class="ph-widget ph-widget-live">
+            <span class="ph-widget-icon">🔴</span>
+            <div><strong id="phWLive">0</strong><span>Đang diễn ra</span></div>
+          </article>
+          <article class="ph-widget ph-widget-accent">
+            <span class="ph-widget-icon">📅</span>
+            <div><strong id="phWUpcoming">0</strong><span>Sắp tới</span></div>
+          </article>
+          <article class="ph-widget ph-widget-muted">
+            <span class="ph-widget-icon">✓</span>
+            <div><strong id="phWPast">0</strong><span>Đã kết thúc</span></div>
+          </article>
+          <article class="ph-widget ph-widget-warn">
+            <span class="ph-widget-icon">📄</span>
+            <div><strong id="phWDocs">—</strong><span>Tài liệu (sắp có)</span></div>
+          </article>
+        </div>
+
+        <div class="ph-panel">
+          <div class="ph-panel-head">
+            <h2>Cuộc họp</h2>
+            <div class="ph-tabs" data-tabs="dash">
+              <button type="button" class="ph-tab is-active" data-filter="live">Đang diễn ra</button>
+              <button type="button" class="ph-tab" data-filter="upcoming">Sắp tới</button>
+              <button type="button" class="ph-tab" data-filter="past">Đã kết thúc</button>
+            </div>
+          </div>
+          <div id="meetingsList" class="ph-meeting-list">
+            <div class="ph-empty">Đang tải...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Lịch họp -->
+      <section class="ph-view" id="view-meetings" data-view="meetings">
+        <div class="ph-page-head">
+          <div>
+            <h1>Lịch họp</h1>
+            <p>Tất cả phiên họp theo trạng thái</p>
+          </div>
+          <div class="ph-head-actions">
+            <button class="ph-btn" id="btnRefresh2" type="button">Làm mới</button>
+            <button class="ph-btn ph-btn-primary" id="btnCreateMeeting2" type="button">+ Tạo cuộc họp</button>
+          </div>
+        </div>
+        <div class="ph-tabs ph-tabs-lg" data-tabs="calendar">
+          <button type="button" class="ph-tab is-active" data-filter="upcoming">Sắp tới</button>
+          <button type="button" class="ph-tab" data-filter="live">Đang diễn ra</button>
+          <button type="button" class="ph-tab" data-filter="past">Đã kết thúc</button>
+        </div>
+        <div id="meetingsListFull" class="ph-meeting-list ph-meeting-list-full">
+          <div class="ph-empty">Đang tải...</div>
+        </div>
+      </section>
+
+      <!-- Kho tài liệu phiên họp -->
+      <section class="ph-view" id="view-documents" data-view="documents">
+        <div class="ph-page-head">
+          <div>
+            <h1>Kho tài liệu phiên họp</h1>
+            <p>Lưu chính Supabase · Đồng bộ hot Firebase khi họp · Thư ký upload trước phiên</p>
+          </div>
+        </div>
+        <div id="phDocsHost" class="ph-docs-host">
+          <div class="ph-empty">Đang tải...</div>
+        </div>
+      </section>
+
+      <!-- Biểu quyết (UI shell) -->
+      <section class="ph-view" id="view-voting" data-view="voting">
+        <div class="ph-page-head">
+          <div>
+            <h1>Biểu quyết &amp; lấy ý kiến</h1>
+            <p>Biểu đồ realtime khi đại biểu bỏ phiếu trong phiên họp</p>
+          </div>
+        </div>
+        <div class="ph-vote-demo">
+          <div class="ph-vote-charts">
+            <div class="ph-donut-wrap">
+              <svg class="ph-donut" viewBox="0 0 120 120" aria-hidden="true">
+                <circle cx="60" cy="60" r="48" fill="none" stroke="#334155" stroke-width="16"/>
+                <circle cx="60" cy="60" r="48" fill="none" stroke="#22c55e" stroke-width="16"
+                  stroke-dasharray="226 76" transform="rotate(-90 60 60)"/>
+                <circle cx="60" cy="60" r="48" fill="none" stroke="#64748b" stroke-width="16"
+                  stroke-dasharray="76 226" stroke-dashoffset="-226" transform="rotate(-90 60 60)"/>
+              </svg>
+              <div class="ph-donut-center"><strong>—</strong><span>phiếu</span></div>
+            </div>
+            <div class="ph-vote-bars">
+              <div class="ph-bar-row"><span>Đồng ý</span><div class="ph-bar-track"><div class="ph-bar-fill ph-bar-yes" style="width:0%"></div></div><strong>0</strong></div>
+              <div class="ph-bar-row"><span>Không</span><div class="ph-bar-track"><div class="ph-bar-fill ph-bar-no" style="width:0%"></div></div><strong>0</strong></div>
+              <div class="ph-bar-row"><span>Không ý kiến</span><div class="ph-bar-track"><div class="ph-bar-fill ph-bar-abstain" style="width:0%"></div></div><strong>0</strong></div>
+            </div>
+          </div>
+          <p class="ph-coming-inline">Mở biểu quyết từ phiên họp trực tiếp. Tính năng backend đang triển khai.</p>
+        </div>
+      </section>
+
+      <!-- Phiên họp trực tiếp (trong shell e-Cabinet, không fullscreen) -->
+      <section class="ph-view" id="view-session" data-view="session">
+        <div id="meetingRoomHost" class="ph-room-host"></div>
+      </section>
+
+      <!-- Cài đặt -->
+      <section class="ph-view" id="view-settings" data-view="settings">
+        <div class="ph-page-head">
+          <div>
+            <h1>Cài đặt &amp; phân quyền</h1>
+            <p>Vai trò trong phòng họp điện tử</p>
+          </div>
+        </div>
+        <div class="ph-settings-grid">
+          <article class="ph-settings-card">
+            <h3>Vai trò</h3>
+            <ul class="ph-role-list">
+              <li><span class="ph-access ph-access-gd">Chủ trì</span> Tạo phiên, mở biểu quyết, ký số</li>
+              <li><span class="ph-access ph-access-tp">Thư ký</span> Soạn biên bản, quản lý tài liệu</li>
+              <li><span class="ph-access ph-access-nv">Đại biểu</span> Xem tài liệu, biểu quyết, ghi chú</li>
+            </ul>
+          </article>
+          <article class="ph-settings-card">
+            <h3>Quyền hiện tại</h3>
+            <p id="phSettingsPerms" class="ph-detail-muted">Đang tải…</p>
+          </article>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Panel tương tác nhanh -->
+    <aside class="ph-context" id="phContext">
+      <div class="ph-context-head">
+        <h3>Tương tác nhanh</h3>
+        <button type="button" class="btn-icon ph-context-close" id="phContextClose" title="Đóng">✕</button>
+      </div>
+      <div class="ph-context-tabs">
+        <button type="button" class="ph-ctx-tab is-active" data-ctx="sign">Ký số</button>
+        <button type="button" class="ph-ctx-tab" data-ctx="notes">Ghi chú</button>
+        <button type="button" class="ph-ctx-tab" data-ctx="chat">Chat</button>
+      </div>
+      <div class="ph-ctx-panel is-visible" data-ctx-panel="sign">
+        <p class="ph-detail-muted">Ký số trên tài liệu phiên họp (sắp có).</p>
+        <div class="ph-sign-preview">
+          <div class="ph-sign-box"><span class="ph-sign-placeholder">Khu vực ký</span></div>
+        </div>
+        <button type="button" class="ph-btn ph-btn-block" disabled>✍️ Ký tài liệu</button>
+      </div>
+      <div class="ph-ctx-panel" data-ctx-panel="notes">
+        <textarea class="ph-textarea" id="phPersonalNotes" placeholder="Ghi chú cá nhân trên tài liệu…" rows="5"></textarea>
+      </div>
+      <div class="ph-ctx-panel" data-ctx-panel="chat">
+        <div id="phCtxChatHost" class="ph-ctx-chat-host">
+          <p class="ph-detail-muted">Chat nhóm hiển thị khi bạn vào phiên họp.</p>
+        </div>
+      </div>
+    </aside>
+
   </div>
-  <section id="meetingsList">
-    <div class="ph-empty">Đang tải...</div>
-  </section>
-  <div id="meetingRoomHost" class="ph-room-host"></div>
-</main>
+</div>
+
+<button type="button" class="ph-fab-context" id="phFabContext" title="Tương tác nhanh">💬</button>
 
 <script src="/static/js/components/ModalForm.js"></script>
-<script src="/static/js/meetings/org-directory.js"></script>
+<script src="/static/js/meetings/org-directory.js?v=37"></script>
 <script src="/static/js/meetings/state.js"></script>
-<script src="/static/js/meetings/services.js"></script>
-<script src="/static/js/meetings/permissions.js"></script>
+<script src="/static/js/meetings/doc-cache.js?v=1"></script>
+<script src="/static/js/meetings/services.js?v=61"></script>
+<script src="/static/js/meetings/permissions.js?v=38"></script>
 <script src="/static/js/meetings/components/ParticipantTreePicker.js"></script>
-<script src="/static/js/meetings/components/MeetingForm.js"></script>
-<script src="/static/js/meetings/components/MeetingDetail.js"></script>
-<script src="/static/js/meetings/components/MeetingRoom.js"></script>
-<script src="/static/js/meetings/main.js"></script>
+<script src="/static/js/meetings/components/MeetingForm.js?v=52"></script>
+<script src="/static/js/meetings/components/MeetingDetail.js?v=49"></script>
+<script src="/static/js/meetings/components/MeetingDocs.js?v=55"></script>
+<script src="/static/js/meetings/pptx-slides.js?v=1"></script>
+<script src="/static/js/meetings/components/MeetingPresenter.js?v=7"></script>
+<script src="/static/js/meetings/components/MeetingRoom.js?v=60"></script>
+<script src="/static/js/meetings/join.js?v=41"></script>
+<script src="/static/js/meetings/main.js?v=49"></script>
 </body>
 </html>

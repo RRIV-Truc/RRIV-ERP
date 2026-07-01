@@ -10,7 +10,7 @@ from modules.meetings.decorators import (
     require_meeting_participant,
 )
 from modules.meetings.schemas import MeetingCreate, MeetingUpdate
-from modules.meetings.service import create_meeting, get_meeting_detail, list_meetings, update_meeting
+from modules.meetings.service import create_meeting, delete_meeting, get_meeting_detail, list_meetings, update_meeting
 from modules.meetings.room_service import (
     assert_can_access,
     find_meeting_by_code,
@@ -21,6 +21,10 @@ from modules.meetings.room_service import (
     post_chat,
 )
 from modules.meetings.sync.firebase_sync import FirebaseMeetingSync
+from modules.meetings import document_service as doc_svc
+from modules.meetings import presentation_service as pres_svc
+from modules.meetings import slide_service as slide_svc
+from modules.meetings.warm_service import warm_meeting_documents
 
 meetings_bp = Blueprint('meetings', __name__)
 
@@ -78,8 +82,26 @@ def api_update_meeting(meeting_id):
     try:
         doc = update_meeting(_supabase(), meeting_id, payload, ctx)
         return jsonify({'success': True, 'meeting': doc})
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
     except Exception as exc:
         print(f'api_update_meeting: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>', methods=['DELETE'])
+@require_meeting_manager
+def api_delete_meeting(meeting_id):
+    supabase = _supabase()
+    if not get_meeting_detail(supabase, meeting_id):
+        return jsonify({'success': False, 'message': 'Không tìm thấy cuộc họp'}), 404
+    try:
+        delete_meeting(supabase, meeting_id, request.meetings_user)  # type: ignore[attr-defined]
+        return jsonify({'success': True})
+    except Exception as exc:
+        print(f'api_delete_meeting: {exc}')
         return jsonify({'success': False, 'message': str(exc)}), 500
 
 
@@ -89,6 +111,7 @@ def api_sync_meeting(meeting_id):
     """Đồng bộ Firebase RTDB → Supabase (Service Account auth)."""
     body = request.json or {}
     sync_type = body.get('sync_type') or 'meeting_end'
+    ctx = request.meetings_user  # type: ignore[attr-defined]
     supabase = _supabase()
     meeting = get_meeting_detail(supabase, meeting_id)
     if not meeting:
@@ -96,6 +119,13 @@ def api_sync_meeting(meeting_id):
     room_id = meeting.get('firebase_room_id')
     if not room_id:
         return jsonify({'success': False, 'message': 'Cuộc họp không có firebase_room_id'}), 400
+
+    if sync_type == 'meeting_end':
+        from modules.meetings.rbac import can_create_meeting
+        if not can_create_meeting(ctx, supabase):
+            return jsonify({'success': False, 'message': 'Chỉ Chủ trì / Thư ký mới được kết thúc cuộc họp'}), 403
+        if (meeting.get('status') or '') == 'completed':
+            return jsonify({'success': False, 'message': 'Cuộc họp đã kết thúc'}), 400
 
     try:
         syncer = FirebaseMeetingSync(supabase)
@@ -198,6 +228,142 @@ def api_room_chat(meeting_id):
         return jsonify({'success': False, 'message': str(exc)}), 400
 
 
+@meetings_bp.route('/api/meetings/<meeting_id>/documents/<doc_id>/presentation-info', methods=['GET'])
+@require_meeting_participant('meeting_id')
+def api_presentation_info(meeting_id, doc_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    try:
+        data = slide_svc.get_presentation_info(_supabase(), meeting_id, doc_id, ctx)
+        return jsonify({'success': True, 'presentation': data})
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except RuntimeError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 500
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except Exception as exc:
+        print(f'api_presentation_info: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/room/presentation/prepare', methods=['POST'])
+@require_meeting_participant('meeting_id')
+def api_prepare_presentation(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    supabase = _supabase()
+    body = request.json or {}
+    doc_id = str(body.get('doc_id') or '').strip()
+    if not doc_id:
+        return jsonify({'success': False, 'message': 'Thiếu doc_id'}), 400
+    try:
+        pres_svc.assert_can_present(supabase, ctx)
+        data = slide_svc.prepare_presentation(supabase, meeting_id, doc_id, ctx)
+        return jsonify({'success': True, 'presentation': data})
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except RuntimeError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 500
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except Exception as exc:
+        print(f'api_prepare_presentation: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/room/presentation/start', methods=['POST'])
+@require_meeting_participant('meeting_id')
+def api_start_presentation(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    supabase = _supabase()
+    body = request.json or {}
+    try:
+        meeting = assert_can_access(supabase, meeting_id, ctx)
+        payload = pres_svc.start_presentation(
+            supabase,
+            meeting,
+            ctx,
+            doc_id=str(body.get('doc_id') or '').strip(),
+            doc_name=str(body.get('doc_name') or 'Tài liệu'),
+            slide_count=int(body.get('slide_count') or 0),
+            mode=str(body.get('mode') or 'images'),
+            download_url=str(body.get('download_url') or '').strip() or None,
+            direct=bool(body.get('direct')),
+            pdf_iframe=bool(body.get('pdf_iframe')),
+        )
+        return jsonify({'success': True, 'presentation': payload})
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except Exception as exc:
+        print(f'api_start_presentation: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/room/presentation/slide', methods=['PUT'])
+@require_meeting_participant('meeting_id')
+def api_update_presentation_slide(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    supabase = _supabase()
+    body = request.json or {}
+    try:
+        meeting = assert_can_access(supabase, meeting_id, ctx)
+        payload = pres_svc.update_presentation_slide(
+            supabase, meeting, ctx, int(body.get('slide_index', 0)),
+            slide_count=int(body['slide_count']) if body.get('slide_count') is not None else None,
+        )
+        return jsonify({'success': True, 'presentation': payload})
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except Exception as exc:
+        print(f'api_update_presentation_slide: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/room/presentation/stop', methods=['POST'])
+@require_meeting_participant('meeting_id')
+def api_stop_presentation(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    supabase = _supabase()
+    try:
+        meeting = assert_can_access(supabase, meeting_id, ctx)
+        result = pres_svc.stop_presentation(supabase, meeting, ctx)
+        return jsonify({'success': True, 'result': result})
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except Exception as exc:
+        print(f'api_stop_presentation: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/documents/<doc_id>/slides/<int:slide_index>', methods=['GET'])
+@require_meeting_participant('meeting_id')
+def api_presentation_slide_image(meeting_id, doc_id, slide_index):
+    from flask import send_file
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    try:
+        path = slide_svc.get_slide_image_path(
+            _supabase(), meeting_id, doc_id, slide_index, ctx,
+        )
+        return send_file(path, mimetype='image/jpeg', max_age=3600)
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+
+
 @meetings_bp.route('/api/meeting-rooms', methods=['GET'])
 @require_auth
 def api_list_meeting_rooms():
@@ -207,3 +373,262 @@ def api_list_meeting_rooms():
         q = q.eq('is_active', True)
     res = q.execute()
     return jsonify({'success': True, 'rooms': res.data or []})
+
+
+# ----- Kho tài liệu cuộc họp (Cold → Hot) -----
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/documents', methods=['GET'])
+@require_meeting_participant('meeting_id')
+def api_list_documents(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    parent_id = request.args.get('parent_id') or None
+    if parent_id in ('', 'null', 'root'):
+        parent_id = None
+    shared_only = request.args.get('shared_only', '').lower() in ('1', 'true', 'yes')
+    flat = request.args.get('flat', '').lower() in ('1', 'true', 'yes')
+    try:
+        can_manage = doc_svc.can_manage_documents(_supabase(), meeting_id, ctx)
+        if flat:
+            items = doc_svc.list_shared_files_flat(
+                _supabase(), meeting_id, ctx, shared_only=shared_only,
+            )
+            items = doc_svc.attach_download_urls(items)
+            return jsonify({
+                'success': True,
+                'documents': items,
+                'breadcrumb': [],
+                'can_manage': can_manage,
+                'shared_only': not can_manage or shared_only,
+            })
+        items = doc_svc.list_documents(
+            _supabase(), meeting_id, ctx, parent_id, shared_only=shared_only,
+        )
+        items = doc_svc.attach_download_urls(items)
+        breadcrumb = doc_svc.list_breadcrumb(_supabase(), meeting_id, parent_id, ctx)
+        return jsonify({
+            'success': True,
+            'documents': items,
+            'breadcrumb': breadcrumb,
+            'can_manage': can_manage,
+            'shared_only': not can_manage or shared_only,
+        })
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/documents/shares', methods=['GET'])
+@require_meeting_participant('meeting_id')
+def api_get_document_shares(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    try:
+        data = doc_svc.get_document_shares(_supabase(), meeting_id, ctx)
+        return jsonify({'success': True, **data})
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/documents/shares', methods=['PUT'])
+@require_meeting_participant('meeting_id')
+def api_set_document_shares(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    body = request.json or {}
+    try:
+        data = doc_svc.set_document_shares(
+            _supabase(), meeting_id, ctx, body.get('document_ids') or [],
+        )
+        return jsonify({'success': True, **data})
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/documents/folder', methods=['POST'])
+@require_meeting_participant('meeting_id')
+def api_create_folder(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    body = request.json or {}
+    try:
+        doc = doc_svc.create_folder(
+            _supabase(), meeting_id, ctx,
+            body.get('name') or '',
+            body.get('parent_id') or None,
+        )
+        try:
+            warm_meeting_documents(_supabase(), meeting_id)
+        except Exception as warm_exc:
+            print(f'api_create_folder warm: {warm_exc}')
+        return jsonify({'success': True, 'document': doc}), 201
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/documents/upload', methods=['POST'])
+@require_meeting_participant('meeting_id')
+def api_upload_document(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    upload = request.files.get('file')
+    if not upload or not upload.filename:
+        return jsonify({'success': False, 'message': 'Thiếu file upload'}), 400
+    parent_id = request.form.get('parent_id') or None
+    if parent_id in ('', 'null', 'root'):
+        parent_id = None
+    try:
+        data = upload.read()
+        doc = doc_svc.upload_file(
+            _supabase(), meeting_id, ctx,
+            upload.filename, data, upload.mimetype, parent_id,
+        )
+        return jsonify({'success': True, 'document': doc}), 201
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception as exc:
+        print(f'api_upload_document: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/documents/<doc_id>', methods=['DELETE'])
+@require_meeting_participant('meeting_id')
+def api_delete_document(meeting_id, doc_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    try:
+        doc_svc.delete_document(_supabase(), meeting_id, doc_id, ctx)
+        return jsonify({'success': True})
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/documents/warm', methods=['POST'])
+@require_meeting_participant('meeting_id')
+def api_warm_documents(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    if not doc_svc.can_manage_documents(_supabase(), meeting_id, ctx):
+        return jsonify({'success': False, 'message': 'Không có quyền warm tài liệu'}), 403
+    try:
+        result = warm_meeting_documents(_supabase(), meeting_id)
+        return jsonify({'success': True, 'result': result})
+    except Exception as exc:
+        print(f'api_warm_documents: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/documents/<doc_id>/move', methods=['PATCH'])
+@require_meeting_participant('meeting_id')
+def api_move_document(meeting_id, doc_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    body = request.json or {}
+    try:
+        parent_id = body.get('parent_id')
+        if parent_id in ('', 'null', 'root'):
+            parent_id = None
+        doc = doc_svc.move_document(_supabase(), meeting_id, doc_id, ctx, parent_id)
+        return jsonify({'success': True, 'document': doc})
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/documents/<doc_id>/download-link', methods=['GET'])
+@require_meeting_participant('meeting_id')
+def api_document_download_link(meeting_id, doc_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    inline = request.args.get('disposition', '').lower() == 'inline'
+    try:
+        link = doc_svc.get_download_link(
+            _supabase(), meeting_id, doc_id, ctx, inline=inline,
+        )
+        if not link.get('direct'):
+            link['url'] = (
+                f'/api/meetings/{meeting_id}/documents/{doc_id}/download'
+                f'?username={ctx.username or ""}'
+                + ('&disposition=inline' if inline else '')
+            )
+        return jsonify({'success': True, 'link': link})
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/documents/<doc_id>/download', methods=['GET'])
+@require_meeting_participant('meeting_id')
+def api_download_document(meeting_id, doc_id):
+    from flask import Response, redirect, send_file
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    inline = request.args.get('disposition', '').lower() == 'inline'
+    presentation = request.args.get('presentation') == '1'
+    try:
+        doc = doc_svc.get_document(_supabase(), meeting_id, doc_id, ctx, check_share=True)
+        if doc.get('kind') != 'file':
+            return jsonify({'success': False, 'message': 'Không phải file'}), 400
+        name = doc.get('name') or 'download'
+        mime = doc_svc.resolve_mime_type(name, doc.get('mime_type'))
+
+        if presentation:
+            data = doc_svc.read_presentation_bytes(doc)
+            return Response(
+                data,
+                mimetype=mime,
+                headers={
+                    'Content-Disposition': doc_svc.download_disposition(
+                        name, mime, inline=inline,
+                    ),
+                    'Content-Length': str(len(data)),
+                    'X-Content-Type-Options': 'nosniff',
+                    'Cache-Control': 'private, max-age=300',
+                },
+            )
+
+        signed = doc_svc.create_signed_download_url(doc)
+        if signed and (not inline or doc_svc.is_pdf_document(name, mime)):
+            return redirect(signed, code=302)
+
+        local_path = doc_svc.local_file_path(doc)
+        if local_path:
+            return send_file(
+                local_path,
+                mimetype=mime,
+                as_attachment=not inline,
+                download_name=name,
+            )
+
+        data = doc_svc.read_file_bytes(_supabase(), doc)
+        return Response(
+            data,
+            mimetype=mime,
+            headers={
+                'Content-Disposition': doc_svc.download_disposition(
+                    name, mime, inline=inline,
+                ),
+                'X-Content-Type-Options': 'nosniff',
+            },
+        )
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except FileNotFoundError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except Exception as exc:
+        print(f'api_download_document: {exc}')
+        return jsonify({'success': False, 'message': 'Không tải được tài liệu'}), 500

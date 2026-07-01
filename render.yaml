@@ -25,5 +25,15 @@ services:
         sync: false
       - key: VOICERSS_API_KEY
         sync: false
-      - key: RESPONSIVEVOICE_KEY
+      - key: MEETING_DOCS_BUCKET
+        value: meeting-docs
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: FIREBASE_DATABASE_URL
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
+      - key: FIREBASE_STORAGE_BUCKET
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
         sync: false

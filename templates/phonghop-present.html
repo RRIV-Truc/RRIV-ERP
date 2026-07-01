@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trình chiếu — Phòng họp</title>
+  <link rel="stylesheet" href="/static/css/app-phonghop.css?v=59">
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+    .ph-present-root {
+      width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center;
+      position: relative; background: #000;
+    }
+    .ph-present-canvas, .ph-present-img, .ph-present-iframe {
+      max-width: 100vw; max-height: 100vh; object-fit: contain; display: block;
+    }
+    .ph-present-iframe {
+      width: 100vw; height: 100vh; border: 0; background: #000;
+    }
+    .ph-present-empty {
+      color: #94a3b8; text-align: center; padding: 24px; font-family: system-ui, sans-serif;
+    }
+    .ph-present-hud {
+      position: fixed; left: 16px; bottom: 16px; padding: 8px 12px; border-radius: 8px;
+      background: rgba(15, 23, 42, 0.72); color: #e2e8f0; font-size: 13px;
+      font-family: system-ui, sans-serif; pointer-events: none; opacity: 0.85;
+    }
+    .ph-present-hud kbd {
+      background: #334155; padding: 1px 6px; border-radius: 4px; font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="ph-present-root" id="phPresentRoot">
+    <p class="ph-present-empty" id="phPresentStatus">Đang chờ trình chiếu…</p>
+    <canvas id="phPresentCanvas" class="ph-present-canvas" hidden></canvas>
+    <img id="phPresentImg" class="ph-present-img" alt="" hidden>
+    <iframe id="phPresentIframe" class="ph-present-iframe" title="PDF" hidden></iframe>
+  </div>
+  <div class="ph-present-hud" id="phPresentHud" hidden>
+    <span id="phPresentHudText"></span> · <kbd>F11</kbd> toàn màn hình
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="/static/js/meetings/pptx-slides.js?v=1"></script>
+  <script>
+    (function () {
+      'use strict';
+      if (window['pdfjsLib']) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      }
+
+      var params = new URLSearchParams(window.location.search);
+      var meetingId = params.get('meeting') || params.get('meetingId') || '';
+      var username = params.get('username') || '';
+      try {
+        var c = JSON.parse(localStorage.getItem('currentUser') || 'null');
+        if (!username && c && c.username) username = c.username;
+      } catch (_) {}
+
+      var statusEl = document.getElementById('phPresentStatus');
+      var canvas = document.getElementById('phPresentCanvas');
+      var img = document.getElementById('phPresentImg');
+      var iframe = document.getElementById('phPresentIframe');
+      var hud = document.getElementById('phPresentHud');
+      var hudText = document.getElementById('phPresentHudText');
+      var ctx2d = canvas.getContext('2d');
+
+      var pdfDoc = null;
+      var pdfUrl = '';
+      var lastKey = '';
+      var pollTimer = null;
+
+      function headers() {
+        return { 'X-RRIV-Username': username, 'Content-Type': 'application/json' };
+      }
+
+      function setStatus(msg) {
+        statusEl.textContent = msg;
+        statusEl.hidden = false;
+        canvas.hidden = true;
+        img.hidden = true;
+        iframe.hidden = true;
+        hud.hidden = true;
+      }
+
+      function hideStatus() {
+        statusEl.hidden = true;
+      }
+
+      function isDirectPdfUrl(url) {
+        return /^https?:\/\//i.test(String(url || ''));
+      }
+
+      function pdfIframeSrc(url, pageIndex) {
+        if (!url) return '';
+        return url.split('#')[0] + '#page=' + (pageIndex + 1);
+      }
+
+      function renderPdfIframe(url, pageIndex) {
+        var src = pdfIframeSrc(url, pageIndex);
+        if (iframe.src !== src) iframe.src = src;
+        hideStatus();
+        iframe.hidden = false;
+        canvas.hidden = true;
+        img.hidden = true;
+      }
+
+      async function fetchRoom() {
+        var url = '/api/meetings/' + encodeURIComponent(meetingId) +
+          '/room?username=' + encodeURIComponent(username);
+        var res = await fetch(url, { headers: headers() });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Lỗi tải phòng');
+        return data.room;
+      }
+
+      async function ensurePdf(url, isDirect) {
+        if (pdfDoc && pdfUrl === url) return pdfDoc;
+        pdfUrl = url;
+        pdfDoc = null;
+        setStatus('Đang tải PDF…');
+        var opts = { url: url, disableRange: true, withCredentials: false };
+        if (!isDirect) {
+          opts.httpHeaders = { 'X-RRIV-Username': username };
+        }
+        pdfDoc = await pdfjsLib.getDocument(opts).promise;
+        return pdfDoc;
+      }
+
+      async function renderPdfPage(index) {
+        var doc = await ensurePdf(pdfUrl);
+        var page = await doc.getPage(index + 1);
+        var viewport = page.getViewport({ scale: 1 });
+        var scale = Math.min(
+          window.innerWidth / viewport.width,
+          window.innerHeight / viewport.height
+        ) * (window.devicePixelRatio || 1);
+        var vp = page.getViewport({ scale: scale });
+        canvas.width = vp.width;
+        canvas.height = vp.height;
+        canvas.style.width = (vp.width / (window.devicePixelRatio || 1)) + 'px';
+        canvas.style.height = (vp.height / (window.devicePixelRatio || 1)) + 'px';
+        await page.render({ canvasContext: ctx2d, viewport: vp }).promise;
+        hideStatus();
+        canvas.hidden = false;
+        img.hidden = true;
+        iframe.hidden = true;
+      }
+
+      function renderImageSlide(baseUrl, docId, index) {
+        var url = baseUrl + '/' + index + '?username=' + encodeURIComponent(username) + '&t=' + Date.now();
+        img.onload = function () {
+          hideStatus();
+          img.hidden = false;
+          canvas.hidden = true;
+          iframe.hidden = true;
+        };
+        img.onerror = function () { setStatus('Không tải được slide ' + (index + 1)); };
+        img.src = url;
+      }
+
+      async function renderPresentation(p) {
+        if (!p || !p.active) {
+          setStatus('Chưa có trình chiếu — chủ trì bấm «Chia sẻ slide» trên app.');
+          lastKey = '';
+          pdfDoc = null;
+          return;
+        }
+        var key = [p.doc_id, p.mode, p.slide_index, p.slide_count, p.download_url || ''].join('|');
+        hud.hidden = false;
+        hudText.textContent = (p.doc_name || 'Slide') + ' · ' + (p.slide_index + 1) + '/' + p.slide_count;
+        if (key === lastKey) return;
+        lastKey = key;
+
+        if (p.mode === 'pdf') {
+          if (!p.download_url) {
+            setStatus('Thiếu link PDF');
+            return;
+          }
+          if (p.pdf_iframe || p.direct || isDirectPdfUrl(p.download_url)) {
+            renderPdfIframe(p.download_url, p.slide_index);
+            return;
+          }
+          pdfUrl = p.download_url;
+          try {
+            await renderPdfPage(p.slide_index);
+          } catch (e) {
+            renderPdfIframe(p.download_url, p.slide_index);
+          }
+          return;
+        }
+
+        if (p.mode === 'pptx') {
+          var cached = window.PhonghopPptxSlides &&
+            window.PhonghopPptxSlides.getSlideDataUrl(meetingId, p.doc_id, p.slide_index);
+          if (cached) {
+            img.onload = function () {
+              hideStatus();
+              img.hidden = false;
+              canvas.hidden = true;
+              iframe.hidden = true;
+            };
+            img.src = cached;
+            return;
+          }
+          if (!window.PhonghopPptxSlides) {
+            setStatus('Đang tải trình chiếu PPTX…');
+            return;
+          }
+          var dl = p.download_url || (
+            '/api/meetings/' + encodeURIComponent(meetingId) +
+            '/documents/' + encodeURIComponent(p.doc_id) +
+            '/download?username=' + encodeURIComponent(username) + '&presentation=1'
+          );
+          try {
+            setStatus('Đang đọc PowerPoint…');
+            await window.PhonghopPptxSlides.parseFromUrl(
+              dl, { 'X-RRIV-Username': username }, meetingId, p.doc_id
+            );
+            lastKey = '';
+            await renderPresentation(p);
+          } catch (e) {
+            setStatus(e.message || 'Không đọc được PowerPoint');
+          }
+          return;
+        }
+
+        var base = p.slides_base_url ||
+          ('/api/meetings/' + encodeURIComponent(meetingId) + '/documents/' + encodeURIComponent(p.doc_id) + '/slides');
+        renderImageSlide(base, p.doc_id, p.slide_index);
+      }
+
+      async function tick() {
+        if (!meetingId) {
+          setStatus('Thiếu mã cuộc họp trong URL.');
+          return;
+        }
+        try {
+          var room = await fetchRoom();
+          var p = room.presentation;
+          if (p && p.active && p.mode === 'pdf' && !p.download_url && p.doc_id) {
+            p.download_url = '/api/meetings/' + encodeURIComponent(meetingId) +
+              '/documents/' + encodeURIComponent(p.doc_id) +
+              '/download?username=' + encodeURIComponent(username) +
+              '&presentation=1&disposition=inline';
+          }
+          if (p && p.active && p.mode === 'images' && !p.slides_base_url && p.doc_id) {
+            p.slides_base_url = '/api/meetings/' + encodeURIComponent(meetingId) +
+              '/documents/' + encodeURIComponent(p.doc_id) + '/slides';
+          }
+          await renderPresentation(p);
+        } catch (e) {
+          setStatus(e.message || 'Mất kết nối phòng họp');
+        }
+      }
+
+      window.addEventListener('resize', function () {
+        lastKey = '';
+        tick();
+      });
+
+      if (!meetingId) {
+        setStatus('URL không hợp lệ — mở từ nút «Màn chiếu» trong phiên họp.');
+      } else {
+        tick();
+        pollTimer = setInterval(tick, 450);
+      }
+
+      window.addEventListener('beforeunload', function () {
+        if (pollTimer) clearInterval(pollTimer);
+      });
+    })();
+  </script>
+</body>
+</html>

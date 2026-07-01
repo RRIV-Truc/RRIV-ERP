@@ -96,12 +96,17 @@
       const meta = d.metadata || {};
       return {
         id: doc.id, ...d,
-        hoTen: d.hoTen || d.name || '',
-        employeeCode: d.employeeCode || d.code || '',
+        hoTen: d.hoTen || d.name || d.full_name || '',
+        employeeCode: d.employeeCode || d.code || d.employee_code || '',
+        position: d.position || d.positionName || d.position_name || '',
+        positionName: d.positionName || d.position_name || d.position || '',
+        orderByDept: d.orderByDept || meta.orderByDept || {},
+        listStt: d.listStt != null ? d.listStt : meta.listStt,
         disabled: d.disabled ?? (d.status === 'inactive' || d.status === 'resigned'),
         concurrentPositions: positionsMap[doc.id] || [],
         systemRoleId: meta.systemRoleId || meta.system_role_id || d.systemRoleId || null,
-        appRolesCache: d.appRolesCache || d.app_roles_cache || meta.appRolesCache || {}
+        appRolesCache: d.appRolesCache || d.app_roles_cache || meta.appRolesCache || {},
+        metadata: meta
       };
     }).filter(isInstitutePersonnel);
     list.sort((a, b) => (a.hoTen || '').localeCompare(b.hoTen || '', 'vi'));

@@ -62,3 +62,14 @@ class InternalFirebaseProvider(MeetingPlatformProvider):
         except Exception as exc:
             print(f'[InternalFirebaseProvider] cancel_meeting: {exc}')
             return False
+
+    def delete_meeting(self, external_id: str) -> bool:
+        from firebase_admin import db
+
+        try:
+            init_firebase_admin_with_service_account()
+            db.reference(f'meetings/{external_id}').delete()
+            return True
+        except Exception as exc:
+            print(f'[InternalFirebaseProvider] delete_meeting: {exc}')
+            return False

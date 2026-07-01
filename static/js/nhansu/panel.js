@@ -123,9 +123,16 @@
 
   function sortPeople(list, ctxDeptId) {
     return list.slice().sort((a, b) => {
-      const oa = NS.effOrder(a, ctxDeptId || a.department);
-      const ob = NS.effOrder(b, ctxDeptId || b.department);
+      const ctx = ctxDeptId || a.department;
+
+      const la = NS.leadershipRank(a, ctx);
+      const lb = NS.leadershipRank(b, ctx);
+      if (la !== lb) return la - lb;
+
+      const oa = NS.effOrder(a, ctx);
+      const ob = NS.effOrder(b, ctx);
       if (oa !== ob) return oa - ob;
+
       return (a.hoTen || '').localeCompare(b.hoTen || '', 'vi');
     });
   }

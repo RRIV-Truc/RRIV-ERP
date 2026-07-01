@@ -12,12 +12,19 @@
   var _onSaved = null;
   var _editMeeting = null;
   var _pendingParticipants = null;
+  var _docTree = [];
+  var _sharedDocIds = {};
+
+  function escHtml(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
 
   function meetingToFormData(m) {
+    var mid = m.id || m.meeting_id;
     var start = m.scheduled_start ? new Date(m.scheduled_start) : new Date();
     var end = m.scheduled_end ? new Date(m.scheduled_end) : defaultEnd(start);
     return {
-      id: m.id,
+      id: mid,
       title: m.title || '',
       description: m.description || '',
       meeting_mode: m.meeting_mode || 'hybrid',
@@ -112,6 +119,73 @@
     return _pendingParticipants || [];
   }
 
+  function getSelectedSharedDocIds() {
+    var ids = [];
+    document.querySelectorAll('#phDocShareHost .ph-doc-share-cb:checked').forEach(function (cb) {
+      if (cb.value) ids.push(cb.value);
+    });
+    return ids;
+  }
+
+  async function loadDocShareSection(meetingId) {
+    _docTree = [];
+    _sharedDocIds = {};
+    if (!meetingId || !window.PhonghopServices.getDocumentShares) {
+      renderDocShareHost(false);
+      return;
+    }
+    try {
+      var data = await window.PhonghopServices.getDocumentShares(meetingId);
+      _docTree = data.tree || [];
+      (data.shared_document_ids || []).forEach(function (id) { _sharedDocIds[id] = true; });
+    } catch (e) {
+      console.warn('[MeetingForm] getDocumentShares', e);
+    }
+    renderDocShareHost(true);
+  }
+
+  function renderDocShareHost(isEdit) {
+    var host = document.getElementById('phDocShareHost');
+    if (!host) return;
+    if (!isEdit || !_editMeeting || !(_editMeeting.id || _editMeeting.meeting_id)) {
+      host.innerHTML =
+        '<p class="ph-detail-muted ph-doc-share-hint">' +
+          'Sau khi <strong>tạo cuộc họp</strong>, upload tài liệu ở <strong>Kho tài liệu</strong>, ' +
+          'rồi <strong>Sửa cuộc họp</strong> để tick chọn file/thư mục chia sẻ cho người tham dự.' +
+        '</p>';
+      return;
+    }
+    if (!_docTree.length) {
+      host.innerHTML =
+        '<p class="ph-detail-muted ph-doc-share-hint">' +
+          'Chưa có tài liệu trong kho cuộc họp này. Vào <strong>Kho tài liệu</strong> để upload, ' +
+          'sau đó quay lại <strong>Sửa cuộc họp</strong> để chọn chia sẻ.' +
+        '</p>';
+      return;
+    }
+    var rows = _docTree.map(function (d) {
+      var pad = (d.depth || 0) * 18 + 8;
+      var icon = d.kind === 'folder' ? '📁' : '📄';
+      var checked = _sharedDocIds[d.id] ? ' checked' : '';
+      var hint = d.kind === 'folder'
+        ? ' <span class="ph-detail-muted">(bao gồm file bên trong)</span>'
+        : '';
+      return (
+        '<label class="ph-doc-share-row" style="padding-left:' + pad + 'px">' +
+          '<input type="checkbox" class="ph-doc-share-cb" value="' + escHtml(d.id) + '"' + checked + ' />' +
+          '<span>' + icon + ' ' + escHtml(d.name) + hint + '</span>' +
+        '</label>'
+      );
+    }).join('');
+    host.innerHTML =
+      '<div class="ph-doc-share-box">' +
+        '<p class="ph-detail-muted ph-doc-share-hint">' +
+          'Chọn file hoặc thư mục được phép xem trong cuộc họp. Người tham dự <strong>chỉ</strong> thấy mục đã tick.' +
+        '</p>' +
+        rows +
+      '</div>';
+  }
+
   function buildFields() {
     var roomOpts = [{ value: '', label: '— Không chọn —' }].concat(
       _rooms.map(function (r) {
@@ -163,6 +237,10 @@
       {
         key: '_participants', label: 'Người tham dự', type: 'custom', full: true,
         html: '<div id="phParticipantsHost" class="ph-participants-host"></div>'
+      },
+      {
+        key: '_doc_share', label: 'Tài liệu họp', type: 'custom', full: true,
+        html: '<div id="phDocShareHost" class="ph-doc-share-host"></div>'
       }
     ];
   }
@@ -185,7 +263,12 @@
         } else if (_editMeeting) {
           _pendingParticipants = participantsFromMeeting(_editMeeting);
         }
-        setTimeout(renderParticipantPicker, 80);
+        setTimeout(function () {
+          renderParticipantPicker();
+          var mid = (editData && editData.id) ||
+            (_editMeeting && (_editMeeting.id || _editMeeting.meeting_id));
+          loadDocShareSection(mid);
+        }, 80);
       },
       onClose: function () {
         fullCleanup();
@@ -209,6 +292,7 @@
         };
         var meeting;
         if (editId) {
+          payload.shared_document_ids = getSelectedSharedDocIds();
           meeting = await window.PhonghopServices.updateMeeting(editId, payload);
         } else {
           payload.status = 'scheduled';
@@ -243,9 +327,11 @@
         }
       }
 
-      if (_editMeeting && _editMeeting.id && (!_editMeeting.participants || !_editMeeting.participants.length)) {
+      if (_editMeeting && (_editMeeting.id || _editMeeting.meeting_id) &&
+          (!_editMeeting.participants || !_editMeeting.participants.length)) {
         try {
-          _editMeeting = await window.PhonghopServices.getMeeting(_editMeeting.id);
+          var fetchId = _editMeeting.id || _editMeeting.meeting_id;
+          _editMeeting = await window.PhonghopServices.getMeeting(fetchId);
         } catch (e) {
           console.warn('[MeetingForm] getMeeting', e);
         }
@@ -260,7 +346,8 @@
       var modal = ensureModal();
       if (!modal) return;
 
-      if (_editMeeting && _editMeeting.id) {
+      if (_editMeeting && (_editMeeting.id || _editMeeting.meeting_id)) {
+        if (!_editMeeting.id && _editMeeting.meeting_id) _editMeeting.id = _editMeeting.meeting_id;
         var formData = meetingToFormData(_editMeeting);
         formData.participants = _editMeeting.participants || [];
         modal.open(formData);

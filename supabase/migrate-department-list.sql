@@ -83,7 +83,7 @@ VALUES
    '{"dept_type":"Trung Tâm","legacy_department_list_id":3,"migrated_from":"department_list"}'::jsonb),
   ('dl-4', 'Trung tâm nghiên cứu ứng dụng nông nghiệp công nghệ cao và chuyển giao kỹ thuật', 'Trung tâm nghiên cứu ứng dụng nông nghiệp công nghệ cao và chuyển giao kỹ thuật', 'Trung tâm nghiên cứu ứng dụng nông nghiệp công nghệ cao và chuyển giao kỹ thuật', 'Trung Tâm', true,
    '{"dept_type":"Trung Tâm","legacy_department_list_id":4,"migrated_from":"department_list"}'::jsonb),
-  ('dl-5', 'Phòng khoa học - công nghệ', 'Phòng khoa học - công nghệ', 'Phòng khoa học - công nghệ', 'Phòng Nghiệp Vụ', true,
+  ('dl-5', 'Phòng khoa học công nghệ', 'Phòng khoa học công nghệ', 'Phòng khoa học công nghệ', 'Phòng Nghiệp Vụ', true,
    '{"dept_type":"Phòng Nghiệp Vụ","legacy_department_list_id":5,"migrated_from":"department_list"}'::jsonb),
   ('dl-6', 'Phòng quản trị - tài chính kế toán', 'Phòng quản trị - tài chính kế toán', 'Phòng quản trị - tài chính kế toán', 'Phòng Nghiệp Vụ', true,
    '{"dept_type":"Phòng Nghiệp Vụ","legacy_department_list_id":6,"migrated_from":"department_list"}'::jsonb)

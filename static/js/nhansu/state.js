@@ -59,8 +59,13 @@
     return String(s || '')
       .trim()
       .toLowerCase()
+      .replace(/\u0111/g, 'd').replace(/\u0110/g, 'D')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '');
+  }
+
+  function isDeputyTitle(k) {
+    return /(?:^|\s)pho\s+(?:giam|truong|chanh)|(?:^|\s)pgd\b|phogiam|phophong|phogiamdoc|vice\s*director/.test(k);
   }
 
   function resolvePositionId(raw, catalog) {
@@ -227,15 +232,19 @@
   // Order is STRICTLY per-dept: orderByDept[deptId] OR concurrentPositions[deptId].order.
   // KHÔNG fallback sang person.order (legacy single value) — sẽ rò qua các PB khác.
   function effOrder(person, deptId) {
-    if (!person || !deptId) return person?.listStt ?? 999;
-    const m = person.orderByDept || {};
+    if (!person || !deptId) {
+      const meta = person?.metadata || {};
+      const ls = person?.listStt ?? meta.listStt;
+      return ls !== undefined && ls !== null && ls !== '' ? Number(ls) : 999;
+    }
+    const meta = person.metadata || {};
+    const m = person.orderByDept || meta.orderByDept || {};
     const keys = [deptId, ...(LEGACY_DEPT_KEYS[deptId] || [])];
     for (const k of keys) {
       if (m[k] !== undefined && m[k] !== null && m[k] !== '') return Number(m[k]);
     }
-    if (person.listStt !== undefined && person.listStt !== null && person.listStt !== '') {
-      return Number(person.listStt);
-    }
+    const ls = person.listStt ?? meta.listStt;
+    if (ls !== undefined && ls !== null && ls !== '') return Number(ls);
     const cp = (person.concurrentPositions || []).find(c =>
       c.departmentId === deptId || LEGACY_DEPT_KEYS[deptId]?.includes(c.departmentId)
     );
@@ -333,6 +342,113 @@
     return ROLE_LABELS[p?.role] || p?.role || '';
   }
 
+  const SYSTEM_ROLE_ID_LEVEL = {
+    '1': 1, '2': 2, '3': 3, '4': 5, '5': 6, '6': 7
+  };
+
+  const SYSTEM_ROLE_LEVEL = {
+    Super_Admin: 1,
+    Institute_Executive: 2,
+    Department_Head: 3,
+    Operations_Specialist: 5,
+    Technical_Staff: 6,
+    Staff_Viewer: 7
+  };
+
+  function inferLevelFromTitle(raw) {
+    const k = normPosKey(raw);
+    if (!k) return 50;
+    if (/^gd\b|\bgd\s/.test(k)) return 1;
+    if (/^pgd\b|\bpgd\s/.test(k)) return 2;
+    if (/pho\s*giam|phogiam|vice\s*director|pgd/.test(k)) return 2;
+    if (/giam\s*doc|giamdoc|director/.test(k) && !isDeputyTitle(k)) return 1;
+    if (/chanh\s*van|chanhvan|vien\s*truong/.test(k) && !isDeputyTitle(k)) return 1;
+    if (/pho\s*chanh|phochanh/.test(k)) return 2;
+    if (/pho\s*truong\s*phong|phophong|(?:^|\s)pho\s+phong/.test(k)) return 4;
+    if (/ke\s*toan\s*truong|ketoantruong/.test(k)) return 3;
+    if (/truong\s*phong|truongphong|head\s*of/.test(k) && !isDeputyTitle(k)) return 3;
+    if (/phu\s*trach|phutrach/.test(k)) return 5;
+    if (/to\s*truong|totruong|team\s*lead/.test(k)) return 5;
+    if (/chuyen\s*vi|chuyenvi|specialist/.test(k)) return 6;
+    if (/cao\s*dang|caodang/.test(k)) return 7;
+    if (/\bncv\b|\bktv\b|researcher|technician/.test(k)) return 7;
+    if (/nhan\s*vien|nhanvien|staff/.test(k)) return 8;
+    return 50;
+  }
+
+  function positionRawForDept(person, deptId) {
+    if (!person) return '';
+    const cps = person.concurrentPositions || [];
+    for (const cp of cps) {
+      if (cp.departmentId === deptId) return cp.positionName || cp.positionId || '';
+      const dn = dept(cp.departmentName);
+      if (dn && dn.id === deptId) return cp.positionName || cp.positionId || '';
+      if ((LEGACY_DEPT_KEYS[deptId] || []).includes(cp.departmentId)) {
+        return cp.positionName || cp.positionId || '';
+      }
+    }
+    const meta = person.metadata || {};
+    return person.position || person.position_name || person.positionName
+      || person.chucVu || meta.position || meta.position_name || '';
+  }
+
+  function allPositionRawsForLeadership(person, deptId) {
+    const seen = new Set();
+    const raws = [];
+    const add = (raw) => {
+      const s = String(raw || '').trim();
+      if (!s || seen.has(s)) return;
+      seen.add(s);
+      raws.push(s);
+    };
+    const meta = person?.metadata || {};
+    add(person?.position || person?.position_name || person?.positionName || person?.chucVu
+      || meta.position || meta.position_name);
+    if (deptId) add(positionRawForDept(person, deptId));
+    (person?.concurrentPositions || []).forEach(cp => {
+      add(cp.positionName || cp.positionId);
+    });
+    return raws;
+  }
+
+  function positionLevel(raw) {
+    if (!raw) return 50;
+    const inferred = inferLevelFromTitle(raw);
+    if (inferred < 50) return inferred;
+    const resolved = resolvePositionId(raw, state.positions);
+    const hit = state.positions.find(p => p.id === resolved || p.name === resolved);
+    if (hit && hit.level != null) return hit.level;
+    const key = normPosKey(raw);
+    const byName = state.positions.find(p => normPosKey(p.name) === key || normPosKey(p.id) === key);
+    if (byName && byName.level != null) return byName.level;
+    return 50;
+  }
+
+  function systemRoleLevel(person) {
+    const rid = personSystemRoleId(person);
+    if (rid && SYSTEM_ROLE_ID_LEVEL[String(rid)] != null) {
+      return SYSTEM_ROLE_ID_LEVEL[String(rid)];
+    }
+    if (rid) {
+      const row = state.systemRoles.find(r => String(r.id) === String(rid));
+      if (row && SYSTEM_ROLE_LEVEL[row.role_name] != null) {
+        return SYSTEM_ROLE_LEVEL[row.role_name];
+      }
+    }
+    return 50;
+  }
+
+  /** Cấp lãnh đạo (số nhỏ = cao hơn) — dùng sắp xếp danh sách nhân sự. */
+  function leadershipRank(person, deptId) {
+    const raws = allPositionRawsForLeadership(person, deptId);
+    let posLvl = 50;
+    raws.forEach(raw => {
+      posLvl = Math.min(posLvl, positionLevel(raw));
+    });
+    const roleLvl = systemRoleLevel(person);
+    return Math.min(posLvl, roleLvl);
+  }
+
   window.NhansuState = {
     state,
     DEFAULT_FACTORIES,
@@ -345,6 +461,8 @@
     getSystemRoleLabel,
     personSystemRoleId,
     personSystemRoleLabel,
+    leadershipRank,
+    positionLevel,
     normPosKey,
     resolvePositionId,
     mergePositionCatalog,

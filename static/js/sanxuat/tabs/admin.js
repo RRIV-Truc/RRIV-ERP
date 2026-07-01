@@ -34,7 +34,7 @@ const TabAdmin = (function() {
     { id: 'dl-2', name: 'Trung t\u00E2m nghi\u00EAn c\u1EE9u ph\u00E1t tri\u1EC3n s\u1EA3n ph\u1EA9m m\u1EDBi', dept_type: 'Trung T\u00E2m' },
     { id: 'dl-3', name: 'Trung t\u00E2m nghi\u00EAn c\u1EE9u ph\u00E1t tri\u1EC3n Gi\u1ED1ng cao su', dept_type: 'Trung T\u00E2m' },
     { id: 'dl-4', name: 'Trung t\u00E2m nghi\u00EAn c\u1EE9u \u1EE9ng d\u1EE5ng n\u00F4ng nghi\u1EC7p c\u00F4ng ngh\u1EC7 cao v\u00E0 chuy\u1EC3n giao k\u1EF9 thu\u1EADt', dept_type: 'Trung T\u00E2m' },
-    { id: 'dl-5', name: 'Ph\u00F2ng khoa h\u1ECDc - c\u00F4ng ngh\u1EC7', dept_type: 'Ph\u00F2ng Nghi\u1EC7p V\u1EE5' },
+    { id: 'dl-5', name: 'Ph\u00F2ng khoa h\u1ECDc c\u00F4ng ngh\u1EC7', dept_type: 'Ph\u00F2ng Nghi\u1EC7p V\u1EE5' },
     { id: 'dl-6', name: 'Ph\u00F2ng qu\u1EA3n tr\u1ECB - t\u00E0i ch\u00EDnh k\u1EBF to\u00E1n', dept_type: 'Ph\u00F2ng Nghi\u1EC7p V\u1EE5' }
   ];
 

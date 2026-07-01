@@ -176,6 +176,8 @@ def get_room_state(supabase, meeting: dict, ctx: UserContext) -> dict:
     meta = snap.get('meta') or {}
     chat = _parse_chat(snap.get('chat'))
     presence = _parse_presence(snap.get('presence'))
+    from modules.meetings.presentation_service import parse_presentation_for_client
+    presentation = parse_presentation_for_client(snap.get('presentation'))
 
     return {
         'meeting_id': meeting.get('id'),
@@ -188,6 +190,7 @@ def get_room_state(supabase, meeting: dict, ctx: UserContext) -> dict:
         'presence': presence,
         'presence_count': len(presence),
         'self_key': _user_key(ctx),
+        'presentation': presentation,
     }
 
 

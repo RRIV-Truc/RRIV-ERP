@@ -77,6 +77,7 @@ class MeetingUpdate(BaseModel):
     online_meeting_url: Optional[str] = None
     participants: Optional[list[MeetingParticipantInput]] = None
     metadata: Optional[dict] = None
+    shared_document_ids: Optional[list[str]] = None
 
     @field_validator('scheduled_start', 'scheduled_end', mode='before')
     @classmethod

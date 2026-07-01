@@ -54,11 +54,16 @@
     return canAccessApp(user);
   }
 
+  function canDeleteMeeting(user) {
+    return canCreateMeeting(user);
+  }
+
   window.PhonghopPerms = {
     APP_ID: APP_ID,
     getUser: getUser,
     canAccessApp: canAccessApp,
     canCreateMeeting: canCreateMeeting,
+    canDeleteMeeting: canDeleteMeeting,
     canViewMeeting: canViewMeeting,
     isGlobalAdmin: isGlobalAdmin
   };

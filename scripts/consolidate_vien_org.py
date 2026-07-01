@@ -26,13 +26,13 @@ CANONICAL_DEPTS = {
         "merge_ids": ["vien-01", "dl-1"],
     },
     "dl-6": {
-        "name": "Phòng Quản trị tài chính kế toán",
+        "name": "Phòng quản trị - tài chính kế toán",
         "dept_type": "Phòng Nghiệp Vụ",
         "order": 2,
         "merge_ids": ["vien-02", "vien-04", "dl-6"],
     },
     "dl-5": {
-        "name": "Phòng Kế hoạch và Khoa học - Công nghệ",
+        "name": "Phòng khoa học công nghệ",
         "dept_type": "Phòng Nghiệp Vụ",
         "order": 3,
         "merge_ids": ["vien-03", "dl-5"],

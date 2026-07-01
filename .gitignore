@@ -1,6 +1,9 @@
 .env
 .env.*
 !.env.example
+env.cloudrun.yaml
+storage/meeting-docs/**
+!storage/meeting-docs/.gitkeep
 __pycache__/
 *.py[cod]
 .DS_Store

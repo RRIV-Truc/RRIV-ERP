@@ -86,18 +86,59 @@
   }
 
   function buildShareText(m) {
+    var J = window.PhonghopJoin;
     var SVC = window.PhonghopServices;
     var room = SVC.roomLabel(m, (_opts && _opts.rooms) || []);
+    var code = m.meeting_code || '';
+    var joinUrl = J && J.buildJoinUrl ? J.buildJoinUrl(code) : '';
     var lines = [
       'Cuộc họp: ' + (m.title || ''),
-      'Mã cuộc họp: ' + (m.meeting_code || '—'),
+      'Mã cuộc họp: ' + (code || '—'),
       'Thời gian: ' + fmtDt(m.scheduled_start) + ' → ' + fmtDt(m.scheduled_end),
       'Hình thức: ' + SVC.modeLabel(m.meeting_mode)
     ];
     if (room) lines.push('Phòng: ' + room);
     lines.push('');
-    lines.push('Vào app Phòng Họp → nhập mã ' + (m.meeting_code || '') + ' → Vào phòng.');
+    if (joinUrl) {
+      lines.push('Link tham gia (nhân viên Viện — cần đăng nhập ERP):');
+      lines.push(joinUrl);
+      lines.push('');
+    }
+    lines.push('Hoặc: mở app Phòng Họp → nhập mã ' + code + ' → Vào phòng.');
+    lines.push('Chỉ người được mời mới vào được (kể cả khi biết mã).');
     return lines.join('\n');
+  }
+
+  function renderJoinShareBlock(m) {
+    var J = window.PhonghopJoin;
+    var code = m.meeting_code || '';
+    if (!code || !J || !J.buildJoinUrl) return '';
+    var st = m.status || m.meeting_status || '';
+    if (st === 'cancelled' || st === 'completed') return '';
+    var joinUrl = J.buildJoinUrl(code);
+    var hint = J.getJoinUrlHint ? J.getJoinUrlHint(joinUrl) : '';
+    var hintClass = J.isLocalOnlyHostname && joinUrl
+      ? (function () {
+          try {
+            return J.isLocalOnlyHostname(new URL(joinUrl).hostname) ? ' ph-detail-warn' : '';
+          } catch (_) { return ''; }
+        })()
+      : '';
+    return (
+      '<div class="ph-detail-block ph-detail-join-share">' +
+        '<span class="ph-detail-label">Link & QR tham gia (nội bộ)</span>' +
+        '<p class="ph-detail-muted ph-detail-help">Gửi cho nhân viên Viện đã được mời. ' +
+        'Mở link hoặc quét QR → đăng nhập ERP (nếu chưa) → vào phòng.</p>' +
+        '<div class="ph-join-link-row">' +
+          '<input type="text" class="ph-join-url-input" id="phDetailJoinUrl" readonly value="' + escapeHtml(joinUrl) + '">' +
+          '<button type="button" class="ph-btn" id="phDetailCopyLink">Sao chép link</button>' +
+        '</div>' +
+        '<div class="ph-qr-wrap" id="phDetailQrHost">' +
+          '<span class="ph-detail-muted">Đang tạo mã QR…</span>' +
+        '</div>' +
+        '<p class="ph-detail-muted ph-detail-help ph-qr-caption' + hintClass + '">' + escapeHtml(hint) + '</p>' +
+      '</div>'
+    );
   }
 
   function renderBody(m) {
@@ -123,8 +164,8 @@
           '<ol>' +
             '<li>Kiểm tra danh sách người mời và thông tin phòng bên dưới.</li>' +
             '<li>Nếu cần thay đổi, bấm <strong>Sửa cuộc họp</strong>.</li>' +
-            '<li>Bấm <strong>Vào phòng họp</strong> để tham gia chat online (mã ' + escapeHtml(code) + ').</li>' +
-            '<li>Hoặc ở màn chính: nhập mã vào ô <strong>Vào bằng mã</strong>.</li>' +
+            '<li>Bấm <strong>Vào phòng họp</strong> hoặc dùng <strong>Link / QR</strong> bên dưới (mã ' + escapeHtml(code) + ').</li>' +
+            '<li>Ở màn chính: nhập mã vào ô <strong>Vào bằng mã</strong> (sau khi đăng nhập).</li>' +
           '</ol>' +
         '</div>';
     } else if (st === 'cancelled') {
@@ -144,6 +185,10 @@
         '<button type="button" class="ph-btn ph-btn-danger" id="phDetailCancel">Hủy cuộc họp</button>';
     }
     actions += '<button type="button" class="ph-btn" id="phDetailCopyShare">Chia sẻ thông tin họp</button>';
+    actions += '<button type="button" class="ph-btn" id="phDetailDocs">Kho tài liệu</button>';
+    if (canManage()) {
+      actions += '<button type="button" class="ph-btn ph-btn-danger" id="phDetailDelete">Xóa vĩnh viễn</button>';
+    }
     if (fbId && canManage()) {
       actions += '<button type="button" class="ph-btn ph-btn-ghost" id="phDetailCopyFb" title="ID kỹ thuật Firebase">Sao chép ID kỹ thuật</button>';
     }
@@ -170,6 +215,7 @@
         '<span class="ph-detail-label">Danh sách tham dự</span>' +
         renderParticipants(m.participants || []) +
       '</div>' +
+      renderJoinShareBlock(m) +
       steps +
       '<div class="ph-detail-actions">' + actions +
         '<button type="button" class="ph-btn" id="phDetailClose">Đóng</button>' +
@@ -182,8 +228,11 @@
     var closeBtn = _overlay.querySelector('#phDetailClose');
     var editBtn = _overlay.querySelector('#phDetailEdit');
     var cancelBtn = _overlay.querySelector('#phDetailCancel');
+    var deleteBtn = _overlay.querySelector('#phDetailDelete');
     var joinBtn = _overlay.querySelector('#phDetailJoin');
     var copyShareBtn = _overlay.querySelector('#phDetailCopyShare');
+    var docsBtn = _overlay.querySelector('#phDetailDocs');
+    var copyLinkBtn = _overlay.querySelector('#phDetailCopyLink');
     var copyBtn = _overlay.querySelector('#phDetailCopyFb');
     var xBtn = _overlay.querySelector('.ph-detail-x');
 
@@ -215,6 +264,28 @@
       copyShareBtn.addEventListener('click', function () {
         copyText(buildShareText(_meeting));
       });
+    }
+
+    if (docsBtn) {
+      docsBtn.addEventListener('click', function () {
+        var mid = _meeting.id;
+        destroy();
+        if (window.PhonghopShell && window.PhonghopShell.openDocumentsForMeeting) {
+          window.PhonghopShell.openDocumentsForMeeting(mid);
+        }
+      });
+    }
+
+    if (copyLinkBtn) {
+      copyLinkBtn.addEventListener('click', function () {
+        var inp = _overlay.querySelector('#phDetailJoinUrl');
+        copyText(inp ? inp.value : '');
+      });
+    }
+
+    var qrHost = _overlay.querySelector('#phDetailQrHost');
+    if (qrHost && window.PhonghopJoin && _meeting.meeting_code) {
+      window.PhonghopJoin.renderQr(qrHost, window.PhonghopJoin.buildJoinUrl(_meeting.meeting_code));
     }
 
     if (copyBtn) {
@@ -250,6 +321,24 @@
           if (typeof onUpdated === 'function') onUpdated();
         } catch (e) {
           alert(e.message || 'Không hủy được cuộc họp');
+        }
+      });
+    }
+
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', async function () {
+        var st = (_meeting.status || _meeting.meeting_status || '').toLowerCase();
+        var label = [_meeting.meeting_code, _meeting.title].filter(Boolean).join(' — ');
+        var msg = 'Xóa vĩnh viễn cuộc họp "' + label + '"?\n\nDữ liệu sẽ không khôi phục được.';
+        if (st === 'live') msg = 'Cuộc họp đang diễn ra.\n\n' + msg;
+        if (!confirm(msg)) return;
+        try {
+          var onUpdated = _opts && _opts.onUpdated;
+          await window.PhonghopServices.deleteMeeting(_meeting.id);
+          destroy();
+          if (typeof onUpdated === 'function') onUpdated();
+        } catch (e) {
+          alert(e.message || 'Không xóa được cuộc họp');
         }
       });
     }

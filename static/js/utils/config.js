@@ -64,7 +64,8 @@ const Config = (function () {
     baocao: '/app/baocao',
     thongbao: '/app/thongbao',
     phanquyen: '/app/phanquyen',
-    phonghop: '/app/phonghop'
+    phonghop: '/app/phonghop',
+    phonghopJoin: '/app/phonghop/join'
   };
 
   /**

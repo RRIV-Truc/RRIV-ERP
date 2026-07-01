@@ -102,8 +102,446 @@
     return data.meeting;
   }
 
+  async function getDocumentShares(meetingId) {
+    var url = API + '/' + encodeURIComponent(meetingId) + '/documents/shares?username=' +
+      encodeURIComponent(username());
+    var res = await fetch(url, { headers: headers() });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Không tải được tài liệu chia sẻ');
+    return data;
+  }
+
+  async function setDocumentShares(meetingId, documentIds) {
+    var url = API + '/' + encodeURIComponent(meetingId) + '/documents/shares?username=' +
+      encodeURIComponent(username());
+    var res = await fetch(url, {
+      method: 'PUT',
+      headers: headers(),
+      body: JSON.stringify({ document_ids: documentIds || [] })
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Không lưu được tài liệu chia sẻ');
+    if (data.warm_result && showDocToast) {
+      var wr = data.warm_result;
+      if (wr.skipped) {
+        showDocToast('Đã lưu tài liệu chia sẻ', 4000);
+      } else {
+        var msg = 'Đã sync hot Firebase: ' + (wr.warmed || 0) + ' file';
+        if (wr.failed) msg += ' (' + wr.failed + ' lỗi — kiểm tra FIREBASE_STORAGE_BUCKET)';
+        showDocToast(msg, 7000);
+      }
+    }
+    return data;
+  }
+
+  function ensureDocViewerModal() {
+    var el = document.getElementById('phDocViewerModal');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'phDocViewerModal';
+    el.className = 'ph-doc-viewer-modal';
+    el.hidden = true;
+    el.innerHTML =
+      '<div class="ph-doc-viewer-backdrop" data-close="1"></div>' +
+      '<div class="ph-doc-viewer-panel">' +
+        '<div class="ph-doc-viewer-head">' +
+          '<strong id="phDocViewerTitle">Tài liệu</strong>' +
+          '<button type="button" class="ph-btn" id="phDocViewerDownload">Tải về / Mở app</button>' +
+          '<button type="button" class="ph-btn" id="phDocViewerClose">Đóng</button>' +
+        '</div>' +
+        '<iframe id="phDocViewerFrame" title="Xem tài liệu" class="ph-doc-viewer-frame"></iframe>' +
+      '</div>';
+    document.body.appendChild(el);
+    el.querySelector('[data-close]').addEventListener('click', function () {
+      closeDocViewer();
+    });
+    el.querySelector('#phDocViewerClose').addEventListener('click', function () {
+      closeDocViewer();
+    });
+    return el;
+  }
+
+  var _viewerBlobUrl = null;
+  var _viewerDownloadName = 'document';
+
+  function closeDocViewer() {
+    var el = document.getElementById('phDocViewerModal');
+    if (!el) return;
+    el.hidden = true;
+    var frame = el.querySelector('#phDocViewerFrame');
+    if (frame) frame.removeAttribute('src');
+    if (_viewerBlobUrl) {
+      URL.revokeObjectURL(_viewerBlobUrl);
+      _viewerBlobUrl = null;
+    }
+  }
+
+  var OFFICE_EXT_MIME = {
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.ppt': 'application/vnd.ms-powerpoint',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+  };
+
+  function fileExt(name) {
+    var n = String(name || '');
+    var i = n.lastIndexOf('.');
+    return i >= 0 ? n.slice(i).toLowerCase() : '';
+  }
+
+  function mimeFromFilename(name, fallback) {
+    var ext = fileExt(name);
+    if (OFFICE_EXT_MIME[ext]) return OFFICE_EXT_MIME[ext];
+    if (ext === '.pdf') return 'application/pdf';
+    return fallback || 'application/octet-stream';
+  }
+
+  function isPdfDoc(name, mime) {
+    if (fileExt(name) === '.pdf') return true;
+    return String(mime || '').toLowerCase().indexOf('pdf') >= 0;
+  }
+
+  function isOfficeDoc(name, mime) {
+    if (OFFICE_EXT_MIME[fileExt(name)]) return true;
+    var m = String(mime || '').toLowerCase();
+    return m.indexOf('word') >= 0 || m.indexOf('excel') >= 0 ||
+      m.indexOf('spreadsheet') >= 0 || m.indexOf('powerpoint') >= 0 ||
+      m.indexOf('presentation') >= 0 || m.indexOf('msword') >= 0 ||
+      m.indexOf('ms-excel') >= 0 || m.indexOf('ms-powerpoint') >= 0;
+  }
+
+  function isMobileDevice() {
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+  }
+
+  function buildDocDownloadUrl(meetingId, docId, disposition) {
+    var url = API + '/' + encodeURIComponent(meetingId) + '/documents/' +
+      encodeURIComponent(docId) + '/download?username=' + encodeURIComponent(username());
+    if (disposition) url += '&disposition=' + encodeURIComponent(disposition);
+    return url;
+  }
+
+  function absoluteDownloadUrl(meetingId, docId, disposition) {
+    return window.location.origin + buildDocDownloadUrl(meetingId, docId, disposition);
+  }
+
+  function isLocalOrHttpUrl(absUrl) {
+    try {
+      var u = new URL(absUrl);
+      var host = (u.hostname || '').toLowerCase();
+      if (u.protocol === 'http:') return true;
+      return host === 'localhost' || host === '127.0.0.1' ||
+        host.startsWith('192.168.') || host.startsWith('10.') || host.endsWith('.local');
+    } catch (_) {
+      return true;
+    }
+  }
+
+  function canUseOfficeShellUrl(absUrl) {
+    if (isLocalOrHttpUrl(absUrl)) return false;
+    try {
+      return new URL(absUrl).protocol === 'https:';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function officeShellUrl(name, absUrl) {
+    var protoMap = {
+      '.doc': 'ms-word', '.docx': 'ms-word',
+      '.xls': 'ms-excel', '.xlsx': 'ms-excel',
+      '.ppt': 'ms-powerpoint', '.pptx': 'ms-powerpoint'
+    };
+    var proto = protoMap[fileExt(name)];
+    if (!proto || !absUrl) return null;
+    return proto + ':ofv|u|' + absUrl;
+  }
+
+  function showDocToast(message, durationMs) {
+    var el = document.getElementById('phDocToast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'phDocToast';
+      el.className = 'ph-doc-toast';
+      document.body.appendChild(el);
+    }
+    el.textContent = message;
+    el.hidden = false;
+    clearTimeout(showDocToast._timer);
+    showDocToast._timer = setTimeout(function () {
+      el.hidden = true;
+    }, durationMs || 8000);
+  }
+
+  function officeAppName(name) {
+    var ext = fileExt(name);
+    if (ext === '.doc' || ext === '.docx') return 'Word';
+    if (ext === '.xls' || ext === '.xlsx') return 'Excel';
+    if (ext === '.ppt' || ext === '.pptx') return 'PowerPoint';
+    return 'ứng dụng tương ứng';
+  }
+
+  function triggerIframeDownload(absUrl) {
+    var iframe = document.getElementById('phDocDownloadFrame');
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'phDocDownloadFrame';
+      iframe.setAttribute('aria-hidden', 'true');
+      iframe.style.cssText = 'position:fixed;width:0;height:0;border:0;visibility:hidden';
+      document.body.appendChild(iframe);
+    }
+    iframe.src = absUrl;
+  }
+
+  function triggerDirectDownload(absUrl, name) {
+    triggerIframeDownload(absUrl);
+    var a = document.createElement('a');
+    a.href = absUrl;
+    if (name) a.setAttribute('download', name);
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  function downloadBlobToDisk(blob, name, mime) {
+    var correctMime = mimeFromFilename(name, mime || blob.type);
+    var finalBlob = blob;
+    if (blob.type !== correctMime && correctMime !== 'application/octet-stream') {
+      finalBlob = new Blob([blob], { type: correctMime });
+    }
+    triggerFileDownload(finalBlob, name, correctMime);
+  }
+
+  function openExternalDownload(url, name) {
+    var a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    if (name) a.setAttribute('download', name);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  function fetchDownloadLink(meetingId, docId, inline) {
+    var cached = window.PhonghopDocCache &&
+      window.PhonghopDocCache.getCachedObjectUrl(meetingId, docId);
+    if (cached) {
+      return cached.then(function (blobUrl) {
+        if (blobUrl) {
+          return { url: blobUrl, direct: true, cached: true };
+        }
+        return fetchDownloadLinkFromApi(meetingId, docId, inline);
+      });
+    }
+    return fetchDownloadLinkFromApi(meetingId, docId, inline);
+  }
+
+  function fetchDownloadLinkFromApi(meetingId, docId, inline) {
+    var url = API + '/' + encodeURIComponent(meetingId) + '/documents/' +
+      encodeURIComponent(docId) + '/download-link?username=' + encodeURIComponent(username());
+    if (inline) url += '&disposition=inline';
+    return fetch(url, { headers: { 'X-RRIV-Username': username() || '' } })
+      .then(function (r) {
+        return r.json().then(function (b) { return { ok: r.ok, b: b }; });
+      })
+      .then(function (x) {
+        if (!x.ok || !x.b.success) {
+          throw new Error(x.b.message || 'Không lấy được link tải');
+        }
+        var link = x.b.link;
+        if (link && link.url && link.direct && window.PhonghopDocCache) {
+          window.PhonghopDocCache.prefetchDoc(meetingId, docId, link.url, link.name);
+        }
+        return link;
+      });
+  }
+
+  function downloadOfficeDesktop(meetingId, docId, name, mime, presetUrl) {
+    showDocToast('Đang mở ' + name + '…');
+    if (presetUrl) {
+      openExternalDownload(presetUrl, name);
+      showDocToast(
+        'File đang tải trực tiếp từ Supabase. Xem thanh tải trình duyệt (Ctrl+J).',
+        8000
+      );
+      return Promise.resolve();
+    }
+    return fetchDownloadLink(meetingId, docId, false).then(function (link) {
+      openExternalDownload(link.url, link.name || name);
+      showDocToast(
+        'File đang tải trực tiếp từ Supabase. Xem thanh tải trình duyệt (Ctrl+J).',
+        8000
+      );
+    });
+  }
+
+  function tryLaunchOfficeApp(name, absUrl) {
+    var shell = officeShellUrl(name, absUrl);
+    if (!shell) return false;
+    try {
+      var iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = shell;
+      document.body.appendChild(iframe);
+      setTimeout(function () {
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+      }, 4000);
+      return true;
+    } catch (e) {
+      console.warn('[PhonghopServices] office shell', e);
+      return false;
+    }
+  }
+
+  function triggerFileDownload(blob, name, mime) {
+    var blobUrl = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = name || 'document';
+    a.type = mime || blob.type || 'application/octet-stream';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(blobUrl); }, 120000);
+  }
+
+  async function fetchDocBlob(meetingId, docId, name, mime, disposition) {
+    var url = buildDocDownloadUrl(meetingId, docId, disposition);
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timer = controller ? setTimeout(function () { controller.abort(); }, 300000) : null;
+    try {
+      var res = await fetch(url, {
+        headers: { 'X-RRIV-Username': username() || '' },
+        signal: controller ? controller.signal : undefined
+      });
+      if (!res.ok) {
+        var err = {};
+        try { err = await res.json(); } catch (_) { /* ignore */ }
+        throw new Error(err.message || ('Không tải được tài liệu (HTTP ' + res.status + ')'));
+      }
+      var buf = await res.arrayBuffer();
+      var correctMime = mimeFromFilename(name, mime || res.headers.get('Content-Type') || '');
+      return new Blob([buf], { type: correctMime });
+    } catch (e) {
+      if (e && e.name === 'AbortError') {
+        throw new Error('Tải file quá lâu — thử lại hoặc kiểm tra kết nối mạng');
+      }
+      throw e;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  function openOfficeWithNativeApp(meetingId, docId, name, mime, presetUrl) {
+    if (!isMobileDevice()) {
+      return downloadOfficeDesktop(meetingId, docId, name, mime, presetUrl);
+    }
+
+    return (async function () {
+      var correctMime = mimeFromFilename(name, mime);
+      var blob = await fetchDocBlob(meetingId, docId, name, mime, 'attachment');
+      if (blob.type !== correctMime && correctMime !== 'application/octet-stream') {
+        blob = new Blob([await blob.arrayBuffer()], { type: correctMime });
+      }
+
+      if (typeof File !== 'undefined' && navigator.share) {
+        try {
+          var shareFile = new File([blob], name, { type: correctMime });
+          if (navigator.canShare && navigator.canShare({ files: [shareFile] })) {
+            await navigator.share({ files: [shareFile], title: name });
+            return;
+          }
+        } catch (e) {
+          if (e && e.name === 'AbortError') return;
+          console.warn('[PhonghopServices] native share', e);
+        }
+      }
+
+      triggerFileDownload(blob, name, correctMime);
+      alert(
+        'File đã tải về. Mở thư mục Tải về hoặc chạm thông báo tải file → chọn Word / Excel / PowerPoint.'
+      );
+    })();
+  }
+
+  function openPdfInViewer(meetingId, docId, name, presetUrl) {
+    if (presetUrl) {
+      closeDocViewer();
+      var modal = ensureDocViewerModal();
+      modal.querySelector('#phDocViewerTitle').textContent = name;
+      modal.querySelector('#phDocViewerFrame').src = presetUrl;
+      modal.querySelector('#phDocViewerDownload').onclick = function () {
+        openExternalDownload(presetUrl, name);
+      };
+      modal.hidden = false;
+      return;
+    }
+    fetchDownloadLink(meetingId, docId, true).then(function (link) {
+      openPdfInViewer(meetingId, docId, name, link.url);
+    }).catch(function (e) {
+      var inlineUrl = absoluteDownloadUrl(meetingId, docId, 'inline');
+      openPdfInViewer(meetingId, docId, name, inlineUrl);
+    });
+  }
+
+  function openMeetingDocument(meetingId, docId, opts) {
+    opts = opts || {};
+    var name = opts.name || 'document';
+    var mime = opts.mime || '';
+    var presetUrl = opts.download_url || null;
+
+    if (isPdfDoc(name, mime) && !opts.download && opts.viewer !== false) {
+      openPdfInViewer(meetingId, docId, name, presetUrl);
+      return Promise.resolve();
+    }
+    if (isOfficeDoc(name, mime)) {
+      return openOfficeWithNativeApp(meetingId, docId, name, mime, presetUrl);
+    }
+    if (!isMobileDevice()) {
+      if (presetUrl) {
+        openExternalDownload(presetUrl, name);
+        return Promise.resolve();
+      }
+      return fetchDownloadLink(meetingId, docId, false).then(function (link) {
+        openExternalDownload(link.url, link.name || name);
+      });
+    }
+    showDocToast('Đang tải ' + name + '…');
+    return fetchDocBlob(meetingId, docId, name, mime, 'attachment')
+      .then(function (blob) {
+        downloadBlobToDisk(blob, name, mime);
+        showDocToast('Đã tải xong ' + name + '.', 6000);
+      });
+  }
+
+  function docOpenLabel(name, mime) {
+    if (isPdfDoc(name, mime)) return 'Xem PDF';
+    if (isOfficeDoc(name, mime)) return 'Mở';
+    return 'Mở';
+  }
+
   async function cancelMeeting(meetingId) {
     return updateMeeting(meetingId, { status: 'cancelled' });
+  }
+
+  async function deleteMeeting(meetingId) {
+    var url = API + '/' + encodeURIComponent(meetingId) + '?username=' + encodeURIComponent(username());
+    var res = await fetch(url, {
+      method: 'DELETE',
+      headers: headers()
+    });
+    var data = await res.json();
+    if (!res.ok) {
+      var msg = data.message;
+      if (Array.isArray(msg)) msg = msg.map(function (e) { return e.msg || JSON.stringify(e); }).join('; ');
+      throw new Error(msg || 'Không xóa được cuộc họp');
+    }
+    return true;
   }
 
   async function lookupMeetingByCode(code) {
@@ -125,7 +563,34 @@
     return data.room;
   }
 
+  async function warmMeetingDocuments(meetingId) {
+    var res = await fetch(
+      API + '/' + encodeURIComponent(meetingId) + '/documents/warm?username=' +
+        encodeURIComponent(username()),
+      { method: 'POST', headers: headers(), body: '{}' }
+    );
+    var data = await parseMeetingApiResponse(res, 'Không sync được tài liệu hot');
+    return data.result;
+  }
+
+  async function endMeeting(meetingId) {
+    var res = await fetch(
+      API + '/' + encodeURIComponent(meetingId) + '/sync?username=' +
+        encodeURIComponent(username()),
+      {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ sync_type: 'meeting_end', username: username() })
+      }
+    );
+    var data = await parseMeetingApiResponse(res, 'Không kết thúc được cuộc họp');
+    return data.result;
+  }
+
   async function leaveRoom(meetingId) {
+    if (window.PhonghopDocCache && meetingId) {
+      await window.PhonghopDocCache.clearMeetingCache(meetingId);
+    }
     var res = await fetch(API + '/' + encodeURIComponent(meetingId) + '/room/leave', {
       method: 'POST',
       headers: headers(),
@@ -241,20 +706,29 @@
         return Object.assign({}, data, {
           id: d.id,
           hoTen: data.hoTen || data.name || data.full_name || '',
-          employeeCode: data.employeeCode || data.code || '',
+          employeeCode: data.employeeCode || data.code || data.employee_code || '',
+          position: data.position || data.positionName || data.position_name || '',
+          positionName: data.positionName || data.position_name || data.position || '',
+          orderByDept: data.orderByDept || meta.orderByDept || {},
+          listStt: data.listStt != null ? data.listStt : meta.listStt,
           disabled: data.disabled != null ? data.disabled : (data.status === 'inactive' || data.status === 'resigned'),
           concurrentPositions: positionsMap[d.id] || [],
-          systemRoleId: meta.systemRoleId || meta.system_role_id || data.systemRoleId || null
+          systemRoleId: meta.systemRoleId || meta.system_role_id || data.systemRoleId || null,
+          metadata: meta
         });
       }).filter(isInstitutePersonnel);
 
-      var departments = results[1].docs.map(function (d) {
-        return Object.assign({ id: d.id }, d.data());
-      });
+      var departments = window.PhonghopOrg.filterDepartments(
+        results[1].docs.map(function (d) {
+          return Object.assign({ id: d.id }, d.data());
+        })
+      );
 
       var teams = results[2].docs.map(function (d) {
         return Object.assign({ id: d.id }, d.data());
       }).filter(function (t) { return !(t.metadata && t.metadata.retired); });
+
+      window.PhonghopOrg.normalizePersonnelDepts(personnel, departments);
 
       var positions = (results[3].docs || []).map(function (d) {
         return Object.assign({ id: d.id }, d.data());
@@ -299,13 +773,123 @@
     }) || null;
   }
 
+  function isPresentableDoc(name, mime) {
+    if (isPdfDoc(name, mime)) return true;
+    var ext = fileExt(name);
+    return ext === '.ppt' || ext === '.pptx';
+  }
+
+  async function getPresentationInfo(meetingId, docId) {
+    var res = await fetch(
+      API + '/' + encodeURIComponent(meetingId) + '/documents/' +
+        encodeURIComponent(docId) + '/presentation-info?username=' +
+        encodeURIComponent(username()),
+      { headers: headers() }
+    );
+    var data = await parseMeetingApiResponse(res, 'Không đọc được thông tin trình chiếu');
+    return data.presentation;
+  }
+
+  async function parseMeetingApiResponse(res, fallbackMsg) {
+    var text = await res.text();
+    var data = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch (_) {
+        if (/^\s*</.test(text)) {
+          throw new Error(
+            (fallbackMsg || 'Lỗi API') + ' (HTTP ' + res.status + '). Restart Flask và xem log terminal.'
+          );
+        }
+        throw new Error(text.slice(0, 240) || fallbackMsg || 'Lỗi API');
+      }
+    }
+    if (!res.ok) {
+      var msg = data && data.message;
+      if (Array.isArray(msg)) {
+        msg = msg.map(function (e) { return e.msg || JSON.stringify(e); }).join('; ');
+      }
+      throw new Error(msg || fallbackMsg || 'Lỗi API');
+    }
+    return data || {};
+  }
+
+  async function preparePresentation(meetingId, docId) {
+    var res = await fetch(
+      API + '/' + encodeURIComponent(meetingId) + '/room/presentation/prepare?username=' +
+        encodeURIComponent(username()),
+      {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ doc_id: docId, username: username() })
+      }
+    );
+    var data = await parseMeetingApiResponse(res, 'Không chuẩn bị được slide');
+    return data.presentation;
+  }
+
+  async function startPresentation(meetingId, payload) {
+    var res = await fetch(
+      API + '/' + encodeURIComponent(meetingId) + '/room/presentation/start?username=' +
+        encodeURIComponent(username()),
+      {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify(Object.assign({ username: username() }, payload))
+      }
+    );
+    var data = await parseMeetingApiResponse(res, 'Không bắt đầu trình chiếu');
+    return data.presentation;
+  }
+
+  async function updatePresentationSlide(meetingId, slideIndex, slideCount) {
+    var body = { slide_index: slideIndex, username: username() };
+    if (slideCount != null && slideCount >= 1) {
+      body.slide_count = slideCount;
+    }
+    var res = await fetch(
+      API + '/' + encodeURIComponent(meetingId) + '/room/presentation/slide?username=' +
+        encodeURIComponent(username()),
+      {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify(body)
+      }
+    );
+    var data = await parseMeetingApiResponse(res, 'Không đổi slide');
+    return data.presentation;
+  }
+
+  async function stopPresentation(meetingId) {
+    var res = await fetch(
+      API + '/' + encodeURIComponent(meetingId) + '/room/presentation/stop?username=' +
+        encodeURIComponent(username()),
+      {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ username: username() })
+      }
+    );
+    var data = await parseMeetingApiResponse(res, 'Không dừng trình chiếu');
+    return data.result;
+  }
+
   window.PhonghopServices = {
     listMeetings: listMeetings,
     listRooms: listRooms,
     createMeeting: createMeeting,
     getMeeting: getMeeting,
     updateMeeting: updateMeeting,
+    getDocumentShares: getDocumentShares,
+    setDocumentShares: setDocumentShares,
+    openMeetingDocument: openMeetingDocument,
+    closeDocViewer: closeDocViewer,
+    docOpenLabel: docOpenLabel,
+    isPdfDoc: isPdfDoc,
+    isOfficeDoc: isOfficeDoc,
     cancelMeeting: cancelMeeting,
+    deleteMeeting: deleteMeeting,
     lookupMeetingByCode: lookupMeetingByCode,
     joinRoom: joinRoom,
     leaveRoom: leaveRoom,
@@ -318,6 +902,16 @@
     findEmployeeByToken: findEmployeeByToken,
     roomLabel: roomLabel,
     modeLabel: modeLabel,
-    username: username
+    username: username,
+    showDocToast: showDocToast,
+    isPresentableDoc: isPresentableDoc,
+    preparePresentation: preparePresentation,
+    getPresentationInfo: getPresentationInfo,
+    startPresentation: startPresentation,
+    updatePresentationSlide: updatePresentationSlide,
+    stopPresentation: stopPresentation,
+    warmMeetingDocuments: warmMeetingDocuments,
+    endMeeting: endMeeting,
+    fetchDownloadLink: fetchDownloadLink
   };
 })();

@@ -94,6 +94,18 @@ class FirebaseMeetingSync:
             'payload': log_payload,
         }).execute()
 
+        try:
+            from modules.meetings.warm_service import purge_hot_documents
+            purge_hot_documents(firebase_room_id)
+            self.supabase.table('meeting_documents').update({
+                'warm_status': 'archived',
+                'archived_at': datetime.now(timezone.utc).isoformat(),
+            }).eq('meeting_id', meeting_id).eq('kind', 'file').in_(
+                'warm_status', ['ready', 'warming', 'pending', 'failed']
+            ).execute()
+        except Exception as exc:
+            print(f'[FirebaseMeetingSync] document archive/purge: {exc}')
+
         return {'meeting_id': meeting_id, 'synced': True, 'payload': log_payload}
 
     def sync_presence(self, meeting_id: str, firebase_room_id: str) -> dict:

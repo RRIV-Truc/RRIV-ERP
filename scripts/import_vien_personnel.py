@@ -36,8 +36,12 @@ CANONICAL_DEPT_MAP = {
     "ban lãnh đạo viện": "dl-1",
     "phòng quản trị nhân sự - hành chính": "dl-6",
     "phòng tài chính - kế toán": "dl-6",
+    "phòng tài chính kế toán": "dl-6",
     "phòng quản trị tài chính kế toán": "dl-6",
+    "phòng quản trị - tài chính kế toán": "dl-6",
     "phòng kế hoạch và khoa học - công nghệ": "dl-5",
+    "phòng khoa học - công nghệ": "dl-5",
+    "phòng khoa học công nghệ": "dl-5",
     "trung tâm qlclcs thiên nhiên": "dl-2",
     "trung tâm nghiên cứu phát triển sản phẩm mới": "dl-2",
     "trung tâm nghiên cứu phát triển giống cao su": "dl-3",
@@ -51,8 +55,8 @@ CANONICAL_DEPT_MAP = {
 
 CANONICAL_DEPT_NAMES = {
     "dl-1": "Ban Lãnh đạo Viện",
-    "dl-5": "Phòng Kế hoạch và Khoa học - Công nghệ",
-    "dl-6": "Phòng Quản trị tài chính kế toán",
+    "dl-5": "Phòng khoa học công nghệ",
+    "dl-6": "Phòng quản trị - tài chính kế toán",
     "dl-2": "Trung tâm nghiên cứu phát triển sản phẩm mới",
     "dl-3": "Trung tâm nghiên cứu phát triển Giống cao su",
     "dl-4": "Trung tâm nghiên cứu ứng dụng nông nghiệp công nghệ cao",

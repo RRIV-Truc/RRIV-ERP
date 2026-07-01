@@ -182,7 +182,10 @@ def create_meeting(
 
 
 def update_meeting(supabase, meeting_id: str, payload: MeetingUpdate, ctx: UserContext) -> dict:
-    patch = payload.model_dump(exclude_unset=True, exclude={'participants'})
+    patch = payload.model_dump(
+        exclude_unset=True,
+        exclude={'participants', 'shared_document_ids'},
+    )
     for k in ('scheduled_start', 'scheduled_end'):
         if k in patch and patch[k] is not None:
             patch[k] = patch[k].isoformat() if hasattr(patch[k], 'isoformat') else patch[k]
@@ -194,6 +197,15 @@ def update_meeting(supabase, meeting_id: str, payload: MeetingUpdate, ctx: UserC
     if payload.participants is not None:
         supabase.table('meeting_participants').delete().eq('meeting_id', meeting_id).execute()
         _insert_participants(supabase, meeting_id, payload.participants, ctx)
+
+    if payload.shared_document_ids is not None:
+        from modules.meetings import document_service as doc_svc
+        try:
+            doc_svc.set_document_shares(
+                supabase, meeting_id, ctx, payload.shared_document_ids,
+            )
+        except RuntimeError as exc:
+            raise ValueError(str(exc)) from exc
 
     return get_meeting_detail_enriched(supabase, meeting_id) or {}
 
@@ -269,3 +281,20 @@ def get_meeting_detail_enriched(supabase, meeting_id: str) -> dict | None:
 
 def get_meeting_detail(supabase, meeting_id: str) -> dict | None:
     return get_meeting_detail_enriched(supabase, meeting_id)
+
+
+def delete_meeting(supabase, meeting_id: str, ctx: UserContext) -> bool:
+    """Xóa vĩnh viễn cuộc họp (chỉ admin/manager — kiểm tra ở route)."""
+    meeting = get_meeting_detail(supabase, meeting_id)
+    if not meeting:
+        return False
+
+    room_id = meeting.get('firebase_room_id')
+    if room_id and meeting.get('platform_type') == 'internal':
+        try:
+            get_provider('internal').delete_meeting(room_id)
+        except Exception as exc:
+            print(f'delete_meeting firebase cleanup: {exc}')
+
+    supabase.table('meetings').delete().eq('id', meeting_id).execute()
+    return True

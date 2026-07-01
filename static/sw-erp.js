@@ -4,9 +4,9 @@
 
  */
 
-var SHELL_CACHE = 'rriv-erp-shell-v32';
+var SHELL_CACHE = 'rriv-erp-shell-v33';
 
-var RUNTIME_CACHE = 'rriv-erp-runtime-v32';
+var RUNTIME_CACHE = 'rriv-erp-runtime-v33';
 
 var OFFLINE_URL = '/offline.html';
 
@@ -194,6 +194,28 @@ function offlineFallback() {
 
 
 
+/** config.js / hub.js — luôn ưu tiên mạng (tránh ẩn app mới trên hub sau khi quay về). */
+function isHubCriticalStatic(pathname) {
+  return pathname === '/static/js/utils/config.js' ||
+    pathname === '/static/js/hub.js';
+}
+
+
+
+function networkFirst(req, cacheName) {
+  return fetch(req).then(function (res) {
+    if (res && res.status === 200) {
+      var clone = res.clone();
+      caches.open(cacheName).then(function (c) { c.put(req, clone); });
+    }
+    return res;
+  }).catch(function () {
+    return caches.match(req);
+  });
+}
+
+
+
 self.addEventListener('fetch', function (event) {
 
   var req = event.request;
@@ -223,6 +245,11 @@ self.addEventListener('fetch', function (event) {
 
 
   if (isStatic || isRootAsset || url.pathname === '/manifest.json') {
+
+    if (isHubCriticalStatic(url.pathname)) {
+      event.respondWith(networkFirst(req, RUNTIME_CACHE));
+      return;
+    }
 
     var isSanxuatTabJs = url.pathname.indexOf('/static/js/sanxuat/tabs/') === 0;
 

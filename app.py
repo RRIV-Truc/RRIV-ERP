@@ -1,4 +1,5 @@
 import os
+import socket
 import uuid
 import random
 import smtplib
@@ -41,16 +42,58 @@ OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "")
 MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN", "")
 VOICERSS_API_KEY = os.getenv("VOICERSS_API_KEY", "")
 RESPONSIVEVOICE_KEY = os.getenv("RESPONSIVEVOICE_KEY", "")
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+APP_PORT = int(os.getenv("PORT", 8080))
+
+
+def _guess_lan_origin():
+    """IP LAN để quét QR từ điện thoại khi dev (không dùng 127.0.0.1)."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0.5)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return f"http://{ip}:{APP_PORT}"
+    except OSError:
+        return ""
+
+
+def _join_public_origin():
+    if PUBLIC_BASE_URL:
+        return PUBLIC_BASE_URL
+    return _guess_lan_origin()
 
 
 @app.context_processor
 def inject_runtime_config():
+    lan = _guess_lan_origin() if not PUBLIC_BASE_URL else ""
     return {
         "openweather_api_key": OPENWEATHER_API_KEY,
         "mapbox_token": MAPBOX_TOKEN,
         "voicerss_api_key": VOICERSS_API_KEY,
         "responsivevoice_key": RESPONSIVEVOICE_KEY,
+        "erp_public_origin": PUBLIC_BASE_URL,
+        "erp_lan_origin": lan,
+        "erp_join_origin": _join_public_origin(),
     }
+
+
+@app.route("/api/public-origin")
+def api_public_origin():
+    current = request.host_url.rstrip("/")
+    configured = PUBLIC_BASE_URL or None
+    lan = _guess_lan_origin() if not configured else None
+    recommended = configured or lan or current
+    host = (request.host or "").split(":")[0].lower()
+    is_localhost = host in ("127.0.0.1", "localhost")
+    return jsonify({
+        "configured": configured,
+        "current": current,
+        "lan": lan,
+        "recommended": recommended,
+        "is_localhost": is_localhost,
+    })
 
 OTP_SESSIONS = {}
 
@@ -1044,6 +1087,27 @@ def root_static_file(filename):
 @app.route('/')
 def home():
     return render_template('index.html')
+
+
+@app.route('/app/ecabinet')
+@app.route('/ecabinet')
+def ecabinet_redirect():
+    """Alias cũ → Phòng họp e-Cabinet."""
+    return redirect('/app/phonghop')
+
+
+@app.route('/app/phonghop/present')
+@app.route('/phonghop/present')
+def phonghop_present():
+    """Cửa sổ trình chiếu — kéo sang màn hình lớn, fullscreen."""
+    return render_template('phonghop-present.html')
+
+
+@app.route('/app/phonghop/join')
+@app.route('/phonghop/join')
+def phonghop_join():
+    """Deep link nội bộ — ?code=MTG-YYYY-NNNN (cùng app Phòng họp)."""
+    return render_template('phonghop.html')
 
 
 @app.route('/app/<app_name>')

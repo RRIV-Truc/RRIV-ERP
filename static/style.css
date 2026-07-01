@@ -38,6 +38,17 @@ body {
 .system-title { background: rgba(255, 255, 255, 0.2); color: white; padding: 8px 20px; border-radius: 20px; font-size: 16px; font-weight: 600; display: inline-block; border: 1px solid rgba(255, 255, 255, 0.3); }
 .card-body-custom { background: white; padding: 35px 35px 25px; }
 .form-title { color: #006629; font-weight: 700; font-size: 24px; text-align: center; margin-bottom: 25px; }
+.login-return-hint {
+  color: #0369a1;
+  background: #e0f2fe;
+  border: 1px solid #7dd3fc;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  text-align: center;
+  margin-bottom: 16px;
+  line-height: 1.45;
+}
 .form-label { color: #005623; font-weight: 600; font-size: 15px; }
 .form-control { border: 2px solid #e0e0e0; border-radius: 12px; padding: 12px 15px; width: 100%; margin-top: 5px; }
 .btn-submit { background-color: #008037; color: white; border: none; border-radius: 12px; padding: 12px; font-size: 17px; font-weight: 600; width: 100%; margin-top: 15px; cursor: pointer; }

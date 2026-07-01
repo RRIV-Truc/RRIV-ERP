@@ -1,4 +1,4 @@
-/* main.js — bootstrap app Phòng họp */
+/* main.js — Phòng họp e-Cabinet */
 (function () {
   'use strict';
 
@@ -6,11 +6,15 @@
   var SVC = window.PhonghopServices;
   var PERMS = window.PhonghopPerms;
   var db = null;
+  var listFilter = { dash: 'live', calendar: 'upcoming' };
+  var searchQuery = '';
 
   function fmtDt(iso) {
     if (!iso) return '—';
     try {
-      return new Date(iso).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
+      return new Date(iso).toLocaleString('vi-VN', {
+        hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric'
+      });
     } catch (_) { return iso; }
   }
 
@@ -26,10 +30,56 @@
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  function normalizeMeeting(m) {
+    if (!m) return m;
+    if (m.meeting_status && !m.status) m.status = m.meeting_status;
+    if (m.meeting_id && !m.id) m.id = m.meeting_id;
+    return m;
+  }
+
+  function meetingBucket(m) {
+    var st = (m.meeting_status || m.status || '').toLowerCase();
+    if (st === 'live') return 'live';
+    if (st === 'completed' || st === 'cancelled') return 'past';
+    return 'upcoming';
+  }
+
+  function filterMeetings(list, bucket) {
+    return list.filter(function (raw) {
+      var m = normalizeMeeting(raw);
+      if (searchQuery) {
+        var q = searchQuery.toLowerCase();
+        var hay = [m.title, m.meeting_code, m.description].join(' ').toLowerCase();
+        if (hay.indexOf(q) === -1) return false;
+      }
+      return meetingBucket(m) === bucket;
+    });
+  }
+
   function canEditMeeting(m) {
     if (!PERMS.canCreateMeeting()) return false;
     var st = m.meeting_status || m.status || '';
     return st === 'scheduled' || st === 'draft' || st === 'live';
+  }
+
+  function canDeleteMeeting() {
+    return PERMS.canDeleteMeeting && PERMS.canDeleteMeeting();
+  }
+
+  async function confirmDeleteMeeting(m) {
+    var id = m.id || m.meeting_id;
+    if (!id) return;
+    var st = (m.meeting_status || m.status || '').toLowerCase();
+    var label = [m.meeting_code, m.title].filter(Boolean).join(' — ');
+    var msg = 'Xóa vĩnh viễn cuộc họp "' + label + '"?\n\nDữ liệu sẽ không khôi phục được.';
+    if (st === 'live') msg = 'Cuộc họp đang diễn ra.\n\n' + msg;
+    if (!confirm(msg)) return;
+    try {
+      await SVC.deleteMeeting(id);
+      await refresh();
+    } catch (e) {
+      alert(e.message || 'Không xóa được cuộc họp');
+    }
   }
 
   function openDetail(meetingId) {
@@ -50,17 +100,30 @@
   }
 
   function openEdit(meeting) {
+    if (!window.MeetingForm || !window.MeetingForm.open) {
+      alert('Không mở được form sửa — tải lại trang (Ctrl+F5).');
+      return;
+    }
+    var m = normalizeMeeting(Object.assign({}, meeting || {}));
+    if (!m.id && m.meeting_id) m.id = m.meeting_id;
+    if (!m.id) {
+      alert('Không xác định được cuộc họp cần sửa.');
+      return;
+    }
     window.MeetingForm.open({
-      meeting: meeting,
+      meeting: m,
       rooms: NS.state.rooms,
       orgData: NS.state.orgDirectory,
       reloadOrg: function () {
+        if (!db) return Promise.resolve(NS.state.orgDirectory || { personnel: [], departments: [], teams: [] });
         return SVC.loadOrgDirectory(db).then(function (org) {
           NS.state.orgDirectory = org;
           return org;
         });
       },
       onSaved: function () { refresh(); }
+    }).catch(function (e) {
+      alert(e.message || 'Không mở được form sửa cuộc họp');
     });
   }
 
@@ -93,49 +156,39 @@
     });
   }
 
-  function normalizeMeeting(m) {
-    if (!m) return m;
-    if (m.meeting_status && !m.status) m.status = m.meeting_status;
-    if (m.meeting_id && !m.id) m.id = m.meeting_id;
-    return m;
+  function renderCard(m) {
+    var id = m.id || m.meeting_id || '';
+    var code = m.meeting_code || '';
+    var title = m.title || '—';
+    var st = m.meeting_status || m.status || '';
+    var start = m.scheduled_start;
+    var room = SVC.roomLabel(m, NS.state.rooms);
+    var count = m.participant_count != null ? m.participant_count : '';
+    var meta = [code, fmtDt(start)].filter(Boolean).join(' · ');
+    if (room) meta += ' · ' + room;
+    if (count !== '') meta += ' · ' + count + ' người mời';
+
+    var actions = '';
+    if (SVC.canJoinMeeting(m)) {
+      actions += '<button type="button" class="ph-card-btn ph-card-btn-join" data-action="join" data-id="' + escapeHtml(id) + '">Vào phòng</button>';
+    }
+    actions += '<button type="button" class="ph-card-btn" data-action="detail" data-id="' + escapeHtml(id) + '">Chi tiết</button>';
+    if (canEditMeeting(m)) {
+      actions += '<button type="button" class="ph-card-btn ph-card-btn-accent" data-action="edit" data-id="' + escapeHtml(id) + '">Sửa</button>';
+    }
+    if (canDeleteMeeting()) {
+      actions += '<button type="button" class="ph-card-btn ph-card-btn-danger" data-action="delete" data-id="' + escapeHtml(id) + '">Xóa</button>';
+    }
+
+    return '<article class="ph-card ph-card-clickable" data-id="' + escapeHtml(id) + '">' +
+      '<div class="ph-card-head"><strong>' + escapeHtml(title) + '</strong>' +
+      '<span class="ph-badge">' + escapeHtml(statusBadge(st)) + '</span></div>' +
+      '<div class="ph-card-meta">' + escapeHtml(meta) + '</div>' +
+      '<div class="ph-card-actions">' + actions + '</div></article>';
   }
 
-  function renderList() {
-    var el = document.getElementById('meetingsList');
+  function bindListEvents(el) {
     if (!el) return;
-    if (!NS.state.meetings.length) {
-      el.innerHTML = '<div class="ph-empty">Chưa có cuộc họp nào. Bấm <strong>Tạo cuộc họp</strong> để bắt đầu.</div>';
-      return;
-    }
-    el.innerHTML = NS.state.meetings.map(function (raw) {
-      var m = normalizeMeeting(raw);
-      var id = m.id || m.meeting_id || '';
-      var code = m.meeting_code || '';
-      var title = m.title || '—';
-      var st = m.meeting_status || m.status || '';
-      var start = m.scheduled_start;
-      var room = SVC.roomLabel(m, NS.state.rooms);
-      var count = m.participant_count != null ? m.participant_count : '';
-      var meta = [code, fmtDt(start)].filter(Boolean).join(' · ');
-      if (room) meta += ' · ' + room;
-      if (count !== '') meta += ' · ' + count + ' người mời';
-
-      var actions = '';
-      if (SVC.canJoinMeeting(m)) {
-        actions += '<button type="button" class="ph-card-btn ph-card-btn-join" data-action="join" data-id="' + escapeHtml(id) + '">Vào phòng</button>';
-      }
-      actions += '<button type="button" class="ph-card-btn" data-action="detail" data-id="' + escapeHtml(id) + '">Chi tiết</button>';
-      if (canEditMeeting(m)) {
-        actions += '<button type="button" class="ph-card-btn ph-card-btn-accent" data-action="edit" data-id="' + escapeHtml(id) + '">Sửa</button>';
-      }
-
-      return '<article class="ph-card ph-card-clickable" data-id="' + escapeHtml(id) + '">' +
-        '<div class="ph-card-head"><strong>' + escapeHtml(title) + '</strong>' +
-        '<span class="ph-badge">' + escapeHtml(statusBadge(st)) + '</span></div>' +
-        '<div class="ph-card-meta">' + escapeHtml(meta) + '</div>' +
-        '<div class="ph-card-actions">' + actions + '</div></article>';
-    }).join('');
-
     el.querySelectorAll('.ph-card-clickable').forEach(function (card) {
       card.addEventListener('click', function (e) {
         if (e.target.closest('.ph-card-btn')) return;
@@ -143,23 +196,53 @@
         if (id) openDetail(id);
       });
     });
-
     el.querySelectorAll('.ph-card-btn').forEach(function (btn) {
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
         var id = btn.getAttribute('data-id');
         var action = btn.getAttribute('data-action');
         if (!id) return;
-        if (action === 'detail') {
-          openDetail(id);
-        } else if (action === 'join') {
-          openRoom(id);
-        } else if (action === 'edit') {
+        if (action === 'detail') openDetail(id);
+        else if (action === 'join') openRoom(id);
+        else if (action === 'edit') {
           var meeting = NS.state.meetings.find(function (m) { return (m.id || m.meeting_id) === id; });
           if (meeting) openEdit(meeting);
+        } else if (action === 'delete') {
+          var toDelete = NS.state.meetings.find(function (m) { return (m.id || m.meeting_id) === id; });
+          if (toDelete) confirmDeleteMeeting(toDelete);
         }
       });
     });
+  }
+
+  function renderInto(el, bucket) {
+    if (!el) return;
+    var items = filterMeetings(NS.state.meetings, bucket);
+    if (!items.length) {
+      var labels = { live: 'Không có cuộc họp đang diễn ra.', upcoming: 'Chưa có cuộc họp sắp tới.', past: 'Chưa có cuộc họp đã kết thúc.' };
+      el.innerHTML = '<div class="ph-empty">' + (labels[bucket] || 'Chưa có cuộc họp.') +
+        (PERMS.canCreateMeeting() && bucket !== 'past' ? ' Bấm <strong>Tạo cuộc họp</strong>.' : '') + '</div>';
+      return;
+    }
+    el.innerHTML = items.map(function (raw) { return renderCard(normalizeMeeting(raw)); }).join('');
+    bindListEvents(el);
+  }
+
+  function updateWidgets() {
+    var all = NS.state.meetings.map(normalizeMeeting);
+    var live = all.filter(function (m) { return meetingBucket(m) === 'live'; }).length;
+    var upcoming = all.filter(function (m) { return meetingBucket(m) === 'upcoming'; }).length;
+    var past = all.filter(function (m) { return meetingBucket(m) === 'past'; }).length;
+    var set = function (id, v) { var el = document.getElementById(id); if (el) el.textContent = String(v); };
+    set('phWLive', live);
+    set('phWUpcoming', upcoming);
+    set('phWPast', past);
+  }
+
+  function renderList() {
+    renderInto(document.getElementById('meetingsList'), listFilter.dash);
+    renderInto(document.getElementById('meetingsListFull'), listFilter.calendar);
+    updateWidgets();
   }
 
   async function refresh() {
@@ -190,46 +273,178 @@
 
   function resumeFromCache() {
     resetViewAfterRoom();
-    if (window.MeetingDetail && window.MeetingDetail.destroy) {
-      window.MeetingDetail.destroy();
-    }
+    if (window.MeetingDetail && window.MeetingDetail.destroy) window.MeetingDetail.destroy();
     refresh();
   }
 
-  function bindUi() {
-    var btnCreate = document.getElementById('btnCreateMeeting');
-    var btnRefresh = document.getElementById('btnRefresh');
-    var btnHome = document.getElementById('btnHome');
-
-    if (btnCreate) {
-      btnCreate.addEventListener('click', async function () {
-        if (!PERMS.canCreateMeeting()) {
-          alert('Chỉ Manager hoặc Admin mới được tạo cuộc họp.');
-          return;
-        }
-        await window.MeetingForm.open({
-          rooms: NS.state.rooms,
-          orgData: NS.state.orgDirectory,
-          reloadOrg: function () {
-            return SVC.loadOrgDirectory(db).then(function (org) {
-              NS.state.orgDirectory = org;
-              return org;
-            });
-          },
-          onSaved: function () { refresh(); }
-        });
+  function switchView(viewId) {
+    if (viewId !== 'session' && window.MeetingRoom && window.MeetingRoom.isActive && window.MeetingRoom.isActive()) {
+      if (!confirm('Bạn đang trong phiên họp. Rời phòng để chuyển màn hình?')) return;
+      window.MeetingRoom.destroy();
+    }
+    document.querySelectorAll('.ph-nav-item').forEach(function (btn) {
+      btn.classList.toggle('is-active', btn.getAttribute('data-view') === viewId);
+    });
+    document.querySelectorAll('.ph-view').forEach(function (v) {
+      v.classList.toggle('is-visible', v.getAttribute('data-view') === viewId);
+    });
+    if (viewId === 'documents' && window.MeetingDocs) {
+      window.MeetingDocs.refresh().catch(function (e) {
+        console.warn('[Phonghop] MeetingDocs', e.message);
       });
     }
+    var sidebar = document.getElementById('phSidebar');
+    if (sidebar) sidebar.classList.remove('is-open');
+  }
+
+  function focusContextTab(tabId) {
+    document.querySelectorAll('.ph-ctx-tab').forEach(function (tab) {
+      var on = tab.getAttribute('data-ctx') === tabId;
+      tab.classList.toggle('is-active', on);
+    });
+    document.querySelectorAll('.ph-ctx-panel').forEach(function (p) {
+      p.classList.toggle('is-visible', p.getAttribute('data-ctx-panel') === tabId);
+    });
+    var ctx = document.getElementById('phContext');
+    if (ctx) ctx.classList.add('is-open');
+  }
+
+  var viewBeforeSession = 'dashboard';
+
+  window.PhonghopShell = {
+    switchView: switchView,
+    openDocumentsForMeeting: function (meetingId, opts) {
+      opts = opts || {};
+      var inSession = opts.fromSession != null
+        ? !!opts.fromSession
+        : document.body.classList.contains('ph-in-session');
+      if (window.MeetingDocs && meetingId) {
+        window.MeetingDocs.setMeeting(meetingId, { sharedOnly: inSession });
+      }
+      switchView('documents');
+    },
+    enterSession: function () {
+      viewBeforeSession = document.querySelector('.ph-view.is-visible');
+      viewBeforeSession = viewBeforeSession ? viewBeforeSession.getAttribute('data-view') : 'dashboard';
+      switchView('session');
+      focusContextTab('chat');
+      document.body.classList.add('ph-in-session');
+    },
+    leaveSession: function () {
+      document.body.classList.remove('ph-in-session');
+      switchView(viewBeforeSession || 'dashboard');
+    }
+  };
+
+  function bindTabs(container, groupKey) {
+    if (!container) return;
+    container.querySelectorAll('.ph-tab').forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        container.querySelectorAll('.ph-tab').forEach(function (t) { t.classList.remove('is-active'); });
+        tab.classList.add('is-active');
+        listFilter[groupKey] = tab.getAttribute('data-filter') || 'upcoming';
+        renderList();
+      });
+    });
+  }
+
+  function bindShell() {
+    document.querySelectorAll('.ph-nav-item').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        switchView(btn.getAttribute('data-view'));
+      });
+    });
+
+    var toggle = document.getElementById('phSidebarToggle');
+    if (toggle) {
+      toggle.addEventListener('click', function () {
+        document.getElementById('phSidebar').classList.toggle('is-open');
+      });
+    }
+
+    bindTabs(document.querySelector('[data-tabs="dash"]'), 'dash');
+    bindTabs(document.querySelector('[data-tabs="calendar"]'), 'calendar');
+
+    var search = document.getElementById('phSearchInput');
+    if (search) {
+      search.addEventListener('input', function () {
+        searchQuery = search.value.trim();
+        renderList();
+      });
+    }
+
+    document.querySelectorAll('.ph-ctx-tab').forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        var id = tab.getAttribute('data-ctx');
+        document.querySelectorAll('.ph-ctx-tab').forEach(function (t) { t.classList.remove('is-active'); });
+        tab.classList.add('is-active');
+        document.querySelectorAll('.ph-ctx-panel').forEach(function (p) {
+          p.classList.toggle('is-visible', p.getAttribute('data-ctx-panel') === id);
+        });
+      });
+    });
+
+    var fab = document.getElementById('phFabContext');
+    var ctx = document.getElementById('phContext');
+    var ctxClose = document.getElementById('phContextClose');
+    if (fab && ctx) fab.addEventListener('click', function () { ctx.classList.add('is-open'); });
+    if (ctxClose && ctx) ctxClose.addEventListener('click', function () { ctx.classList.remove('is-open'); });
+
+    document.querySelectorAll('.ph-doc-tools').forEach(function (bar) {
+      bar.querySelectorAll('.ph-tool').forEach(function (tool) {
+        tool.addEventListener('click', function () {
+          bar.querySelectorAll('.ph-tool').forEach(function (t) { t.classList.remove('is-active'); });
+          tool.classList.add('is-active');
+        });
+      });
+    });
+
+    var today = document.getElementById('phTodayLabel');
+    if (today) {
+      today.textContent = new Date().toLocaleDateString('vi-VN', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+      });
+    }
+  }
+
+  function openCreateForm() {
+    if (!PERMS.canCreateMeeting()) {
+      alert('Chỉ Manager hoặc Admin mới được tạo cuộc họp.');
+      return;
+    }
+    return window.MeetingForm.open({
+      rooms: NS.state.rooms,
+      orgData: NS.state.orgDirectory,
+      reloadOrg: function () {
+        return SVC.loadOrgDirectory(db).then(function (org) {
+          NS.state.orgDirectory = org;
+          return org;
+        });
+      },
+      onSaved: function () { refresh(); }
+    });
+  }
+
+  function bindUi() {
+    ['btnCreateMeeting', 'btnCreateMeeting2'].forEach(function (id) {
+      var btn = document.getElementById(id);
+      if (btn) btn.addEventListener('click', function () { openCreateForm(); });
+    });
+    ['btnRefresh', 'btnRefresh2'].forEach(function (id) {
+      var btn = document.getElementById(id);
+      if (btn) btn.addEventListener('click', refresh);
+    });
+
     var btnJoin = document.getElementById('btnJoinByCode');
     var joinInput = document.getElementById('joinCodeInput');
-
     if (btnJoin) btnJoin.addEventListener('click', joinByCodeInput);
     if (joinInput) {
       joinInput.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') { e.preventDefault(); joinByCodeInput(); }
       });
     }
-    if (btnRefresh) btnRefresh.addEventListener('click', refresh);
+
+    var btnHome = document.getElementById('btnHome');
     if (btnHome) btnHome.addEventListener('click', function () { window.location.href = '/'; });
 
     var chip = document.getElementById('userChip');
@@ -240,11 +455,33 @@
       if (av) av.textContent = (u.hoTen || u.name || u.username || '?').charAt(0).toUpperCase();
       if (nm) nm.textContent = u.hoTen || u.name || u.username;
     }
+
+    var permsEl = document.getElementById('phSettingsPerms');
+    if (permsEl) {
+      var parts = [];
+      if (PERMS.canCreateMeeting()) parts.push('Tạo/sửa cuộc họp');
+      if (PERMS.canDeleteMeeting && PERMS.canDeleteMeeting()) parts.push('Xóa cuộc họp');
+      parts.push('Tham gia cuộc họp được mời');
+      permsEl.textContent = parts.length ? parts.join(' · ') : 'Xem và tham gia cuộc họp được mời';
+    }
+
+    if (!PERMS.canCreateMeeting()) {
+      ['btnCreateMeeting', 'btnCreateMeeting2'].forEach(function (id) {
+        var b = document.getElementById(id);
+        if (b) b.style.display = 'none';
+      });
+    }
   }
 
   async function bootstrap() {
+    var joinCode = window.PhonghopJoin && window.PhonghopJoin.getCodeFromUrl();
+
     var authUser = await Auth.init();
     if (!authUser) {
+      if (joinCode && window.PhonghopJoin) {
+        window.PhonghopJoin.redirectToLoginWithReturn();
+        return;
+      }
       window.location.href = '/';
       return;
     }
@@ -273,15 +510,26 @@
       return SVC.normalizeEmployee(p, p.id);
     }).filter(Boolean);
 
-    if (!PERMS.canCreateMeeting()) {
-      var btn = document.getElementById('btnCreateMeeting');
-      if (btn) btn.style.display = 'none';
-    }
-
+    bindShell();
     bindUi();
     await refresh();
 
     if (typeof RrivAppBar !== 'undefined' && RrivAppBar.refresh) RrivAppBar.refresh();
+
+    if (joinCode && window.PhonghopJoin) {
+      try {
+        await window.PhonghopJoin.enterByCode(joinCode, {
+          onClose: function () {
+            resetViewAfterRoom();
+            refresh();
+          },
+          onError: function (e) {
+            alert(e.message || 'Không vào được phòng họp');
+          }
+        });
+      } catch (_) { /* onError */ }
+      window.PhonghopJoin.cleanJoinQueryFromHistory();
+    }
   }
 
   window.addEventListener('pagehide', function () {
