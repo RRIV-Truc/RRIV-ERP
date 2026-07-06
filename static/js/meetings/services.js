@@ -21,6 +21,19 @@
     };
   }
 
+  function uploadHeaders() {
+    return { 'X-RRIV-Username': username() };
+  }
+
+  async function parseJsonResponse(res, fallbackMsg) {
+    var text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      throw new Error(fallbackMsg || 'Phản hồi server không hợp lệ');
+    }
+  }
+
   function normalizeEmployee(doc, docId) {
     var x = doc || {};
     var status = String(x.employment_status || x.employmentStatus || x.status || 'active').toLowerCase();
@@ -50,14 +63,21 @@
   async function listMeetings(limit) {
     var url = API + '?limit=' + (limit || 50) + '&username=' + encodeURIComponent(username());
     var res = await fetch(url, { headers: headers() });
-    var body = await res.json();
-    if (!res.ok) throw new Error(body.message || 'Lỗi tải danh sách họp');
+    var body = await parseJsonResponse(
+      res,
+      'Không đọc được danh sách cuộc họp (server trả HTML — thử restart Flask hoặc đăng nhập lại)'
+    );
+    if (!res.ok) {
+      var msg = body.message;
+      if (typeof msg !== 'string') msg = JSON.stringify(msg);
+      throw new Error(msg || ('Lỗi tải danh sách họp (HTTP ' + res.status + ')'));
+    }
     return body.meetings || [];
   }
 
   async function listRooms() {
     var res = await fetch(ROOMS_API + '?username=' + encodeURIComponent(username()), { headers: headers() });
-    var body = await res.json();
+    var body = await parseJsonResponse(res, 'Không đọc được danh sách phòng họp');
     if (!res.ok) throw new Error(body.message || 'Lỗi tải phòng họp');
     return body.rooms || [];
   }
@@ -103,12 +123,79 @@
   }
 
   async function getDocumentShares(meetingId) {
-    var url = API + '/' + encodeURIComponent(meetingId) + '/documents/shares?username=' +
-      encodeURIComponent(username());
+    if (meetingId) {
+      var url = API + '/' + encodeURIComponent(meetingId) + '/documents/shares?username=' +
+        encodeURIComponent(username());
+      var res = await fetch(url, { headers: headers() });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Không tải được tài liệu chia sẻ');
+      return data;
+    }
+    return getLibraryDocumentTree(null);
+  }
+
+  async function getLibraryDocumentTree(meetingId) {
+    return browseLibraryFolder({ meetingId: meetingId, parentId: null });
+  }
+
+  async function browseLibraryFolder(opts) {
+    opts = opts || {};
+    var params = ['username=' + encodeURIComponent(username())];
+    if (opts.parentId) params.push('parent_id=' + encodeURIComponent(opts.parentId));
+    if (opts.meetingId) params.push('meeting_id=' + encodeURIComponent(opts.meetingId));
+    var url = API + '/documents/library/browse?' + params.join('&');
     var res = await fetch(url, { headers: headers() });
     var data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Không tải được tài liệu chia sẻ');
+    if (!res.ok) throw new Error(data.message || 'Không tải được kho tài liệu');
     return data;
+  }
+
+  async function uploadLibraryDocument(file, parentId) {
+    var fd = new FormData();
+    fd.append('file', file);
+    if (parentId) fd.append('parent_id', parentId);
+    var url = API + '/documents/library/upload?username=' + encodeURIComponent(username());
+    var res = await fetch(url, { method: 'POST', headers: uploadHeaders(), body: fd });
+    var data = await parseJsonResponse(res, 'Upload thất bại — kiểm tra server đã restart chưa');
+    if (!res.ok) throw new Error(data.message || 'Upload thất bại');
+    return data.document || data;
+  }
+
+  async function createLibraryFolder(name, parentId) {
+    var url = API + '/documents/library/folder?username=' + encodeURIComponent(username());
+    var res = await fetch(url, {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, headers()),
+      body: JSON.stringify({ name: name, parent_id: parentId || null })
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Không tạo được thư mục');
+    return data.document || data;
+  }
+
+  async function uploadMeetingDocument(meetingId, file, parentId) {
+    var fd = new FormData();
+    fd.append('file', file);
+    if (parentId) fd.append('parent_id', parentId);
+    var url = API + '/' + encodeURIComponent(meetingId) + '/documents/upload?username=' +
+      encodeURIComponent(username());
+    var res = await fetch(url, { method: 'POST', headers: uploadHeaders(), body: fd });
+    var data = await parseJsonResponse(res, 'Upload thất bại');
+    if (!res.ok) throw new Error(data.message || 'Upload thất bại');
+    return data.document || data;
+  }
+
+  async function createMeetingDocFolder(meetingId, name, parentId) {
+    var url = API + '/' + encodeURIComponent(meetingId) + '/documents/folder?username=' +
+      encodeURIComponent(username());
+    var res = await fetch(url, {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, headers()),
+      body: JSON.stringify({ name: name, parent_id: parentId || null })
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Không tạo được thư mục');
+    return data.document || data;
   }
 
   async function setDocumentShares(meetingId, documentIds) {
@@ -438,8 +525,23 @@
   }
 
   function openOfficeWithNativeApp(meetingId, docId, name, mime, presetUrl) {
+    var sharing = window.MeetingScreenShare &&
+      window.MeetingScreenShare.isLocalSharing &&
+      window.MeetingScreenShare.isLocalSharing();
+    if (sharing) {
+      showDocToast(
+        'Đang chia sẻ màn hình: sau khi Word mở, chuyển sang cửa sổ Word (Alt+Tab). ' +
+        'Nếu không thấy Word trong khung chia sẻ, bấm «Dừng chia sẻ» → «Chia sẻ màn hình» lại và chọn cửa sổ Word.',
+        12000
+      );
+    }
+
     if (!isMobileDevice()) {
-      return downloadOfficeDesktop(meetingId, docId, name, mime, presetUrl);
+      return downloadOfficeDesktop(meetingId, docId, name, mime, presetUrl).then(function () {
+        if (sharing) {
+          showDocToast('Mở Word → Alt+Tab sang Word để mọi người thấy nội dung.', 8000);
+        }
+      });
     }
 
     return (async function () {
@@ -521,7 +623,13 @@
 
   function docOpenLabel(name, mime) {
     if (isPdfDoc(name, mime)) return 'Xem PDF';
-    if (isOfficeDoc(name, mime)) return 'Mở';
+    if (isOfficeDoc(name, mime)) {
+      if (window.MeetingScreenShare && window.MeetingScreenShare.isLocalSharing &&
+          window.MeetingScreenShare.isLocalSharing()) {
+        return 'Tải & mở Word';
+      }
+      return 'Mở';
+    }
     return 'Mở';
   }
 
@@ -620,10 +728,33 @@
     return data.message;
   }
 
+  function localDayMs(isoOrDate) {
+    var d = isoOrDate instanceof Date ? isoOrDate : new Date(isoOrDate);
+    if (isNaN(d.getTime())) return null;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  }
+
+  /** Cuộc họp «đã qua» khi sang ngày hôm sau (VN) so với ngày lên lịch — trừ khi đang live. */
+  function isMeetingPastByDay(m) {
+    if (!m) return false;
+    var st = (m.status || m.meeting_status || '').toLowerCase();
+    if (st === 'live') return false;
+    var startIso = m.scheduled_start || m.scheduledStart;
+    if (!startIso) return false;
+    var meetingDay = localDayMs(startIso);
+    if (meetingDay == null) return false;
+    return localDayMs(new Date()) > meetingDay;
+  }
+
   function canJoinMeeting(m) {
     if (!m) return false;
     var st = (m.status || m.meeting_status || '').toLowerCase();
-    return (st === 'scheduled' || st === 'live' || st === 'draft') && !!m.firebase_room_id;
+    if (st === 'completed' || st === 'cancelled') return false;
+    if (st !== 'scheduled' && st !== 'live' && st !== 'draft') return false;
+    if (st !== 'live' && isMeetingPastByDay(m)) return false;
+    var platform = String(m.platform_type || 'internal').toLowerCase();
+    if (platform === 'internal') return true;
+    return !!m.firebase_room_id;
   }
 
   function roomLabel(meeting, rooms) {
@@ -875,6 +1006,82 @@
     return data.result;
   }
 
+  async function startScreenShare(meetingId) {
+    var res = await fetch(
+      API + '/' + encodeURIComponent(meetingId) + '/room/screen-share/start',
+      { method: 'POST', headers: headers(), body: '{}' }
+    );
+    var data = await parseMeetingApiResponse(res, 'Không bắt đầu được chia sẻ màn hình');
+    return data.screen_share;
+  }
+
+  async function requestScreenShare(meetingId) {
+    var res = await fetch(
+      API + '/' + encodeURIComponent(meetingId) + '/room/screen-share/request',
+      { method: 'POST', headers: headers(), body: '{}' }
+    );
+    var data = await parseMeetingApiResponse(res, 'Không gửi được yêu cầu chia sẻ');
+    return data.request;
+  }
+
+  async function approveScreenShareRequest(meetingId, requestId) {
+    var res = await fetch(
+      API + '/' + encodeURIComponent(meetingId) + '/room/screen-share/request/' +
+        encodeURIComponent(requestId) + '/approve',
+      { method: 'POST', headers: headers(), body: '{}' }
+    );
+    var data = await parseMeetingApiResponse(res, 'Không duyệt được yêu cầu');
+    return data.request;
+  }
+
+  async function denyScreenShareRequest(meetingId, requestId) {
+    var res = await fetch(
+      API + '/' + encodeURIComponent(meetingId) + '/room/screen-share/request/' +
+        encodeURIComponent(requestId) + '/deny',
+      { method: 'POST', headers: headers(), body: '{}' }
+    );
+    var data = await parseMeetingApiResponse(res, 'Không từ chối được yêu cầu');
+    return data.request;
+  }
+
+  async function stopScreenShare(meetingId, force) {
+    var res = await fetch(
+      API + '/' + encodeURIComponent(meetingId) + '/room/screen-share/stop',
+      {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ force: !!force })
+      }
+    );
+    return parseMeetingApiResponse(res, 'Không dừng được chia sẻ màn hình');
+  }
+
+  async function postScreenShareSignal(meetingId, type, payload, toUsername) {
+    var res = await fetch(
+      API + '/' + encodeURIComponent(meetingId) + '/room/screen-share/signal',
+      {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          type: type,
+          payload: payload,
+          to_username: toUsername || null
+        })
+      }
+    );
+    var data = await parseMeetingApiResponse(res, 'Không gửi được tín hiệu WebRTC');
+    return data.signal;
+  }
+
+  async function fetchScreenShareSignals(meetingId, since) {
+    var url = API + '/' + encodeURIComponent(meetingId) + '/room/screen-share/signals?username=' +
+      encodeURIComponent(username());
+    if (since) url += '&since=' + encodeURIComponent(since);
+    var res = await fetch(url, { headers: headers() });
+    var data = await parseMeetingApiResponse(res, 'Không đọc được tín hiệu WebRTC');
+    return data.signals || [];
+  }
+
   window.PhonghopServices = {
     listMeetings: listMeetings,
     listRooms: listRooms,
@@ -882,6 +1089,12 @@
     getMeeting: getMeeting,
     updateMeeting: updateMeeting,
     getDocumentShares: getDocumentShares,
+    getLibraryDocumentTree: getLibraryDocumentTree,
+    browseLibraryFolder: browseLibraryFolder,
+    uploadLibraryDocument: uploadLibraryDocument,
+    createLibraryFolder: createLibraryFolder,
+    uploadMeetingDocument: uploadMeetingDocument,
+    createMeetingDocFolder: createMeetingDocFolder,
     setDocumentShares: setDocumentShares,
     openMeetingDocument: openMeetingDocument,
     closeDocViewer: closeDocViewer,
@@ -896,6 +1109,7 @@
     getRoomState: getRoomState,
     sendRoomChat: sendRoomChat,
     canJoinMeeting: canJoinMeeting,
+    isMeetingPastByDay: isMeetingPastByDay,
     loadEmployees: loadEmployees,
     loadOrgDirectory: loadOrgDirectory,
     normalizeEmployee: normalizeEmployee,
@@ -910,6 +1124,13 @@
     startPresentation: startPresentation,
     updatePresentationSlide: updatePresentationSlide,
     stopPresentation: stopPresentation,
+    startScreenShare: startScreenShare,
+    requestScreenShare: requestScreenShare,
+    approveScreenShareRequest: approveScreenShareRequest,
+    denyScreenShareRequest: denyScreenShareRequest,
+    stopScreenShare: stopScreenShare,
+    postScreenShareSignal: postScreenShareSignal,
+    fetchScreenShareSignals: fetchScreenShareSignals,
     warmMeetingDocuments: warmMeetingDocuments,
     endMeeting: endMeeting,
     fetchDownloadLink: fetchDownloadLink

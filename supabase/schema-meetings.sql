@@ -31,7 +31,7 @@ END $$;
 
 DO $$ BEGIN
   CREATE TYPE meeting_participant_role AS ENUM (
-    'organizer', 'host', 'participant', 'observer'
+    'organizer', 'host', 'secretary', 'participant', 'observer'
   );
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;

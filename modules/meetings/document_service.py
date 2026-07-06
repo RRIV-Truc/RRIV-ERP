@@ -5,7 +5,7 @@ import os
 import re
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -14,6 +14,7 @@ from modules.meetings.service import get_meeting_detail
 
 BUCKET = os.getenv('MEETING_DOCS_BUCKET', 'meeting-docs').strip() or 'meeting-docs'
 LOCAL_ROOT = Path(os.getenv('MEETING_DOCS_LOCAL_ROOT', 'storage/meeting-docs'))
+LIBRARY_MEETING_CODE = os.getenv('MEETING_DOC_LIBRARY_CODE', 'MTG-LIB-KHO').strip() or 'MTG-LIB-KHO'
 MAX_FILE_BYTES = int(os.getenv('MEETING_DOCS_MAX_MB', '50')) * 1024 * 1024
 ALLOWED_EXT = {
     '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
@@ -35,10 +36,69 @@ def _storage_key() -> str:
     return os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY') or ''
 
 
+def is_library_meeting(meeting: dict | None) -> bool:
+    if not meeting:
+        return False
+    if (meeting.get('meeting_code') or '').strip().upper() == LIBRARY_MEETING_CODE.upper():
+        return True
+    meta = meeting.get('metadata') or {}
+    return bool(meta.get('is_document_library'))
+
+
+def ensure_library_meeting(supabase, ctx: UserContext) -> str:
+    """Cuộc họp ảo — gốc cây thư mục kho tài liệu chung."""
+    res = supabase.table('meetings').select('id').eq(
+        'meeting_code', LIBRARY_MEETING_CODE
+    ).limit(1).execute()
+    if res.data:
+        return str(res.data[0]['id'])
+
+    now = datetime.now(timezone.utc)
+    end = now + timedelta(hours=1)
+    mid = str(uuid.uuid4())
+    row = {
+        'id': mid,
+        'meeting_code': LIBRARY_MEETING_CODE,
+        'title': 'Kho tài liệu chung',
+        'description': 'Lưu trữ tài liệu dùng chung — không phải cuộc họp',
+        'meeting_mode': 'online',
+        'platform_type': 'internal',
+        'status': 'completed',
+        'scheduled_start': now.isoformat(),
+        'scheduled_end': end.isoformat(),
+        'created_by_username': ctx.username,
+        'metadata': {'is_document_library': True},
+    }
+    try:
+        supabase.table('meetings').insert(row).execute()
+    except Exception as exc:
+        print(f'[meeting_docs] ensure_library_meeting insert: {exc}')
+        retry = supabase.table('meetings').select('id').eq(
+            'meeting_code', LIBRARY_MEETING_CODE
+        ).limit(1).execute()
+        if retry.data:
+            return str(retry.data[0]['id'])
+        raise RuntimeError(
+            'Không tạo được kho tài liệu chung (MTG-LIB-KHO). '
+            'Kiểm tra bảng meetings trên Supabase.'
+        ) from exc
+    return mid
+
+
+def assert_can_browse_library(supabase, ctx: UserContext, for_meeting_id: Optional[str] = None) -> None:
+    if can_create_meeting(ctx, supabase):
+        return
+    if for_meeting_id and can_manage_documents(supabase, for_meeting_id, ctx):
+        return
+    raise PermissionError('Chỉ Thư ký / Manager mới quản lý kho tài liệu chung')
+
+
 def can_manage_documents(supabase, meeting_id: str, ctx: UserContext) -> bool:
+    meeting = get_meeting_detail(supabase, meeting_id)
+    if meeting and is_library_meeting(meeting):
+        return can_create_meeting(ctx, supabase)
     if can_create_meeting(ctx, supabase):
         return True
-    meeting = get_meeting_detail(supabase, meeting_id)
     if not meeting:
         return False
     org_id = meeting.get('organizer_employee_id')
@@ -47,7 +107,7 @@ def can_manage_documents(supabase, meeting_id: str, ctx: UserContext) -> bool:
     uname = (ctx.username or '').lower()
     for p in meeting.get('participants') or []:
         role = (p.get('participant_role') or '').lower()
-        if role in ('organizer', 'host') and (
+        if role in ('organizer', 'host', 'secretary') and (
             (p.get('username') or '').lower() == uname
             or (ctx.employee_id and p.get('employee_id') == ctx.employee_id)
         ):
@@ -59,6 +119,10 @@ def assert_can_read(supabase, meeting_id: str, ctx: UserContext) -> dict:
     meeting = get_meeting_detail(supabase, meeting_id)
     if not meeting:
         raise LookupError('Không tìm thấy cuộc họp')
+    if is_library_meeting(meeting):
+        if can_create_meeting(ctx, supabase):
+            return meeting
+        raise PermissionError('Bạn không có quyền xem kho tài liệu chung')
     if not is_meeting_participant(supabase, meeting_id, ctx) and not can_create_meeting(ctx, supabase):
         raise PermissionError('Bạn không có quyền xem tài liệu cuộc họp này')
     return meeting
@@ -98,6 +162,70 @@ def _fetch_all_docs(supabase, meeting_id: str) -> list[dict]:
         'meeting_id', meeting_id
     ).order('kind').order('sort_order').order('name').execute()
     return [_row_to_doc(r) for r in (res.data or [])]
+
+
+def _accessible_meeting_ids_for_user(supabase, ctx: UserContext) -> set[str]:
+    from modules.meetings.service import list_meetings
+    ids: set[str] = set()
+    for m in list_meetings(supabase, ctx, limit=500):
+        mid = m.get('id') or m.get('meeting_id')
+        if mid:
+            ids.add(str(mid))
+    return ids
+
+
+def consolidate_documents_to_library(supabase, lib_id: str) -> int:
+    """Gom tài liệu cũ (từng cuộc họp) vào kho chung MTG-LIB-KHO."""
+    try:
+        res = supabase.table('meeting_documents').select('id').neq(
+            'meeting_id', lib_id
+        ).execute()
+        if not res.data:
+            return 0
+        supabase.table('meeting_documents').update({
+            'meeting_id': lib_id,
+        }).neq('meeting_id', lib_id).execute()
+        return len(res.data)
+    except Exception as exc:
+        print(f'[meeting_docs] consolidate to library: {exc}')
+        return 0
+
+
+def _list_library_items_at_parent(
+    supabase,
+    ctx: UserContext,
+    parent_id: Optional[str],
+) -> list[dict]:
+    """Liệt kê file/thư mục tại một cấp — toàn kho (theo parent_id, không tách cuộc họp)."""
+    q = supabase.table('meeting_documents').select('*')
+    if parent_id:
+        q = q.eq('parent_id', parent_id)
+    else:
+        q = q.is_('parent_id', 'null')
+    res = q.order('kind').order('sort_order').order('name').execute()
+    items = [_row_to_doc(r) for r in (res.data or [])]
+    if can_create_meeting(ctx, supabase):
+        return items
+    allowed = _accessible_meeting_ids_for_user(supabase, ctx)
+    return [d for d in items if str(d.get('meeting_id') or '') in allowed]
+
+
+def _library_breadcrumb(supabase, folder_id: Optional[str]) -> list[dict]:
+    trail: list[dict] = []
+    cur = folder_id
+    seen: set[str] = set()
+    while cur and cur not in seen:
+        seen.add(str(cur))
+        res = supabase.table('meeting_documents').select(
+            'id, name, parent_id'
+        ).eq('id', cur).limit(1).execute()
+        if not res.data:
+            break
+        row = res.data[0]
+        trail.append({'id': row['id'], 'name': row['name']})
+        cur = row.get('parent_id')
+    trail.reverse()
+    return trail
 
 
 def get_shared_root_ids(supabase, meeting_id: str) -> set[str]:
@@ -159,6 +287,28 @@ def _folder_has_shared_descendant(
     return False
 
 
+def is_document_shared_to_meeting(
+    supabase,
+    target_meeting_id: str,
+    doc_id: str,
+) -> bool:
+    """True nếu doc_id được chia sẻ cho cuộc họp target (kể cả tài liệu ở cuộc họp khác)."""
+    if not doc_id:
+        return False
+    shared_roots = get_shared_root_ids(supabase, target_meeting_id)
+    if str(doc_id) in shared_roots:
+        return True
+    res = supabase.table('meeting_documents').select('meeting_id').eq(
+        'id', doc_id
+    ).limit(1).execute()
+    if not res.data:
+        return False
+    source_mid = str(res.data[0]['meeting_id'])
+    all_docs = _fetch_all_docs(supabase, source_mid)
+    by_id = _build_doc_index(all_docs)
+    return is_document_shared(str(doc_id), shared_roots, by_id)
+
+
 def is_document_shared_by_chain(
     supabase,
     meeting_id: str,
@@ -197,15 +347,7 @@ def assert_can_access_document(
     doc_id: str,
     ctx: UserContext,
 ) -> dict:
-    doc = get_document(supabase, meeting_id, doc_id, ctx)
-    if not should_filter_shared(supabase, meeting_id, ctx):
-        return doc
-    all_docs = _fetch_all_docs(supabase, meeting_id)
-    shared_roots = get_shared_root_ids(supabase, meeting_id)
-    by_id = _build_doc_index(all_docs)
-    if not is_document_shared(doc_id, shared_roots, by_id):
-        raise PermissionError('Tài liệu chưa được chia sẻ cho cuộc họp này')
-    return doc
+    return get_document(supabase, meeting_id, doc_id, ctx)
 
 
 def list_documents(
@@ -249,6 +391,66 @@ def list_documents(
     return visible
 
 
+def _accessible_meetings_for_docs(supabase, ctx: UserContext) -> list[dict]:
+    from modules.meetings.service import list_meetings
+    return list_meetings(supabase, ctx, limit=500)
+
+
+def list_library_documents(
+    supabase,
+    ctx: UserContext,
+    meeting_id: Optional[str] = None,
+    parent_id: Optional[str] = None,
+    meeting_filter: Optional[str] = None,
+) -> dict:
+    """Kho tài liệu chung — duyệt thư mục (không theo cuộc họp)."""
+    _ = meeting_filter  # deprecated
+    lib_id = ensure_library_meeting(supabase, ctx)
+    is_admin = can_create_meeting(ctx, supabase)
+
+    if not is_admin:
+        raise PermissionError('Chỉ Thư ký / Manager mới xem toàn bộ kho tài liệu')
+
+    nav_parent = parent_id
+    if meeting_id and not parent_id:
+        nav_parent = None
+    elif meeting_id and parent_id:
+        nav_parent = parent_id
+
+    data = browse_library_folder(supabase, ctx, parent_id=nav_parent, for_meeting_id=None)
+    lib_id = data.get('library_meeting_id') or lib_id
+    items = [{
+        **d,
+        'meeting_id': lib_id,
+    } for d in (data.get('documents') or [])]
+
+    return {
+        'documents': items,
+        'breadcrumb': data.get('breadcrumb') or [],
+        'can_manage': True,
+        'shared_only': False,
+        'library_mode': True,
+        'scope_meeting_id': None,
+        'library_meeting_id': lib_id,
+        'parent_id': nav_parent,
+        'is_admin_library': is_admin,
+    }
+
+
+def _meetings_summary(meetings: list[dict]) -> list[dict]:
+    out = []
+    for m in meetings:
+        mid = m.get('id') or m.get('meeting_id')
+        if not mid:
+            continue
+        out.append({
+            'id': mid,
+            'meeting_code': m.get('meeting_code'),
+            'title': m.get('title'),
+        })
+    return out
+
+
 def list_shared_files_flat(
     supabase,
     meeting_id: str,
@@ -256,16 +458,19 @@ def list_shared_files_flat(
     shared_only: bool = False,
 ) -> list[dict]:
     assert_can_read(supabase, meeting_id, ctx)
-    all_docs = _fetch_all_docs(supabase, meeting_id)
-    shared_roots = get_shared_root_ids(supabase, meeting_id)
-    by_id = _build_doc_index(all_docs)
     filter_shared = shared_only or should_filter_shared(supabase, meeting_id, ctx)
     if not filter_shared:
+        all_docs = _fetch_all_docs(supabase, meeting_id)
         return [d for d in all_docs if d.get('kind') == 'file']
-    return [
-        d for d in all_docs
-        if d.get('kind') == 'file' and is_document_shared(str(d['id']), shared_roots, by_id)
-    ]
+
+    shared_roots = get_shared_root_ids(supabase, meeting_id)
+    if not shared_roots:
+        return []
+    file_ids = collect_descendant_file_ids(supabase, meeting_id, list(shared_roots))
+    if not file_ids:
+        return []
+    res = supabase.table('meeting_documents').select('*').in_('id', file_ids).execute()
+    return [_row_to_doc(r) for r in (res.data or []) if r.get('kind') == 'file']
 
 
 def list_documents_tree(supabase, meeting_id: str, ctx: UserContext) -> list[dict]:
@@ -302,13 +507,65 @@ def list_documents_tree(supabase, meeting_id: str, ctx: UserContext) -> list[dic
 def get_document_shares(supabase, meeting_id: str, ctx: UserContext) -> dict:
     assert_can_read(supabase, meeting_id, ctx)
     shared_ids = sorted(get_shared_root_ids(supabase, meeting_id))
-    tree = list_documents_tree(supabase, meeting_id, ctx) if can_manage_documents(
-        supabase, meeting_id, ctx
-    ) else []
+    can_mgr = can_manage_documents(supabase, meeting_id, ctx) or can_create_meeting(ctx, supabase)
+    if can_mgr:
+        lib = browse_library_folder(supabase, ctx, parent_id=None, for_meeting_id=meeting_id)
+        return {
+            'shared_document_ids': shared_ids,
+            'documents': lib.get('documents') or [],
+            'breadcrumb': lib.get('breadcrumb') or [],
+            'library_meeting_id': lib.get('library_meeting_id'),
+            'can_manage': True,
+        }
     return {
         'shared_document_ids': shared_ids,
-        'tree': tree,
-        'can_manage': can_manage_documents(supabase, meeting_id, ctx),
+        'documents': [],
+        'breadcrumb': [{'id': '', 'name': 'Kho tài liệu'}],
+        'can_manage': False,
+    }
+
+
+def browse_library_folder(
+    supabase,
+    ctx: UserContext,
+    parent_id: Optional[str] = None,
+    for_meeting_id: Optional[str] = None,
+) -> dict:
+    """Duyệt kho tài liệu chung theo thư mục (kiểu Windows Explorer)."""
+    assert_can_browse_library(supabase, ctx, for_meeting_id)
+    lib_id = ensure_library_meeting(supabase, ctx)
+    if can_create_meeting(ctx, supabase):
+        migrated = consolidate_documents_to_library(supabase, lib_id)
+        if migrated:
+            print(f'[meeting_docs] consolidated {migrated} document(s) into library')
+    items = _list_library_items_at_parent(supabase, ctx, parent_id)
+    trail = _library_breadcrumb(supabase, parent_id) if parent_id else []
+    breadcrumb = [{'id': '', 'name': 'Kho tài liệu'}] + trail
+    shared_ids = sorted(get_shared_root_ids(supabase, for_meeting_id)) if for_meeting_id else []
+    return {
+        'documents': items,
+        'breadcrumb': breadcrumb,
+        'shared_document_ids': shared_ids,
+        'library_meeting_id': lib_id,
+        'parent_id': parent_id,
+        'can_manage': True,
+    }
+
+
+def list_library_tree(
+    supabase,
+    ctx: UserContext,
+    for_meeting_id: Optional[str] = None,
+) -> dict:
+    """Deprecated — dùng browse_library_folder."""
+    data = browse_library_folder(supabase, ctx, parent_id=None, for_meeting_id=for_meeting_id)
+    return {
+        'tree': [],
+        'documents': data.get('documents') or [],
+        'breadcrumb': data.get('breadcrumb') or [],
+        'shared_document_ids': data.get('shared_document_ids') or [],
+        'library_meeting_id': data.get('library_meeting_id'),
+        'can_manage': True,
     }
 
 
@@ -320,36 +577,47 @@ def collect_descendant_file_ids(
     """File con (mọi cấp) của các folder/file được tick chia sẻ."""
     if not root_ids:
         return []
-    all_docs = _fetch_all_docs(supabase, meeting_id)
-    by_id = _build_doc_index(all_docs)
-    children_of: dict[Optional[str], list[dict]] = {}
-    for d in all_docs:
-        pid = d.get('parent_id')
-        key = str(pid) if pid else None
-        children_of.setdefault(key, []).append(d)
+    res = supabase.table('meeting_documents').select('id, meeting_id').in_(
+        'id', root_ids
+    ).execute()
+    roots_by_meeting: dict[str, list[str]] = {}
+    for row in res.data or []:
+        sm = str(row.get('meeting_id') or meeting_id)
+        rid = str(row.get('id') or '')
+        if rid:
+            roots_by_meeting.setdefault(sm, []).append(rid)
 
     file_ids: list[str] = []
     seen: set[str] = set()
-    for root in root_ids:
-        stack = [str(root)]
-        visited: set[str] = set()
-        while stack:
-            cur = stack.pop()
-            if cur in visited:
-                continue
-            visited.add(cur)
-            row = by_id.get(cur)
-            if not row:
-                continue
-            if row.get('kind') == 'file':
-                if cur not in seen:
-                    seen.add(cur)
-                    file_ids.append(cur)
-            else:
-                for child in children_of.get(cur, []):
-                    cid = str(child.get('id') or '')
-                    if cid:
-                        stack.append(cid)
+    for sm, roots in roots_by_meeting.items():
+        all_docs = _fetch_all_docs(supabase, sm)
+        by_id = _build_doc_index(all_docs)
+        children_of: dict[Optional[str], list[dict]] = {}
+        for d in all_docs:
+            pid = d.get('parent_id')
+            key = str(pid) if pid else None
+            children_of.setdefault(key, []).append(d)
+
+        for root in roots:
+            stack = [str(root)]
+            visited: set[str] = set()
+            while stack:
+                cur = stack.pop()
+                if cur in visited:
+                    continue
+                visited.add(cur)
+                row = by_id.get(cur)
+                if not row:
+                    continue
+                if row.get('kind') == 'file':
+                    if cur not in seen:
+                        seen.add(cur)
+                        file_ids.append(cur)
+                else:
+                    for child in children_of.get(cur, []):
+                        cid = str(child.get('id') or '')
+                        if cid:
+                            stack.append(cid)
     return file_ids
 
 
@@ -361,31 +629,42 @@ def collect_shared_tree_doc_ids(
     """Folder + file thuộc cây chia sẻ (để index trên Firebase)."""
     if not root_ids:
         return []
-    all_docs = _fetch_all_docs(supabase, meeting_id)
-    by_id = _build_doc_index(all_docs)
-    children_of: dict[Optional[str], list[dict]] = {}
-    for d in all_docs:
-        pid = d.get('parent_id')
-        key = str(pid) if pid else None
-        children_of.setdefault(key, []).append(d)
+    res = supabase.table('meeting_documents').select('id, meeting_id').in_(
+        'id', root_ids
+    ).execute()
+    roots_by_meeting: dict[str, list[str]] = {}
+    for row in res.data or []:
+        sm = str(row.get('meeting_id') or meeting_id)
+        rid = str(row.get('id') or '')
+        if rid:
+            roots_by_meeting.setdefault(sm, []).append(rid)
 
     out: list[str] = []
     seen: set[str] = set()
-    for root in root_ids:
-        stack = [str(root)]
-        visited: set[str] = set()
-        while stack:
-            cur = stack.pop()
-            if cur in visited:
-                continue
-            visited.add(cur)
-            if cur not in seen:
-                seen.add(cur)
-                out.append(cur)
-            for child in children_of.get(cur, []):
-                cid = str(child.get('id') or '')
-                if cid:
-                    stack.append(cid)
+    for sm, roots in roots_by_meeting.items():
+        all_docs = _fetch_all_docs(supabase, sm)
+        by_id = _build_doc_index(all_docs)
+        children_of: dict[Optional[str], list[dict]] = {}
+        for d in all_docs:
+            pid = d.get('parent_id')
+            key = str(pid) if pid else None
+            children_of.setdefault(key, []).append(d)
+
+        for root in roots:
+            stack = [str(root)]
+            visited: set[str] = set()
+            while stack:
+                cur = stack.pop()
+                if cur in visited:
+                    continue
+                visited.add(cur)
+                if cur not in seen:
+                    seen.add(cur)
+                    out.append(cur)
+                for child in children_of.get(cur, []):
+                    cid = str(child.get('id') or '')
+                    if cid:
+                        stack.append(cid)
     return out
 
 
@@ -422,13 +701,23 @@ def set_document_shares(
         clean_ids.append(did)
 
     if clean_ids:
-        res = supabase.table('meeting_documents').select('id').eq(
-            'meeting_id', meeting_id
-        ).in_('id', clean_ids).execute()
+        res = supabase.table('meeting_documents').select('id, meeting_id').in_(
+            'id', clean_ids
+        ).execute()
         found = {str(r['id']) for r in (res.data or [])}
         missing = [d for d in clean_ids if d not in found]
         if missing:
-            raise ValueError('Một số tài liệu không thuộc cuộc họp này')
+            raise ValueError('Một số tài liệu không tồn tại trong kho')
+        for row in res.data or []:
+            doc_mid = str(row.get('meeting_id') or '')
+            try:
+                assert_can_read(supabase, doc_mid, ctx)
+            except PermissionError as exc:
+                raise ValueError('Không có quyền dùng tài liệu trong kho') from exc
+            if not can_create_meeting(ctx, supabase) and not can_manage_documents(
+                supabase, doc_mid, ctx
+            ):
+                raise ValueError('Không được chia sẻ tài liệu này')
 
     supabase.table('meeting_document_shares').delete().eq('meeting_id', meeting_id).execute()
     if clean_ids:
@@ -455,13 +744,16 @@ def set_document_shares(
 def _validate_parent(supabase, meeting_id: str, parent_id: Optional[str]) -> None:
     if not parent_id:
         return
-    res = supabase.table('meeting_documents').select('id, kind').eq(
+    res = supabase.table('meeting_documents').select('id, kind, meeting_id').eq(
         'id', parent_id
-    ).eq('meeting_id', meeting_id).limit(1).execute()
+    ).limit(1).execute()
     if not res.data:
         raise ValueError('Thư mục cha không tồn tại')
-    if res.data[0].get('kind') != 'folder':
+    row = res.data[0]
+    if row.get('kind') != 'folder':
         raise ValueError('parent_id phải là thư mục')
+    if str(row.get('meeting_id') or '') != str(meeting_id):
+        raise ValueError('Thư mục cha không thuộc kho tài liệu')
 
 
 def create_folder(
@@ -736,10 +1028,16 @@ def attach_download_urls(docs: list[dict], max_files: int = 12) -> list[dict]:
     for d in docs:
         row = dict(d)
         if row.get('kind') == 'file':
-            signed = resolve_direct_download_url(row)
-            if signed:
-                row['download_url'] = signed
-                row['download_source'] = 'firebase' if row.get('firebase_path') and row.get('warm_status') == 'ready' else 'supabase'
+            try:
+                signed = resolve_direct_download_url(row)
+                if signed:
+                    row['download_url'] = signed
+                    row['download_source'] = (
+                        'firebase' if row.get('firebase_path') and row.get('warm_status') == 'ready'
+                        else 'supabase'
+                    )
+            except Exception as exc:
+                print(f'[meeting_docs] attach_download_urls skip {row.get("id")}: {exc}')
         out.append(row)
     return out
 
@@ -818,13 +1116,12 @@ def get_document(
     assert_can_read(supabase, meeting_id, ctx)
     res = supabase.table('meeting_documents').select('*').eq(
         'id', doc_id
-    ).eq('meeting_id', meeting_id).limit(1).execute()
+    ).limit(1).execute()
     if not res.data:
         raise LookupError('Không tìm thấy tài liệu')
     doc = _row_to_doc(res.data[0])
     if check_share and should_filter_shared(supabase, meeting_id, ctx):
-        shared_roots = get_shared_root_ids(supabase, meeting_id)
-        if not is_document_shared_by_chain(supabase, meeting_id, doc_id, shared_roots):
+        if not is_document_shared_to_meeting(supabase, meeting_id, doc_id):
             raise PermissionError('Tài liệu chưa được chia sẻ cho cuộc họp này')
     return doc
 

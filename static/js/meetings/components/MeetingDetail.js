@@ -31,7 +31,13 @@
   }
 
   function roleLabel(role) {
-    var map = { organizer: 'Chủ trì', host: 'Điều phối', participant: 'Tham dự', observer: 'Quan sát' };
+    var map = {
+      organizer: 'Người tạo',
+      host: 'Chủ trì',
+      secretary: 'Thư ký',
+      participant: 'Tham dự',
+      observer: 'Quan sát'
+    };
     return map[role] || role || '';
   }
 
@@ -175,7 +181,7 @@
     }
 
     var actions = '';
-    var canJoin = SVC.canJoinMeeting(m) && fbId;
+    var canJoin = SVC.canJoinMeeting(m);
     if (canJoin) {
       actions += '<button type="button" class="ph-btn ph-btn-primary" id="phDetailJoin">Vào phòng họp</button>';
     }

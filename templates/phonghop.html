@@ -14,7 +14,7 @@
 <title>Phòng Họp e-Cabinet</title>
 <meta name="theme-color" content="#0c4a6e">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-<link rel="stylesheet" href="/static/css/app-phonghop.css?v=60">
+<link rel="stylesheet" href="/static/css/app-phonghop.css?v=66">
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script src="/static/js/vendor/qrcode.min.js"></script>
 </head>
@@ -253,20 +253,27 @@
 
 <button type="button" class="ph-fab-context" id="phFabContext" title="Tương tác nhanh">💬</button>
 
+<div class="ph-meeting-float-bar" id="phMeetingFloatBar" hidden>
+  <span class="ph-meeting-float-dot"></span>
+  <span class="ph-meeting-float-title">Đang trong phiên họp</span>
+  <button type="button" class="ph-btn ph-btn-primary ph-btn-sm" id="phMeetingFloatReturn">Quay lại phiên họp</button>
+</div>
+
 <script src="/static/js/components/ModalForm.js"></script>
 <script src="/static/js/meetings/org-directory.js?v=37"></script>
 <script src="/static/js/meetings/state.js"></script>
 <script src="/static/js/meetings/doc-cache.js?v=1"></script>
-<script src="/static/js/meetings/services.js?v=61"></script>
+<script src="/static/js/meetings/services.js?v=64"></script>
 <script src="/static/js/meetings/permissions.js?v=38"></script>
 <script src="/static/js/meetings/components/ParticipantTreePicker.js"></script>
-<script src="/static/js/meetings/components/MeetingForm.js?v=52"></script>
-<script src="/static/js/meetings/components/MeetingDetail.js?v=49"></script>
+<script src="/static/js/meetings/components/MeetingForm.js?v=54"></script>
+<script src="/static/js/meetings/components/MeetingDetail.js?v=50"></script>
 <script src="/static/js/meetings/components/MeetingDocs.js?v=55"></script>
 <script src="/static/js/meetings/pptx-slides.js?v=1"></script>
-<script src="/static/js/meetings/components/MeetingPresenter.js?v=7"></script>
-<script src="/static/js/meetings/components/MeetingRoom.js?v=60"></script>
+<script src="/static/js/meetings/components/MeetingPresenter.js?v=8"></script>
+<script src="/static/js/meetings/components/MeetingScreenShare.js?v=16"></script>
+<script src="/static/js/meetings/components/MeetingRoom.js?v=72"></script>
 <script src="/static/js/meetings/join.js?v=41"></script>
-<script src="/static/js/meetings/main.js?v=49"></script>
+<script src="/static/js/meetings/main.js?v=52"></script>
 </body>
 </html>

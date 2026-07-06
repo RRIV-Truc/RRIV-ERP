@@ -908,22 +908,83 @@ body.ph-in-session .ph-context { display: flex; }
 .ph-docs-share-note { margin: 0 0 10px; font-size: 12px; }
 
 .ph-doc-share-host { margin-top: 4px; }
+.ph-doc-share-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+.ph-doc-share-upload-label {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.15);
+  font-size: 13px;
+}
+.ph-doc-share-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ph-muted, #94a3b8);
+}
+.ph-doc-share-target select { min-width: 200px; }
+.ph-doc-share-group {
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--ph-accent, #60a5fa);
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
 .ph-doc-share-box {
-  max-height: 220px;
-  overflow-y: auto;
+  max-height: 360px;
   border: 1px solid var(--ph-border);
   border-radius: 8px;
-  padding: 8px 0;
   background: rgba(15, 23, 42, 0.5);
+  overflow: hidden;
 }
+.ph-doc-share-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+.ph-doc-share-crumb {
+  background: none;
+  border: none;
+  color: var(--ph-accent, #60a5fa);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 13px;
+}
+.ph-doc-share-crumb:hover { text-decoration: underline; }
+.ph-doc-share-crumb-sep { color: var(--ph-muted, #94a3b8); }
+.ph-doc-share-explorer {
+  max-height: 300px;
+  overflow-y: auto;
+}
+.ph-doc-share-item {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+}
+.ph-doc-share-item[data-kind="folder"] .ph-doc-share-row { cursor: pointer; }
+.ph-doc-share-item[data-kind="folder"]:hover { background: rgba(51, 65, 85, 0.35); }
+.ph-doc-share-icon { font-size: 18px; flex-shrink: 0; }
+.ph-doc-share-name { flex: 1; font-size: 14px; }
+.ph-doc-share-empty { padding: 16px 12px; margin: 0; }
 .ph-doc-share-hint { margin: 0 0 8px; padding: 0 12px; font-size: 12px; }
 .ph-doc-share-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px 6px 8px;
+  padding: 8px 12px;
+  margin: 0;
   font-size: 13px;
-  cursor: pointer;
 }
 .ph-doc-share-row:hover { background: rgba(51, 65, 85, 0.35); }
 .ph-doc-share-row input { flex-shrink: 0; }
@@ -1454,3 +1515,216 @@ body.ph-in-session .ph-context { display: flex; }
   border-radius: 50%; animation: ph-spin 0.8s linear infinite;
 }
 @keyframes ph-spin { to { transform: rotate(360deg); } }
+
+/* Chia sẻ màn hình phiên họp */
+.ph-screen-share-host { margin-bottom: 16px; }
+.ph-screen-share-host-prominent { margin-top: 4px; }
+.ph-screen-share-bar {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 14px 16px; border-radius: 12px;
+  border: 1px solid var(--ph-border);
+  background: rgba(15, 23, 42, 0.55);
+}
+.ph-screen-share-bar-prominent {
+  border-color: rgba(56, 189, 248, 0.35);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.85) 0%, rgba(15, 23, 42, 0.55) 100%);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+}
+.ph-screen-share-bar-loading {
+  padding: 20px; text-align: center;
+}
+.ph-screen-share-header { margin-bottom: 2px; }
+.ph-screen-share-title {
+  margin: 0 0 6px; font-size: 15px; font-weight: 600; color: #e2e8f0;
+}
+.ph-screen-share-lead {
+  margin: 0; font-size: 13px; line-height: 1.45;
+}
+.ph-screen-share-actions {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+}
+.ph-screen-share-actions .ph-btn-primary {
+  font-weight: 600; padding: 8px 16px;
+}
+.ph-screen-share-status {
+  font-size: 13px; color: #7dd3fc;
+}
+.ph-screen-share-stage {
+  position: relative; min-height: 180px;
+  border-radius: 8px; overflow: hidden;
+  background: #000;
+}
+.ph-screen-share-video {
+  width: 100%; max-height: 420px;
+  display: block; object-fit: contain;
+  background: #000;
+}
+.ph-screen-share-viewer-status {
+  margin: 8px 0 0; font-size: 12px; text-align: center; color: #94a3b8;
+}
+.ph-screen-share-viewer-status.ph-screen-share-viewer-err { color: #fbbf24; }
+.ph-session-doc-heading {
+  margin: 0 0 8px; font-size: 13px; color: #7dd3fc; font-weight: 600;
+}
+.ph-session-doc-err { color: #fca5a5 !important; }
+.ph-screen-share-video[hidden] { display: none; }
+.ph-screen-share-placeholder {
+  margin: 0; padding: 20px 14px; text-align: center;
+}
+.ph-screen-share-host-hint {
+  margin: 8px 0 0; padding: 8px 10px; border-radius: 8px;
+  font-size: 12px; line-height: 1.45;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+}
+.ph-screen-share-host-hint kbd {
+  background: #334155; padding: 1px 5px; border-radius: 4px; font-size: 11px;
+}
+.ph-screen-share-fs-btn {
+  position: absolute; right: 10px; bottom: 10px; z-index: 3;
+  width: 36px; height: 36px; border: 0; border-radius: 8px;
+  background: rgba(15, 23, 42, 0.78); color: #e2e8f0;
+  font-size: 18px; cursor: pointer; opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+.ph-screen-share-stage.has-stream:hover .ph-screen-share-fs-btn,
+.ph-screen-share-stage.has-stream:focus-within .ph-screen-share-fs-btn,
+.ph-screen-projector-root.has-stream:hover .ph-screen-projector-fs,
+.ph-screen-projector-root.has-stream:focus-within .ph-screen-projector-fs {
+  opacity: 1;
+}
+.ph-screen-share-fs-btn:hover,
+.ph-screen-projector-fs:hover {
+  background: rgba(56, 189, 248, 0.85); color: #0f172a;
+}
+.ph-screen-share-stage:fullscreen,
+.ph-screen-projector-root:fullscreen {
+  border-radius: 0; background: #000;
+}
+.ph-screen-share-stage:fullscreen .ph-screen-share-video,
+.ph-screen-projector-root:fullscreen .ph-screen-projector-video {
+  max-height: 100vh; height: 100vh; width: 100vw;
+}
+
+/* Cửa sổ màn chiếu TV (kéo sang HDMI) */
+.ph-screen-projector-root {
+  position: relative; width: 100vw; height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  background: #000; overflow: hidden;
+}
+.ph-screen-projector-video {
+  width: 100vw; height: 100vh; object-fit: contain; display: block;
+  background: #000;
+}
+.ph-screen-projector-status {
+  color: #94a3b8; text-align: center; padding: 24px;
+  font-family: system-ui, sans-serif; font-size: 15px; max-width: 480px;
+}
+.ph-screen-projector-hud {
+  position: fixed; left: 16px; bottom: 16px; padding: 8px 12px; border-radius: 8px;
+  background: rgba(15, 23, 42, 0.72); color: #e2e8f0; font-size: 13px;
+  font-family: system-ui, sans-serif; pointer-events: none; opacity: 0.85;
+}
+.ph-screen-projector-hud kbd {
+  background: #334155; padding: 1px 6px; border-radius: 4px; font-size: 12px;
+}
+.ph-screen-projector-fs { opacity: 0.85; }
+
+/* Chủ trì: laptop = bảng điều khiển, TV = cửa sổ riêng */
+.ph-host-control-mode .ph-screen-share-stage { min-height: 220px; }
+.ph-host-control-mode .ph-screen-share-video { max-height: 360px; }
+
+/* Thanh nổi — quay lại phiên họp khi duyệt menu khác */
+.ph-meeting-float-bar {
+  position: fixed; left: 50%; bottom: 20px; z-index: 12000;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; border-radius: 999px;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid var(--ph-border);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+.ph-meeting-float-bar[hidden] { display: none !important; }
+.ph-meeting-float-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #ef4444; box-shadow: 0 0 8px #ef4444;
+  animation: ph-live-pulse 1.4s ease-in-out infinite;
+}
+.ph-meeting-float-title {
+  font-size: 13px; color: var(--ph-text); white-space: nowrap;
+}
+.ph-screen-share-wait { color: #fbbf24; }
+.ph-screen-share-denied { color: #f87171; }
+
+.ph-screen-share-approvals {
+  display: flex; flex-direction: column; gap: 8px;
+  margin-bottom: 4px;
+}
+.ph-screen-share-queue-title {
+  margin: 0; font-size: 13px; font-weight: 600; color: #fbbf24;
+}
+.ph-screen-share-queue-hint {
+  margin: 0; font-size: 12px; line-height: 1.45;
+}
+.ph-screen-share-approval-card {
+  padding: 10px 12px; border-radius: 8px;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.08);
+}
+.ph-screen-share-approval-card p {
+  margin: 0 0 8px; font-size: 13px;
+}
+.ph-screen-share-approval-actions {
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+
+/* Vai trò phiên + danh sách tham dự online/offline */
+.ph-meeting-roles {
+  margin-top: 12px; padding: 12px; border-radius: 10px;
+  border: 1px solid var(--ph-border);
+  background: rgba(15, 23, 42, 0.35);
+}
+.ph-meeting-roles-lead { margin: 0 0 10px; font-size: 13px; }
+.ph-meeting-roles-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+}
+.ph-meeting-role-field {
+  display: flex; flex-direction: column; gap: 6px;
+  font-size: 13px; font-weight: 600; color: #cbd5e1;
+}
+.ph-meeting-role-field select { font-weight: 400; }
+.ph-room-presence { list-style: none; margin: 0; padding: 0; }
+.ph-presence-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0; font-size: 13px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+.ph-presence-row.is-offline { opacity: 0.72; }
+.ph-presence-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.ph-presence-dot.is-online { background: #22c55e; box-shadow: 0 0 6px rgba(34, 197, 94, 0.6); }
+.ph-presence-dot.is-offline { background: #64748b; }
+.ph-presence-name { flex: 1; min-width: 0; }
+.ph-presence-role {
+  font-size: 11px; font-weight: 600; color: #7dd3fc;
+  margin-left: 4px;
+}
+.ph-presence-status {
+  font-size: 11px; color: #94a3b8; flex-shrink: 0;
+}
+.ph-presence-row.is-online .ph-presence-status { color: #86efac; }
+
+@media (max-width: 640px) {
+  .ph-meeting-roles-grid { grid-template-columns: 1fr; }
+}
+
+.ph-empty-err { color: #fca5a5; }
+
+@media (max-width: 640px) {
+  .ph-meeting-float-bar {
+    left: 12px; right: 12px; transform: none;
+    border-radius: 12px; flex-wrap: wrap; justify-content: center;
+  }
+  .ph-meeting-float-title { white-space: normal; text-align: center; }
+}

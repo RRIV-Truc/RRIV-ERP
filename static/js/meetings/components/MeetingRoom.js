@@ -13,6 +13,51 @@
   var _destroying = false;
   var _shellReady = false;
   var _lastRoom = null;
+  var _agendaStep = 1;
+  var SESSION_STORE_KEY = 'phonghop_active_meeting';
+  var _docsLoading = false;
+  var _sessionDocsCache = null;
+
+  function saveSessionStore() {
+    if (!_meetingId || !_joined) return;
+    try {
+      sessionStorage.setItem(SESSION_STORE_KEY, JSON.stringify({
+        meetingId: _meetingId,
+        agendaStep: _agendaStep,
+        ts: Date.now()
+      }));
+    } catch (_) { /* ignore */ }
+  }
+
+  function clearSessionStore() {
+    try { sessionStorage.removeItem(SESSION_STORE_KEY); } catch (_) { /* ignore */ }
+  }
+
+  function rebindDom() {
+    _host = document.getElementById('meetingRoomHost');
+    _chatHost = document.getElementById('phCtxChatHost');
+    return !!_host;
+  }
+
+  function resetRoomDom() {
+    document.body.classList.remove('ph-room-active');
+    document.body.classList.remove('ph-host-control-mode');
+    var hostEl = document.getElementById('meetingRoomHost');
+    if (hostEl) {
+      hostEl.innerHTML = '';
+      hostEl.classList.remove('ph-room-open');
+      delete hostEl.dataset.agendaBound;
+      delete hostEl.dataset.agendaStep;
+    }
+    _shellReady = false;
+    _host = null;
+    _chatHost = null;
+  }
+
+  function resetRoomShell() {
+    resetRoomDom();
+    _lastRoom = null;
+  }
 
   function esc(s) {
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -23,24 +68,6 @@
     try {
       return new Date(iso).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
     } catch (_) { return ''; }
-  }
-
-  function resetRoomShell() {
-    document.body.classList.remove('ph-room-active');
-    _shellReady = false;
-    _lastRoom = null;
-    if (_host) {
-      _host.innerHTML = '';
-      _host.classList.remove('ph-room-open');
-    }
-    if (_chatHost) {
-      _chatHost.innerHTML = '<p class="ph-detail-muted">Chat nhóm hiển thị khi bạn vào phiên họp.</p>';
-    }
-    if (window.PhonghopShell && window.PhonghopShell.leaveSession) {
-      window.PhonghopShell.leaveSession();
-    }
-    _host = null;
-    _chatHost = null;
   }
 
   function destroy(skipOnClose) {
@@ -55,13 +82,28 @@
     if (window.MeetingPresenter) {
       window.MeetingPresenter.cleanup();
     }
+    if (window.MeetingScreenShare) {
+      window.MeetingScreenShare.cleanup();
+    }
 
     var leavingId = _meetingId;
     var hadJoined = _joined;
     _joined = false;
     _meetingId = null;
+    clearSessionStore();
+    _sessionDocsCache = null;
+    _docsLoading = false;
 
-    resetRoomShell();
+    resetRoomDom();
+
+    if (window.PhonghopShell && window.PhonghopShell.leaveSession) {
+      window.PhonghopShell.leaveSession();
+    }
+
+    var chatEl = document.getElementById('phCtxChatHost');
+    if (chatEl) {
+      chatEl.innerHTML = '<p class="ph-detail-muted">Chat nhóm hiển thị khi bạn vào phiên họp.</p>';
+    }
 
     if (hadJoined && leavingId && !skipOnClose) {
       window.PhonghopServices.leaveRoom(leavingId).catch(function () { /* ignore */ });
@@ -136,13 +178,30 @@
     }).join('');
   }
 
-  function buildPresenceHtml(presence) {
-    if (!presence.length) {
-      return '<li class="ph-room-empty-inline">Chưa có ai online</li>';
+  function buildPresenceHtml(attendees) {
+    var list = attendees || [];
+    if (!list.length) {
+      return '<li class="ph-room-empty-inline">Chưa có người được mời</li>';
     }
-    return presence.map(function (p) {
-      return '<li>' + esc(p.displayName || p.username) + '</li>';
+    return list.map(function (p) {
+      var online = !!p.online;
+      var dotClass = online ? 'ph-presence-dot is-online' : 'ph-presence-dot is-offline';
+      var statusText = online ? 'Online' : 'Offline';
+      var roleTag = p.role_label && p.participant_role !== 'participant'
+        ? ' <span class="ph-presence-role">' + esc(p.role_label) + '</span>'
+        : '';
+      return '<li class="ph-presence-row' + (online ? ' is-online' : ' is-offline') + '">' +
+        '<span class="' + dotClass + '" title="' + esc(statusText) + '"></span>' +
+        '<span class="ph-presence-name">' + esc(p.displayName || p.username) + roleTag + '</span>' +
+        '<span class="ph-presence-status">' + esc(statusText) + '</span></li>';
     }).join('');
+  }
+
+  function getAttendeesFromRoom(room) {
+    if (room && room.attendees && room.attendees.length) return room.attendees;
+    return (room && room.presence) ? room.presence.map(function (p) {
+      return Object.assign({}, p, { online: true, role_label: '', participant_role: 'guest' });
+    }) : [];
   }
 
   function agendaProgressPct(stepIndex, total) {
@@ -153,31 +212,127 @@
     return (
       '<div class="ph-content-phase">' +
         '<h3>Nội dung</h3>' +
-        '<p class="ph-detail-muted">Tài liệu đã sync hot — mở file bên dưới hoặc trình chiếu slide lên màn hình lớn.</p>' +
-        '<div id="phPresenterHost"></div>' +
-        '<div id="phPresentFollow" hidden></div>' +
+        '<p class="ph-detail-muted">Chia sẻ màn hình (cửa sổ, tab trình duyệt, Word, Excel, PowerPoint, PDF…) — mọi người xem đồng bộ trong phiên họp.</p>' +
+        '<div id="phScreenShareHost" class="ph-screen-share-host ph-screen-share-host-prominent">' +
+          '<div class="ph-screen-share-bar ph-screen-share-bar-loading">' +
+            '<p class="ph-detail-muted">Đang tải điều khiển chia sẻ màn hình…</p>' +
+          '</div>' +
+        '</div>' +
         '<div class="ph-session-doc-list" id="phSessionDocList"><p class="ph-detail-muted">Đang tải tài liệu…</p></div>' +
       '</div>'
     );
   }
 
-  function loadSessionDocs(meetingId) {
+  function ensureScreenShareUi(room) {
+    if (!_meetingId || !_host || !window.MeetingScreenShare) return;
+    var step = parseInt(_host.dataset.agendaStep, 10);
+    if (step !== 1) return;
+    if (!_host.querySelector('#phScreenShareHost')) return;
+    if (window.MeetingScreenShare.hasToolbar && window.MeetingScreenShare.hasToolbar()) {
+      return;
+    }
+    var r = room || _lastRoom || {};
+    window.MeetingScreenShare.mountToolbar(_meetingId, {
+      isHost: r.is_host,
+      isSecretary: r.is_secretary,
+      canModerate: r.can_moderate,
+      canApproveShare: r.can_approve_share,
+      requests: r.screen_share_requests
+    });
+  }
+
+  function sessionDocsRenderKey(docs) {
+    return (docs || []).map(function (d) {
+      return String(d.id || '') + ':' + String(d.warm_status || '');
+    }).join('|');
+  }
+
+  function loadSessionDocs(meetingId, retryCount) {
     if (!meetingId || !_host) return;
+    if (_docsLoading) return;
+    retryCount = retryCount || 0;
+
     var listEl = _host.querySelector('#phSessionDocList');
-    if (!listEl) return;
+    if (!listEl) {
+      if (retryCount < 2) {
+        setTimeout(function () { loadSessionDocs(meetingId, retryCount + 1); }, 400);
+      }
+      return;
+    }
+
+    if (_sessionDocsCache && _sessionDocsCache.meetingId === meetingId && retryCount === 0) {
+      renderSessionDocList(meetingId, _sessionDocsCache.docs, listEl);
+      return;
+    }
+
+    _docsLoading = true;
     var uname = window.PhonghopServices.username && window.PhonghopServices.username();
     var url = '/api/meetings/' + encodeURIComponent(meetingId) +
-      '/documents?flat=1&shared_only=1&username=' + encodeURIComponent(uname);
+      '/documents?flat=1&shared_only=1&skip_urls=1&username=' + encodeURIComponent(uname);
+
     fetch(url, { headers: { 'X-RRIV-Username': uname || '' } })
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        return r.text().then(function (text) {
+          var data = null;
+          try { data = text ? JSON.parse(text) : null; } catch (_) {
+            throw new Error('Phản hồi không hợp lệ (HTTP ' + r.status + ')');
+          }
+          if (!r.ok || !data || !data.success) {
+            throw new Error((data && data.message) || ('HTTP ' + r.status));
+          }
+          return data;
+        });
+      })
       .then(function (data) {
-        if (!data.success) throw new Error(data.message || 'Lỗi');
+        _docsLoading = false;
+        if (!_host || !_host.querySelector('#phSessionDocList')) return;
+        listEl = _host.querySelector('#phSessionDocList');
         var docs = (data.documents || []).filter(function (d) { return d.kind === 'file'; });
-        if (!docs.length) {
-          listEl.innerHTML = '<p class="ph-detail-muted">Chưa có tài liệu được chia sẻ — Thư ký chọn ở <strong>Sửa cuộc họp → Tài liệu họp</strong> hoặc upload ở <strong>Kho tài liệu</strong>.</p>';
+        if (!docs.length && _sessionDocsCache && _sessionDocsCache.meetingId === meetingId &&
+            _sessionDocsCache.docs && _sessionDocsCache.docs.length) {
+          renderSessionDocList(meetingId, _sessionDocsCache.docs, listEl);
           return;
         }
-        listEl.innerHTML = '<ul class="ph-session-files">' + docs.map(function (d) {
+        _sessionDocsCache = { meetingId: meetingId, docs: docs };
+        renderSessionDocList(meetingId, docs, listEl);
+      })
+      .catch(function (e) {
+        _docsLoading = false;
+        if (!_host) return;
+        listEl = _host.querySelector('#phSessionDocList');
+        if (!listEl) return;
+        if (retryCount < 2) {
+          listEl.innerHTML = '<p class="ph-detail-muted">Đang thử tải lại tài liệu…</p>';
+          setTimeout(function () { loadSessionDocs(meetingId, retryCount + 1); }, 800 + retryCount * 700);
+          return;
+        }
+        listEl.innerHTML = '<p class="ph-detail-muted ph-session-doc-err">Không tải được danh sách tài liệu.' +
+          (e.message ? ' (' + esc(String(e.message).slice(0, 120)) + ')' : '') +
+          ' <button type="button" class="ph-btn ph-btn-sm" id="phSessionDocRetry">Thử lại</button></p>';
+        var retryBtn = listEl.querySelector('#phSessionDocRetry');
+        if (retryBtn) {
+          retryBtn.addEventListener('click', function () {
+            _sessionDocsCache = null;
+            listEl.innerHTML = '<p class="ph-detail-muted">Đang tải tài liệu…</p>';
+            loadSessionDocs(meetingId, 0);
+          });
+        }
+      });
+  }
+
+  function renderSessionDocList(meetingId, docs, listEl) {
+    if (!listEl) return;
+    var renderKey = sessionDocsRenderKey(docs);
+    if (listEl.dataset.docsKey === renderKey && listEl.querySelector('.ph-session-files, .ph-session-doc-empty')) {
+      return;
+    }
+    listEl.dataset.docsKey = renderKey;
+
+    if (!docs.length) {
+      listEl.innerHTML = '<p class="ph-detail-muted ph-session-doc-empty">Chưa có tài liệu được chia sẻ — Thư ký chọn ở <strong>Sửa cuộc họp → Tài liệu họp</strong> hoặc upload ở <strong>Kho tài liệu</strong>.</p>';
+      return;
+    }
+    listEl.innerHTML = '<h4 class="ph-session-doc-heading">Tài liệu phiên họp</h4><ul class="ph-session-files">' + docs.map(function (d) {
           var label = (window.PhonghopServices && window.PhonghopServices.docOpenLabel)
             ? window.PhonghopServices.docOpenLabel(d.name, d.mime_type)
             : 'Mở';
@@ -203,10 +358,6 @@
             }).catch(function (e) { alert(e.message || 'Không mở được tài liệu'); });
           });
         });
-        if (window.MeetingPresenter) {
-          window.MeetingPresenter.setMeetingId(meetingId);
-          window.MeetingPresenter.mountIdle(docs);
-        }
         if (window.PhonghopDocCache) {
           window.PhonghopDocCache.prefetchMeetingDocs(meetingId, docs).then(function (r) {
             if (r && r.ok > 0 && window.PhonghopServices && window.PhonghopServices.showDocToast) {
@@ -220,15 +371,17 @@
           return d.warm_status === 'pending' || d.warm_status === 'failed';
         });
         if (needWarm && window.PhonghopServices && window.PhonghopServices.warmMeetingDocuments &&
-            window.PhonghopPerms && window.PhonghopPerms.canCreateMeeting()) {
+            window.PhonghopPerms && window.PhonghopPerms.canCreateMeeting() &&
+            !listEl.dataset.warmRequested) {
+          listEl.dataset.warmRequested = '1';
           window.PhonghopServices.warmMeetingDocuments(meetingId)
-            .then(function () { loadSessionDocs(meetingId); })
-            .catch(function () { /* ignore */ });
+            .then(function () {
+              _sessionDocsCache = null;
+              listEl.dataset.docsKey = '';
+              loadSessionDocs(meetingId, 0);
+            })
+            .catch(function () { listEl.dataset.warmRequested = ''; });
         }
-      })
-      .catch(function () {
-        listEl.innerHTML = '<p class="ph-detail-muted">Không tải được danh sách tài liệu.</p>';
-      });
   }
 
   function buildPhasePaneHtml(stepIndex, room) {
@@ -285,6 +438,8 @@
     var steps = _host.querySelectorAll('.ph-agenda-step');
     var total = steps.length || 5;
     var idx = Math.max(0, Math.min(stepIndex, total - 1));
+    _agendaStep = idx;
+    saveSessionStore();
     steps.forEach(function (el, i) {
       el.classList.remove('is-done', 'is-active');
       if (i < idx) el.classList.add('is-done');
@@ -294,7 +449,10 @@
     if (fill) fill.style.width = agendaProgressPct(idx, total) + '%';
     var pane = _host.querySelector('#phSessionMainPane');
     if (pane) pane.innerHTML = buildPhasePaneHtml(idx, room || _lastRoom || {});
-    if (idx === 1 && _meetingId) loadSessionDocs(_meetingId);
+    if (idx === 1 && _meetingId) {
+      ensureScreenShareUi(room || _lastRoom || {});
+      loadSessionDocs(_meetingId);
+    }
     if (idx === 4) {
       var endBtn = _host.querySelector('#phRoomEndConclude');
       if (endBtn && !endBtn.dataset.bound) {
@@ -306,19 +464,27 @@
   }
 
   function bindAgendaSteps(room) {
-    if (!_host || _host.dataset.agendaBound) return;
-    _host.dataset.agendaBound = '1';
-    _host.querySelectorAll('.ph-agenda-step').forEach(function (step) {
-      step.addEventListener('click', function () {
-        var n = parseInt(step.getAttribute('data-step'), 10);
-        if (!isNaN(n)) setAgendaStep(n, _lastRoom || room);
+    if (!_host) return;
+    if (!_host.dataset.agendaBound) {
+      _host.dataset.agendaBound = '1';
+      _host.querySelectorAll('.ph-agenda-step').forEach(function (step) {
+        step.addEventListener('click', function () {
+          var n = parseInt(step.getAttribute('data-step'), 10);
+          if (!isNaN(n)) setAgendaStep(n, _lastRoom || room);
+        });
       });
-    });
-    setAgendaStep(1, room);
+    }
+    setAgendaStep(typeof _agendaStep === 'number' ? _agendaStep : 1, room);
   }
 
   function ensureShell(room) {
-    if (_shellReady && _host) return;
+    if (_shellReady && _host) {
+      var pane = _host.querySelector('#phSessionMainPane');
+      if (pane && !pane.innerHTML.trim()) {
+        setAgendaStep(typeof _agendaStep === 'number' ? _agendaStep : 1, room);
+      }
+      return;
+    }
 
     _host.innerHTML =
       '<div class="ph-session-view">' +
@@ -358,11 +524,11 @@
           '</div>' +
           '<aside class="ph-session-aside">' +
             '<div class="ph-session-aside-block">' +
-              '<h3>Đang online (<span id="phRoomPresenceCount">' + (room.presence_count || 0) + '</span>)</h3>' +
+              '<h3>Tham dự phiên (<span id="phRoomPresenceCount">' + (room.presence_count || 0) + '</span> online)</h3>' +
               '<ul class="ph-room-presence" id="phRoomPresence">' + buildPresenceHtml(room.presence || []) + '</ul>' +
             '</div>' +
             '<div class="ph-session-aside-block ph-session-aside-hint">' +
-              '<p class="ph-detail-muted">Chủ trì: trình chiếu slide · Đại biểu: theo dõi slide hoặc mở tài liệu riêng.</p>' +
+              '<p class="ph-detail-muted">Chủ trì hoặc đại biểu (khi được duyệt) chia sẻ màn hình — mọi người xem đồng bộ trong phiên.</p>' +
             '</div>' +
           '</aside>' +
         '</div>' +
@@ -412,19 +578,23 @@
     _lastRoom = room;
     if (!_host) return;
 
+    document.body.classList.toggle('ph-host-control-mode', !!(room.is_host || room.is_secretary) && _joined);
+
     ensureShell(room);
 
     var title = _host.querySelector('#phSessionTitle');
     var meta = _host.querySelector('#phSessionMeta');
+    var attendees = getAttendeesFromRoom(room);
+    var onlineCount = attendees.filter(function (a) { return a.online; }).length;
     if (title) title.textContent = room.title || 'Cuộc họp';
     if (meta) {
-      meta.textContent = (room.meeting_code || '') + ' · ' + (room.presence_count || 0) + ' đang online';
+      meta.textContent = (room.meeting_code || '') + ' · ' + onlineCount + ' đang online';
     }
 
     var presCount = _host.querySelector('#phRoomPresenceCount');
     var presList = _host.querySelector('#phRoomPresence');
-    if (presCount) presCount.textContent = String(room.presence_count || 0);
-    if (presList) presList.innerHTML = buildPresenceHtml(room.presence || []);
+    if (presCount) presCount.textContent = String(onlineCount);
+    if (presList) presList.innerHTML = buildPresenceHtml(attendees);
 
     ensureChatShell();
     var chatList = _chatHost && _chatHost.querySelector('#phRoomChatList');
@@ -434,10 +604,59 @@
       if (atBottom) chatList.scrollTop = chatList.scrollHeight;
     }
 
-    if (window.MeetingPresenter && _meetingId) {
-      window.MeetingPresenter.setMeetingId(_meetingId);
-      window.MeetingPresenter.syncFromRoom(_meetingId, room.presentation);
+    if (window.MeetingScreenShare && _meetingId) {
+      ensureScreenShareUi(room);
+      window.MeetingScreenShare.syncFromRoom(
+        _meetingId,
+        room.screen_share,
+        room.screen_share_requests,
+        room.is_host,
+        {
+          isHost: room.is_host,
+          isSecretary: room.is_secretary,
+          canModerate: room.can_moderate,
+          canApproveShare: room.can_approve_share,
+          presence: room.presence,
+          attendees: room.attendees
+        }
+      );
     }
+
+    var step = parseInt(_host.dataset.agendaStep, 10);
+    if (step === 1 && _meetingId) {
+      var docList = _host.querySelector('#phSessionDocList');
+      if (docList && !_sessionDocsCache && !_docsLoading) {
+        loadSessionDocs(_meetingId);
+      }
+    }
+  }
+
+  function restoreUi() {
+    if (!_meetingId || !_joined) return Promise.resolve(false);
+    if (!rebindDom()) return Promise.resolve(false);
+
+    _host.classList.add('ph-room-open');
+    document.body.classList.add('ph-in-session');
+    document.body.classList.add('ph-room-active');
+
+    if (window.PhonghopShell && window.PhonghopShell.showSessionView) {
+      window.PhonghopShell.showSessionView();
+    }
+
+    if (_lastRoom) {
+      _shellReady = false;
+      renderRoom(_lastRoom);
+      setAgendaStep(_agendaStep, _lastRoom);
+    }
+
+    if (_pollTimer) clearInterval(_pollTimer);
+    _pollTimer = setInterval(refresh, 2500);
+
+    saveSessionStore();
+    if (window.PhonghopShell && window.PhonghopShell.updateMeetingFloatBar) {
+      window.PhonghopShell.updateMeetingFloatBar(false);
+    }
+    return refresh().then(function () { return true; });
   }
 
   function renderRoom(room) {
@@ -458,6 +677,11 @@
       opts = opts || {};
       if (!opts.meetingId) return;
 
+      if (_meetingId === opts.meetingId && _joined) {
+        _onClose = opts.onClose || _onClose;
+        return restoreUi();
+      }
+
       _host = document.getElementById('meetingRoomHost');
       _chatHost = document.getElementById('phCtxChatHost');
       if (!_host) return;
@@ -477,6 +701,7 @@
       try {
         var room = await window.PhonghopServices.joinRoom(_meetingId);
         _joined = true;
+        saveSessionStore();
         renderRoom(room);
         if (_pollTimer) clearInterval(_pollTimer);
         _pollTimer = setInterval(refresh, 2500);
@@ -498,10 +723,50 @@
 
     destroy: destroy,
     resetShell: resetRoomShell,
-    isActive: function () { return !!_meetingId && _joined; }
+    restoreUi: restoreUi,
+    refresh: refresh,
+    reloadSessionDocs: function () {
+      if (!_meetingId) return;
+      var listEl = _host && _host.querySelector('#phSessionDocList');
+      if (!listEl) return;
+      _sessionDocsCache = null;
+      loadSessionDocs(_meetingId, 0);
+    },
+    isActive: function () { return !!_meetingId && _joined; },
+    getMeetingId: function () { return _meetingId; },
+    resumeStoredSession: function () {
+      try {
+        var raw = sessionStorage.getItem(SESSION_STORE_KEY);
+        if (!raw) return Promise.resolve(false);
+        var data = JSON.parse(raw);
+        if (!data || !data.meetingId) return Promise.resolve(false);
+        if (Date.now() - (data.ts || 0) > 86400000) {
+          clearSessionStore();
+          return Promise.resolve(false);
+        }
+        if (_meetingId === data.meetingId && _joined) {
+          return restoreUi().then(function () { return true; });
+        }
+        _agendaStep = typeof data.agendaStep === 'number' ? data.agendaStep : 1;
+        return window.MeetingRoom.open({
+          meetingId: data.meetingId,
+          onClose: function () {
+            if (window.PhonghopShell && window.PhonghopShell.updateMeetingFloatBar) {
+              window.PhonghopShell.updateMeetingFloatBar(false);
+            }
+          }
+        }).then(function () { return true; });
+      } catch (_) {
+        return Promise.resolve(false);
+      }
+    }
   };
 
-  window.addEventListener('pagehide', function () {
-    destroy(true);
+  /* Không destroy phiên khi chuyển tab — chỉ heartbeat khi tab ẩn */
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') return;
+    if (_meetingId && _joined && (!_host || !_host.querySelector('.ph-session-view'))) {
+      restoreUi();
+    }
   });
 })();

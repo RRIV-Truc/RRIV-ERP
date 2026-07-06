@@ -9,17 +9,22 @@
   var _canManage = false;
   var _sharedOnly = false;
   var _sharedOnlyMode = false;
+  var _libraryMode = true;
+  var _libraryMeetingId = null;
   var _meetings = [];
   var _lastDocs = [];
   var _dragDocId = null;
+  var _isAdminLibrary = false;
 
   function canDragDrop() {
     return _canManage && !_sharedOnlyMode;
   }
 
   function moveDocument(docId, targetParentId) {
+    var base = uploadApiBase();
+    if (!base) return Promise.reject(new Error('Chọn cuộc họp trước khi di chuyển tài liệu'));
     return fetch(
-      apiBase() + '/' + encodeURIComponent(docId) + '/move?username=' +
+      base + '/' + encodeURIComponent(docId) + '/move?username=' +
         encodeURIComponent(window.PhonghopServices.username()),
       {
         method: 'PATCH',
@@ -35,12 +40,14 @@
   }
 
   function uploadFileToFolder(file, parentId) {
+    var base = uploadApiBase();
+    if (!base) return Promise.reject(new Error('Chọn cuộc họp (lọc) trước khi upload'));
     var fd = new FormData();
     fd.append('file', file);
     if (parentId) fd.append('parent_id', parentId);
-    return fetch(apiBase() + '/upload?username=' + encodeURIComponent(window.PhonghopServices.username()), {
+    return fetch(base + '/upload?username=' + encodeURIComponent(window.PhonghopServices.username()), {
       method: 'POST',
-      headers: hdrs(),
+      headers: uploadHdrs(),
       body: fd
     }).then(function (r) {
       return r.json().then(function (b) { return { ok: r.ok, b: b }; });
@@ -70,7 +77,43 @@
   }
 
   function apiBase() {
+    if (_sharedOnlyMode && _meetingId) {
+      return '/api/meetings/' + encodeURIComponent(_meetingId) + '/documents';
+    }
+    return '/api/meetings/documents/library';
+  }
+
+  function buildListUrl() {
+    var params = [];
+    if (_sharedOnlyMode && _meetingId) {
+      if (_parentId) params.push('parent_id=' + encodeURIComponent(_parentId));
+      params.push('shared_only=1');
+    } else if (_libraryMode) {
+      if (_parentId) params.push('parent_id=' + encodeURIComponent(_parentId));
+    } else {
+      if (_parentId) params.push('parent_id=' + encodeURIComponent(_parentId));
+    }
+    params.push('username=' + encodeURIComponent(window.PhonghopServices.username()));
+    return apiBase() + '?' + params.join('&');
+  }
+
+  function uploadApiBase() {
+    if (_libraryMode && !_sharedOnlyMode) {
+      return _libraryMeetingId
+        ? '/api/meetings/' + encodeURIComponent(_libraryMeetingId) + '/documents'
+        : '/api/meetings/documents/library';
+    }
+    if (!_meetingId) return null;
     return '/api/meetings/' + encodeURIComponent(_meetingId) + '/documents';
+  }
+
+  function uploadToLibrary(file, parentId) {
+    if (window.PhonghopServices.uploadLibraryDocument) {
+      return window.PhonghopServices.uploadLibraryDocument(file, parentId).then(function () {
+        return loadList();
+      });
+    }
+    return uploadFileToFolder(file, parentId);
   }
 
   function hdrs() {
@@ -79,18 +122,23 @@
       : {};
   }
 
+  function uploadHdrs() {
+    return hdrs();
+  }
+
   async function loadList() {
-    if (!_meetingId) return;
-    var params = [];
-    if (_parentId) params.push('parent_id=' + encodeURIComponent(_parentId));
-    if (_sharedOnlyMode) params.push('shared_only=1');
-    params.push('username=' + encodeURIComponent(window.PhonghopServices.username()));
-    var qs = '?' + params.join('&');
-    var res = await fetch(apiBase() + qs, { headers: hdrs() });
+    if (_sharedOnlyMode && !_meetingId) return;
+    if (!_libraryMode && !_meetingId) return;
+    var res = await fetch(buildListUrl(), { headers: hdrs() });
     var data = await res.json();
     if (!res.ok) throw new Error(data.message || 'Không tải được tài liệu');
     _canManage = !!data.can_manage;
     _sharedOnly = !!data.shared_only;
+    _isAdminLibrary = !!data.is_admin_library;
+    _libraryMeetingId = data.library_meeting_id || _libraryMeetingId;
+    if (_libraryMode && data.library_meeting_id) {
+      _meetingId = data.library_meeting_id;
+    }
     render(data.documents || [], data.breadcrumb || []);
   }
 
@@ -124,11 +172,15 @@
         btn.textContent = label;
       }
     };
-    var p = window.PhonghopServices.openMeetingDocument(_meetingId, d.id, {
-      name: d.name,
-      mime: d.mime_type,
-      download_url: d.download_url || null
-    });
+    var p = window.PhonghopServices.openMeetingDocument(
+      d.meeting_id || _meetingId,
+      d.id,
+      {
+        name: d.name,
+        mime: d.mime_type,
+        download_url: d.download_url || null
+      }
+    );
     if (!p || typeof p.then !== 'function') {
       done();
       return;
@@ -143,23 +195,22 @@
     var host = document.getElementById('phDocsHost');
     if (!host) return;
 
-    var meetingOpts = _meetings.map(function (m) {
-      var sel = m.id === _meetingId ? ' selected' : '';
-      var label = [m.meeting_code, m.title].filter(Boolean).join(' — ');
-      return '<option value="' + esc(m.id) + '"' + sel + '>' + esc(label) + '</option>';
-    }).join('');
-
-    var crumbs = '<button type="button" class="ph-docs-crumb" data-folder="">📂 Gốc</button>';
-    breadcrumb.forEach(function (b) {
-      crumbs += '<span class="ph-docs-crumb-sep">/</span>' +
-        '<button type="button" class="ph-docs-crumb" data-folder="' + esc(b.id) + '">' + esc(b.name) + '</button>';
-    });
+    var crumbs = '';
+    if (breadcrumb && breadcrumb.length) {
+      breadcrumb.forEach(function (b, idx) {
+        if (idx) crumbs += '<span class="ph-docs-crumb-sep">›</span>';
+        crumbs += '<button type="button" class="ph-docs-crumb" data-folder="' + esc(b.id || '') + '">' +
+          esc(b.name || 'Kho tài liệu') + '</button>';
+      });
+    } else {
+      crumbs = '<button type="button" class="ph-docs-crumb" data-folder="">📂 Kho tài liệu</button>';
+    }
 
     var rows = docs.length ? docs.map(function (d) {
       var icon = d.kind === 'folder' ? '📁' : '📄';
       var meta = d.kind === 'file'
         ? (fmtSize(d.file_size) + ' · ' + warmLabel(d.warm_status))
-        : 'Thư mục';
+        : 'Thư mục · double-click mở';
       var acts = '';
       if (d.kind === 'folder') {
         acts = '<button type="button" class="ph-card-btn ph-docs-open" data-id="' + esc(d.id) + '">Mở</button>';
@@ -176,6 +227,7 @@
       return (
         '<div class="ph-docs-row' + (d.kind === 'folder' ? ' ph-docs-row-folder' : '') +
           dragCls + dropCls + '" data-id="' + esc(d.id) + '" data-kind="' + esc(d.kind) + '"' +
+          (d.meeting_id ? ' data-meeting="' + esc(d.meeting_id) + '"' : '') +
           (canDragDrop() ? ' draggable="true"' : '') + '>' +
           '<span class="ph-docs-icon">' + icon + '</span>' +
           '<div class="ph-docs-info"><strong>' + esc(d.name) + '</strong><span>' + esc(meta) + '</span></div>' +
@@ -202,23 +254,21 @@
 
     var shareNote = _sharedOnlyMode
       ? '<p class="ph-detail-muted ph-docs-share-note">Trong phiên họp chỉ hiển thị tài liệu đã tick ở <strong>Sửa cuộc họp → Tài liệu họp</strong>.</p>'
-      : (_sharedOnly && !_canManage
-        ? '<p class="ph-detail-muted ph-docs-share-note">Chỉ hiển thị tài liệu đã được chia sẻ cho cuộc họp.</p>'
-        : (_canManage
-          ? '<p class="ph-detail-muted ph-docs-share-note">Tick chọn tài liệu chia sẻ trong <strong>Sửa cuộc họp → Tài liệu họp</strong>.</p>'
-          : ''));
+      : (_isAdminLibrary
+        ? '<p class="ph-detail-muted ph-docs-share-note">Kho tài liệu chung — duyệt thư mục như Windows Explorer. Tick tài liệu họp trong <strong>Sửa cuộc họp</strong>.</p>'
+        : (_sharedOnly
+          ? '<p class="ph-detail-muted ph-docs-share-note">Chỉ hiển thị tài liệu các cuộc họp bạn tham gia (đã được chia sẻ).</p>'
+          : (_canManage
+            ? '<p class="ph-detail-muted ph-docs-share-note">Tick chọn tài liệu chia sẻ trong <strong>Sửa cuộc họp → Tài liệu họp</strong>.</p>'
+            : '')));
 
     host.innerHTML =
       '<div class="ph-docs-shell">' +
-        '<div class="ph-docs-meeting-pick">' +
-          '<label>Cuộc họp</label>' +
-          '<select id="phDocsMeetingSelect" class="ph-input">' + meetingOpts + '</select>' +
-        '</div>' +
         shareNote +
         toolbar +
         '<div class="ph-docs-breadcrumb">' + crumbs + '</div>' +
         '<div class="ph-docs-list' + (canDragDrop() ? ' ph-docs-list-droppable' : '') + '">' + rows + '</div>' +
-        '<p class="ph-detail-muted ph-docs-foot">Lưu chính: Supabase · Phiên họp: Firebase (tự sync khi upload)</p>' +
+        '<p class="ph-detail-muted ph-docs-foot">Lưu chính: Supabase · Phiên họp: Firebase (tự sync khi chia sẻ)</p>' +
       '</div>';
 
     bindEvents(host);
@@ -242,7 +292,13 @@
       var files = e.dataTransfer && e.dataTransfer.files;
       if (files && files.length) {
         var uploads = [];
-        for (var i = 0; i < files.length; i++) uploads.push(uploadFileToFolder(files[i], targetFolderId));
+        for (var i = 0; i < files.length; i++) {
+          uploads.push(
+            (_libraryMode && !_sharedOnlyMode)
+              ? window.PhonghopServices.uploadLibraryDocument(files[i], targetFolderId)
+              : uploadFileToFolder(files[i], targetFolderId)
+          );
+        }
         Promise.all(uploads).catch(function (err) { alert(err.message); });
         return;
       }
@@ -317,39 +373,37 @@
   }
 
   function bindEvents(host) {
-    var sel = host.querySelector('#phDocsMeetingSelect');
-    if (sel) {
-      sel.addEventListener('change', function () {
-        _meetingId = sel.value;
-        _parentId = null;
-        loadList().catch(function (e) { alert(e.message); });
-      });
-    }
-
     host.querySelectorAll('.ph-docs-crumb').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        var f = btn.getAttribute('data-folder');
-        _parentId = f || null;
+        _parentId = btn.getAttribute('data-folder') || null;
+        if (_parentId === '') _parentId = null;
         loadList().catch(function (e) { alert(e.message); });
       });
     });
 
+    function openFolder(folderId) {
+      _parentId = folderId || null;
+      loadList().catch(function (err) { alert(err.message); });
+    }
+
     host.querySelectorAll('.ph-docs-open, .ph-docs-row-folder').forEach(function (el) {
       el.addEventListener('click', function (e) {
-        if (e.target.closest('.ph-docs-del') || e.target.closest('.ph-docs-view')) {
-          return;
-        }
+        if (e.target.closest('.ph-docs-del') || e.target.closest('.ph-docs-view')) return;
         if (e.target.closest('.ph-docs-open')) {
           e.stopPropagation();
-          _parentId = e.target.closest('.ph-docs-open').getAttribute('data-id');
-          loadList().catch(function (err) { alert(err.message); });
+          openFolder(e.target.closest('.ph-docs-open').getAttribute('data-id'));
           return;
         }
         if (el.classList.contains('ph-docs-row-folder')) {
-          _parentId = el.getAttribute('data-id');
-          loadList().catch(function (err) { alert(err.message); });
+          openFolder(el.getAttribute('data-id'));
         }
       });
+      if (el.classList.contains('ph-docs-row-folder')) {
+        el.addEventListener('dblclick', function (e) {
+          if (e.target.closest('.ph-docs-del') || e.target.closest('.ph-docs-view')) return;
+          openFolder(el.getAttribute('data-id'));
+        });
+      }
     });
 
     function docById(id) {
@@ -371,7 +425,16 @@
         var kind = btn.getAttribute('data-kind');
         var msg = kind === 'folder' ? 'Xóa thư mục này?' : 'Xóa tài liệu này?';
         if (!confirm(msg)) return;
-        fetch(apiBase() + '/' + encodeURIComponent(id) + '?username=' +
+        var doc = docById(id);
+        var base = uploadApiBase();
+        if (!base && doc && doc.meeting_id) {
+          base = '/api/meetings/' + encodeURIComponent(doc.meeting_id) + '/documents';
+        }
+        if (!base) {
+          alert('Không xác định được cuộc họp của tài liệu');
+          return;
+        }
+        fetch(base + '/' + encodeURIComponent(id) + '?username=' +
           encodeURIComponent(window.PhonghopServices.username()), {
           method: 'DELETE',
           headers: hdrs()
@@ -389,16 +452,18 @@
       btnFolder.addEventListener('click', function () {
         var name = prompt('Tên thư mục mới:');
         if (!name || !name.trim()) return;
-        fetch(apiBase() + '/folder?username=' + encodeURIComponent(window.PhonghopServices.username()), {
-          method: 'POST',
-          headers: Object.assign({ 'Content-Type': 'application/json' }, hdrs()),
-          body: JSON.stringify({ name: name.trim(), parent_id: _parentId })
-        }).then(function (r) { return r.json().then(function (b) { return { ok: r.ok, b: b }; }); })
-          .then(function (x) {
-            if (!x.ok) throw new Error(x.b.message || 'Không tạo được thư mục');
-            return loadList();
-          })
-          .catch(function (e) { alert(e.message); });
+        var p = (_libraryMode && !_sharedOnlyMode && window.PhonghopServices.createLibraryFolder)
+          ? window.PhonghopServices.createLibraryFolder(name.trim(), _parentId)
+          : (function () {
+              var base = uploadApiBase();
+              if (!base) return Promise.reject(new Error('Không tạo được thư mục'));
+              return fetch(base + '/folder?username=' + encodeURIComponent(window.PhonghopServices.username()), {
+                method: 'POST',
+                headers: Object.assign({ 'Content-Type': 'application/json' }, hdrs()),
+                body: JSON.stringify({ name: name.trim(), parent_id: _parentId })
+              }).then(function (r) { return r.json().then(function (b) { if (!r.ok) throw new Error(b.message); }); });
+            })();
+        p.then(function () { return loadList(); }).catch(function (e) { alert(e.message); });
       });
     }
 
@@ -407,28 +472,24 @@
       fileInput.addEventListener('change', function () {
         var file = fileInput.files && fileInput.files[0];
         if (!file) return;
-        var fd = new FormData();
-        fd.append('file', file);
-        if (_parentId) fd.append('parent_id', _parentId);
-        fetch(apiBase() + '/upload?username=' + encodeURIComponent(window.PhonghopServices.username()), {
-          method: 'POST',
-          headers: hdrs(),
-          body: fd
-        }).then(function (r) { return r.json().then(function (b) { return { ok: r.ok, b: b }; }); })
-          .then(function (x) {
-            fileInput.value = '';
-            if (!x.ok) throw new Error(x.b.message || 'Upload thất bại');
-            return loadList();
-          })
-          .catch(function (e) { alert(e.message); fileInput.value = ''; });
+        fileInput.value = '';
+        var p = (_libraryMode && !_sharedOnlyMode)
+          ? uploadToLibrary(file, _parentId)
+          : uploadFileToFolder(file, _parentId);
+        p.catch(function (e) { alert(e.message); });
       });
     }
 
     var btnWarm = host.querySelector('#phDocsWarm');
     if (btnWarm) {
       btnWarm.addEventListener('click', function () {
+        var base = uploadApiBase();
+        if (!base) {
+          alert('Chọn cuộc họp để sync hot.');
+          return;
+        }
         btnWarm.disabled = true;
-        fetch(apiBase() + '/warm?username=' + encodeURIComponent(window.PhonghopServices.username()), {
+        fetch(base + '/warm?username=' + encodeURIComponent(window.PhonghopServices.username()), {
           method: 'POST',
           headers: Object.assign({ 'Content-Type': 'application/json' }, hdrs()),
           body: '{}'
@@ -451,12 +512,18 @@
     } else {
       _sharedOnlyMode = document.body.classList.contains('ph-in-session');
     }
+    _libraryMode = !_sharedOnlyMode;
 
     _meetings = (window.PhonghopState && window.PhonghopState.state.meetings) || [];
-    if (meetingId) _meetingId = meetingId;
-    if (!_meetingId && _meetings.length) _meetingId = _meetings[0].id || _meetings[0].meeting_id;
-    _parentId = null;
-    if (!_meetingId) {
+    if (meetingId && opts.sharedOnly) _meetingId = meetingId;
+    if (_sharedOnlyMode) {
+      if (!_meetingId && _meetings.length) {
+        _meetingId = _meetings[0].id || _meetings[0].meeting_id;
+      }
+    } else if (_libraryMode) {
+      _parentId = null;
+    }
+    if (!_libraryMode && !_sharedOnlyMode && !_meetingId) {
       var host = document.getElementById('phDocsHost');
       if (host) host.innerHTML = '<p class="ph-empty">Chưa có cuộc họp — tạo cuộc họp trước khi thêm tài liệu.</p>';
       return;
@@ -468,8 +535,17 @@
     refresh: refresh,
     setMeeting: function (id, opts) {
       opts = opts || {};
-      _meetingId = id;
-      _parentId = null;
+      if (opts.sharedOnly) {
+        _meetingId = id;
+        _parentId = null;
+        _sharedOnlyMode = true;
+        _libraryMode = false;
+      } else {
+        _meetingId = null;
+        _parentId = null;
+        _sharedOnlyMode = false;
+        _libraryMode = true;
+      }
       if (opts.sharedOnly != null) _sharedOnlyMode = !!opts.sharedOnly;
       return refresh(id, opts);
     }

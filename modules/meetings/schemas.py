@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 MeetingMode = Literal['in_person', 'online', 'hybrid']
 PlatformType = Literal['internal', 'zoom', 'google_meet']
 MeetingStatus = Literal['draft', 'scheduled', 'live', 'completed', 'cancelled']
-ParticipantRole = Literal['organizer', 'host', 'participant', 'observer']
+ParticipantRole = Literal['organizer', 'host', 'secretary', 'participant', 'observer']
 
 
 class MeetingParticipantInput(BaseModel):
@@ -46,6 +46,7 @@ class MeetingCreate(BaseModel):
     online_meeting_url: Optional[str] = None
     participants: list[MeetingParticipantInput] = Field(default_factory=list)
     metadata: dict = Field(default_factory=dict)
+    shared_document_ids: Optional[list[str]] = None
 
     @field_validator('scheduled_start', 'scheduled_end', mode='before')
     @classmethod

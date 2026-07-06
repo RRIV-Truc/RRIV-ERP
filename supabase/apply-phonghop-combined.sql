@@ -40,6 +40,11 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
+  ALTER TYPE meeting_participant_role ADD VALUE 'secretary';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
   CREATE TYPE meeting_rsvp_status AS ENUM (
     'pending', 'accepted', 'declined', 'tentative'
   );

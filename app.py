@@ -1103,6 +1103,13 @@ def phonghop_present():
     return render_template('phonghop-present.html')
 
 
+@app.route('/app/phonghop/screen')
+@app.route('/phonghop/screen')
+def phonghop_screen():
+    """Cửa sổ màn chiếu TV — xem chia sẻ màn hình WebRTC."""
+    return render_template('phonghop-screen.html')
+
+
 @app.route('/app/phonghop/join')
 @app.route('/phonghop/join')
 def phonghop_join():

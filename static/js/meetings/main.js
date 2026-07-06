@@ -18,12 +18,16 @@
     } catch (_) { return iso; }
   }
 
-  function statusBadge(st) {
+  function statusBadge(st, m) {
+    var s = (st || '').toLowerCase();
+    if ((s === 'scheduled' || s === 'draft') && m && SVC.isMeetingPastByDay(m)) {
+      return 'Quá hạn';
+    }
     var map = {
       draft: 'Nháp', scheduled: 'Đã lên lịch', live: 'Đang họp',
       completed: 'Hoàn thành', cancelled: 'Đã hủy'
     };
-    return map[st] || st;
+    return map[s] || st;
   }
 
   function escapeHtml(s) {
@@ -41,6 +45,7 @@
     var st = (m.meeting_status || m.status || '').toLowerCase();
     if (st === 'live') return 'live';
     if (st === 'completed' || st === 'cancelled') return 'past';
+    if (SVC.isMeetingPastByDay(m)) return 'past';
     return 'upcoming';
   }
 
@@ -182,7 +187,7 @@
 
     return '<article class="ph-card ph-card-clickable" data-id="' + escapeHtml(id) + '">' +
       '<div class="ph-card-head"><strong>' + escapeHtml(title) + '</strong>' +
-      '<span class="ph-badge">' + escapeHtml(statusBadge(st)) + '</span></div>' +
+      '<span class="ph-badge">' + escapeHtml(statusBadge(st, m)) + '</span></div>' +
       '<div class="ph-card-meta">' + escapeHtml(meta) + '</div>' +
       '<div class="ph-card-actions">' + actions + '</div></article>';
   }
@@ -245,14 +250,31 @@
     updateWidgets();
   }
 
+  function showListError(msg) {
+    var html = '<div class="ph-empty ph-empty-err">' + escapeHtml(msg || 'Lỗi tải dữ liệu') +
+      ' <button type="button" class="ph-btn ph-btn-sm" id="phListRetry">Thử lại</button></div>';
+    ['meetingsList', 'meetingsListFull'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.innerHTML = html;
+    });
+    var retry = document.getElementById('phListRetry');
+    if (retry) retry.addEventListener('click', function () { refresh(); });
+  }
+
   async function refresh() {
     NS.state.loading = true;
     try {
       NS.state.meetings = (await SVC.listMeetings(80)).map(normalizeMeeting);
-      NS.state.rooms = await SVC.listRooms();
+      try {
+        NS.state.rooms = await SVC.listRooms();
+      } catch (roomErr) {
+        console.warn('[phonghop] listRooms', roomErr);
+        NS.state.rooms = NS.state.rooms || [];
+      }
       renderList();
     } catch (e) {
-      alert(e.message || 'Lỗi tải dữ liệu');
+      console.error('[phonghop] refresh', e);
+      showListError(e.message || 'Lỗi tải dữ liệu');
     } finally {
       NS.state.loading = false;
     }
@@ -261,33 +283,77 @@
   function resetViewAfterRoom() {
     if (window.MeetingRoom && window.MeetingRoom.resetShell) {
       window.MeetingRoom.resetShell();
-    } else {
-      document.body.classList.remove('ph-room-active');
-      var host = document.getElementById('meetingRoomHost');
-      if (host) {
-        host.innerHTML = '';
-        host.classList.remove('ph-room-open');
-      }
     }
+    document.body.classList.remove('ph-in-session');
+    document.body.classList.remove('ph-room-active');
+    updateMeetingFloatBar(false);
   }
 
   function resumeFromCache() {
-    resetViewAfterRoom();
-    if (window.MeetingDetail && window.MeetingDetail.destroy) window.MeetingDetail.destroy();
+    if (window.MeetingRoom && window.MeetingRoom.isActive && window.MeetingRoom.isActive()) {
+      window.MeetingRoom.restoreUi && window.MeetingRoom.restoreUi();
+      return;
+    }
+    if (window.MeetingRoom && window.MeetingRoom.resumeStoredSession) {
+      window.MeetingRoom.resumeStoredSession().then(function (ok) {
+        if (!ok) refresh();
+      });
+      return;
+    }
     refresh();
   }
 
-  function switchView(viewId) {
-    if (viewId !== 'session' && window.MeetingRoom && window.MeetingRoom.isActive && window.MeetingRoom.isActive()) {
-      if (!confirm('Bạn đang trong phiên họp. Rời phòng để chuyển màn hình?')) return;
-      window.MeetingRoom.destroy();
-    }
+  function switchViewSilent(viewId) {
     document.querySelectorAll('.ph-nav-item').forEach(function (btn) {
       btn.classList.toggle('is-active', btn.getAttribute('data-view') === viewId);
     });
     document.querySelectorAll('.ph-view').forEach(function (v) {
       v.classList.toggle('is-visible', v.getAttribute('data-view') === viewId);
     });
+  }
+
+  function isSessionViewVisible() {
+    var el = document.querySelector('.ph-view.is-visible[data-view="session"]');
+    return !!el;
+  }
+
+  function updateMeetingFloatBar(show) {
+    var bar = document.getElementById('phMeetingFloatBar');
+    if (!bar) return;
+    var inMeeting = window.MeetingRoom && window.MeetingRoom.isActive && window.MeetingRoom.isActive();
+    var visible = show != null ? show : (inMeeting && !isSessionViewVisible());
+    bar.hidden = !visible;
+    if (visible && inMeeting) {
+      var titleEl = bar.querySelector('.ph-meeting-float-title');
+      if (titleEl && window.MeetingRoom.getMeetingId) {
+        titleEl.textContent = 'Đang trong phiên họp';
+      }
+    }
+  }
+
+  function switchView(viewId) {
+    var inMeeting = window.MeetingRoom && window.MeetingRoom.isActive && window.MeetingRoom.isActive();
+
+    if (viewId === 'session') {
+      if (inMeeting && window.MeetingRoom.restoreUi) {
+        window.MeetingRoom.restoreUi();
+      }
+      switchViewSilent('session');
+      if (document.body.classList.contains('ph-in-session')) {
+        focusContextTab('chat');
+      }
+      updateMeetingFloatBar(false);
+      return;
+    }
+
+    if (inMeeting) {
+      switchViewSilent(viewId);
+      updateMeetingFloatBar(true);
+      return;
+    }
+
+    switchViewSilent(viewId);
+    updateMeetingFloatBar(false);
     if (viewId === 'documents' && window.MeetingDocs) {
       window.MeetingDocs.refresh().catch(function (e) {
         console.warn('[Phonghop] MeetingDocs', e.message);
@@ -313,6 +379,17 @@
 
   window.PhonghopShell = {
     switchView: switchView,
+    switchViewSilent: switchViewSilent,
+    showSessionView: function () {
+      switchViewSilent('session');
+      document.querySelectorAll('.ph-nav-item').forEach(function (btn) {
+        btn.classList.toggle('is-active', btn.getAttribute('data-view') === 'session');
+      });
+      focusContextTab('chat');
+      updateMeetingFloatBar(false);
+    },
+    updateMeetingFloatBar: updateMeetingFloatBar,
+    getViewBeforeSession: function () { return viewBeforeSession || 'dashboard'; },
     openDocumentsForMeeting: function (meetingId, opts) {
       opts = opts || {};
       var inSession = opts.fromSession != null
@@ -326,13 +403,18 @@
     enterSession: function () {
       viewBeforeSession = document.querySelector('.ph-view.is-visible');
       viewBeforeSession = viewBeforeSession ? viewBeforeSession.getAttribute('data-view') : 'dashboard';
-      switchView('session');
+      if (viewBeforeSession === 'session') viewBeforeSession = 'dashboard';
+      switchViewSilent('session');
       focusContextTab('chat');
       document.body.classList.add('ph-in-session');
+      document.body.classList.add('ph-room-active');
+      updateMeetingFloatBar(false);
     },
     leaveSession: function () {
       document.body.classList.remove('ph-in-session');
-      switchView(viewBeforeSession || 'dashboard');
+      document.body.classList.remove('ph-room-active');
+      switchViewSilent(viewBeforeSession || 'dashboard');
+      updateMeetingFloatBar(false);
     }
   };
 
@@ -512,6 +594,14 @@
 
     bindShell();
     bindUi();
+
+    var floatReturn = document.getElementById('phMeetingFloatReturn');
+    if (floatReturn) {
+      floatReturn.addEventListener('click', function () {
+        switchView('session');
+      });
+    }
+
     await refresh();
 
     if (typeof RrivAppBar !== 'undefined' && RrivAppBar.refresh) RrivAppBar.refresh();
@@ -529,13 +619,25 @@
         });
       } catch (_) { /* onError */ }
       window.PhonghopJoin.cleanJoinQueryFromHistory();
+    } else if (window.MeetingRoom && window.MeetingRoom.resumeStoredSession) {
+      var resumed = await window.MeetingRoom.resumeStoredSession();
+      if (resumed) {
+        if (window.PhonghopShell && window.PhonghopShell.showSessionView) {
+          window.PhonghopShell.showSessionView();
+        }
+      }
     }
   }
 
   window.addEventListener('pagehide', function () {
     if (window.MeetingForm && window.MeetingForm.destroy) window.MeetingForm.destroy();
     if (window.MeetingDetail && window.MeetingDetail.destroy) window.MeetingDetail.destroy();
-    if (window.MeetingRoom && window.MeetingRoom.destroy) window.MeetingRoom.destroy(true);
+    if (window.MeetingRoom && window.MeetingRoom.isActive && window.MeetingRoom.isActive()) {
+      var mid = window.MeetingRoom.getMeetingId && window.MeetingRoom.getMeetingId();
+      if (mid && window.PhonghopServices && window.PhonghopServices.leaveRoom) {
+        window.PhonghopServices.leaveRoom(mid).catch(function () { /* ignore */ });
+      }
+    }
   });
 
   window.addEventListener('pageshow', function (e) {
@@ -543,11 +645,22 @@
   });
 
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible' && NS.state.meetings.length) {
-      resetViewAfterRoom();
-      refresh();
+    if (document.visibilityState !== 'visible') return;
+    if (window.MeetingRoom && window.MeetingRoom.isActive && window.MeetingRoom.isActive()) {
+      if (window.MeetingRoom.restoreUi) window.MeetingRoom.restoreUi();
+      updateMeetingFloatBar(!isSessionViewVisible());
+      return;
     }
+    if (NS.state.meetings.length) refresh();
   });
+
+  if (typeof Auth !== 'undefined' && Auth.onAuthStateChange) {
+    Auth.onAuthStateChange(function (user) {
+      if (!user && window.MeetingRoom && window.MeetingRoom.isActive && window.MeetingRoom.isActive()) {
+        window.MeetingRoom.destroy(true);
+      }
+    });
+  }
 
   document.addEventListener('DOMContentLoaded', bootstrap);
 })();

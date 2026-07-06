@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Màn chiếu TV — Phòng họp</title>
+  <link rel="stylesheet" href="/static/css/app-phonghop.css?v=64">
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+  </style>
+</head>
+<body>
+  <div class="ph-screen-projector-root" id="phScreenProjectorRoot">
+    <video id="phScreenProjectorVideo" class="ph-screen-projector-video" autoplay playsinline muted hidden></video>
+    <p class="ph-screen-projector-status" id="phScreenProjectorStatus">Đang chờ chia sẻ màn hình…</p>
+    <button type="button" class="ph-screen-share-fs-btn ph-screen-projector-fs" id="phScreenProjectorFullscreen"
+      title="Toàn màn hình (Esc thoát)" aria-label="Toàn màn hình" hidden>⛶</button>
+    <div class="ph-screen-projector-hud">
+      Màn chiếu TV · <kbd>F11</kbd> hoặc ⛶ toàn màn hình · <kbd>Esc</kbd> thoát
+    </div>
+  </div>
+
+  <script src="/static/js/meetings/services.js?v=64"></script>
+  <script src="/static/js/meetings/components/MeetingScreenShare.js?v=16"></script>
+  <script>
+    (function () {
+      'use strict';
+      var params = new URLSearchParams(window.location.search);
+      var meetingId = params.get('meeting') || params.get('meetingId') || '';
+      var urlUser = params.get('username') || '';
+      if (urlUser) {
+        try {
+          var stored = JSON.parse(localStorage.getItem('currentUser') || 'null');
+          if (!stored || !stored.username) {
+            localStorage.setItem('currentUser', JSON.stringify({ username: urlUser }));
+          }
+        } catch (_) {
+          localStorage.setItem('currentUser', JSON.stringify({ username: urlUser }));
+        }
+      }
+      if (!meetingId) {
+        document.getElementById('phScreenProjectorStatus').textContent =
+          'URL không hợp lệ — mở từ nút «Màn chiếu TV» trong phiên họp.';
+        return;
+      }
+      window.MeetingScreenShare.initProjector(meetingId);
+      var root = document.getElementById('phScreenProjectorRoot');
+      var fsBtn = document.getElementById('phScreenProjectorFullscreen');
+      if (root && fsBtn) {
+        root.addEventListener('mouseenter', function () {
+          if (root.classList.contains('has-stream')) fsBtn.hidden = false;
+        });
+        root.addEventListener('mouseleave', function () {
+          if (!document.fullscreenElement) fsBtn.hidden = true;
+        });
+      }
+      document.addEventListener('fullscreenchange', function () {
+        if (fsBtn) fsBtn.hidden = !document.fullscreenElement && !root.classList.contains('has-stream');
+      });
+    })();
+  </script>
+</body>
+</html>

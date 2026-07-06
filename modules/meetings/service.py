@@ -160,9 +160,7 @@ def create_meeting(
         row['online_meeting_password'] = platform_result.online_meeting_password
         row['firebase_room_id'] = platform_result.firebase_room_id
 
-    if platform == 'internal' and payload.meeting_mode == 'in_person' and not row.get('firebase_room_id'):
-        pass
-    elif platform == 'internal' and not row.get('firebase_room_id'):
+    if platform == 'internal' and not row.get('firebase_room_id'):
         provider = get_provider('internal')
         platform_result = provider.create_meeting(payload, meeting_id)
         row['online_meeting_url'] = platform_result.online_meeting_url
@@ -174,6 +172,15 @@ def create_meeting(
         raise RuntimeError('Không thể lưu cuộc họp vào Supabase')
 
     _insert_participants(supabase, meeting_id, payload.participants, ctx)
+
+    if payload.shared_document_ids is not None:
+        from modules.meetings import document_service as doc_svc
+        try:
+            doc_svc.set_document_shares(
+                supabase, meeting_id, ctx, payload.shared_document_ids,
+            )
+        except (RuntimeError, ValueError) as exc:
+            raise ValueError(str(exc)) from exc
 
     doc = dict(res.data[0])
     if platform_result:
@@ -231,12 +238,16 @@ def list_meetings(supabase, ctx: UserContext, limit: int = 50) -> list:
     rows = []
     for row in out.data or []:
         mid = row.get('meeting_id')
-        if mid:
-            full = supabase.table('meetings').select('*').eq('id', mid).limit(1).execute()
-            if full.data:
-                rows.append(_enrich_meeting(supabase, full.data[0]))
-                continue
-        rows.append(_enrich_meeting(supabase, row))
+        try:
+            if mid:
+                full = supabase.table('meetings').select('*').eq('id', mid).limit(1).execute()
+                if full.data:
+                    rows.append(_enrich_meeting(supabase, full.data[0]))
+                    continue
+            rows.append(_enrich_meeting(supabase, row))
+        except Exception as exc:
+            print(f'[list_meetings] skip meeting {mid}: {exc}')
+            rows.append(_enrich_meeting(supabase, row))
     return rows
 
 

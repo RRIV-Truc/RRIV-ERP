@@ -23,6 +23,7 @@ from modules.meetings.room_service import (
 from modules.meetings.sync.firebase_sync import FirebaseMeetingSync
 from modules.meetings import document_service as doc_svc
 from modules.meetings import presentation_service as pres_svc
+from modules.meetings import screen_share_service as share_svc
 from modules.meetings import slide_service as slide_svc
 from modules.meetings.warm_service import warm_meeting_documents
 
@@ -39,8 +40,18 @@ def _supabase():
 def api_list_meetings():
     ctx = request.meetings_user  # type: ignore[attr-defined]
     limit = min(int(request.args.get('limit', 50)), 200)
-    items = list_meetings(_supabase(), ctx, limit=limit)
-    return jsonify({'success': True, 'meetings': items})
+    try:
+        items = list_meetings(_supabase(), ctx, limit=limit)
+        return jsonify({'success': True, 'meetings': items})
+    except Exception as exc:
+        print(f'api_list_meetings: {exc}')
+        msg = str(exc)
+        if 'secretary' in msg.lower() or 'invalid input value for enum' in msg.lower():
+            msg = (
+                'Lỗi vai trò Thư ký — chạy migration SQL '
+                'supabase/migrations/20260630_meeting_secretary_role.sql trên Supabase rồi thử lại.'
+            )
+        return jsonify({'success': False, 'message': msg}), 500
 
 
 @meetings_bp.route('/api/meetings', methods=['POST'])
@@ -348,6 +359,150 @@ def api_stop_presentation(meeting_id):
         return jsonify({'success': False, 'message': str(exc)}), 500
 
 
+@meetings_bp.route('/api/meetings/<meeting_id>/room/screen-share/start', methods=['POST'])
+@require_meeting_participant('meeting_id')
+def api_start_screen_share(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    supabase = _supabase()
+    try:
+        meeting = assert_can_access(supabase, meeting_id, ctx)
+        payload = share_svc.start_screen_share(supabase, meeting, ctx)
+        return jsonify({'success': True, 'screen_share': share_svc.parse_screen_share_for_client(payload)})
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except Exception as exc:
+        print(f'api_start_screen_share: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/room/screen-share/request', methods=['POST'])
+@require_meeting_participant('meeting_id')
+def api_request_screen_share(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    supabase = _supabase()
+    try:
+        meeting = assert_can_access(supabase, meeting_id, ctx)
+        req = share_svc.request_screen_share(supabase, meeting, ctx)
+        return jsonify({'success': True, 'request': req})
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except Exception as exc:
+        print(f'api_request_screen_share: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/room/screen-share/request/<request_id>/approve', methods=['POST'])
+@require_meeting_participant('meeting_id')
+def api_approve_screen_share(meeting_id, request_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    supabase = _supabase()
+    try:
+        meeting = assert_can_access(supabase, meeting_id, ctx)
+        req = share_svc.approve_screen_share_request(supabase, meeting, ctx, request_id)
+        return jsonify({'success': True, 'request': req})
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except Exception as exc:
+        print(f'api_approve_screen_share: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/room/screen-share/request/<request_id>/deny', methods=['POST'])
+@require_meeting_participant('meeting_id')
+def api_deny_screen_share(meeting_id, request_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    supabase = _supabase()
+    try:
+        meeting = assert_can_access(supabase, meeting_id, ctx)
+        req = share_svc.deny_screen_share_request(supabase, meeting, ctx, request_id)
+        return jsonify({'success': True, 'request': req})
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except Exception as exc:
+        print(f'api_deny_screen_share: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/room/screen-share/stop', methods=['POST'])
+@require_meeting_participant('meeting_id')
+def api_stop_screen_share(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    supabase = _supabase()
+    body = request.json or {}
+    try:
+        meeting = assert_can_access(supabase, meeting_id, ctx)
+        result = share_svc.stop_screen_share(
+            supabase, meeting, ctx, force=bool(body.get('force')),
+        )
+        return jsonify({'success': True, 'result': result})
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except Exception as exc:
+        print(f'api_stop_screen_share: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/room/screen-share/signal', methods=['POST'])
+@require_meeting_participant('meeting_id')
+def api_screen_share_signal(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    supabase = _supabase()
+    body = request.json or {}
+    try:
+        meeting = assert_can_access(supabase, meeting_id, ctx)
+        msg = share_svc.post_screen_share_signal(
+            supabase,
+            meeting,
+            ctx,
+            signal_type=str(body.get('type') or ''),
+            payload=body.get('payload'),
+            to_username=str(body.get('to_username') or '').strip() or None,
+        )
+        return jsonify({'success': True, 'signal': msg})
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except Exception as exc:
+        print(f'api_screen_share_signal: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/room/screen-share/signals', methods=['GET'])
+@require_meeting_participant('meeting_id')
+def api_screen_share_signals(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    supabase = _supabase()
+    since = request.args.get('since') or None
+    try:
+        meeting = assert_can_access(supabase, meeting_id, ctx)
+        signals = share_svc.list_screen_share_signals(meeting, ctx, since=since)
+        return jsonify({'success': True, 'signals': signals})
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except Exception as exc:
+        print(f'api_screen_share_signals: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
 @meetings_bp.route('/api/meetings/<meeting_id>/documents/<doc_id>/slides/<int:slide_index>', methods=['GET'])
 @require_meeting_participant('meeting_id')
 def api_presentation_slide_image(meeting_id, doc_id, slide_index):
@@ -378,6 +533,121 @@ def api_list_meeting_rooms():
 # ----- Kho tài liệu cuộc họp (Cold → Hot) -----
 
 
+@meetings_bp.route('/api/meetings/documents/library/browse', methods=['GET'])
+@require_auth
+def api_browse_library():
+    """Duyệt kho tài liệu chung theo thư mục (Explorer)."""
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    parent_id = request.args.get('parent_id') or None
+    meeting_id = request.args.get('meeting_id') or None
+    if parent_id in ('', 'null', 'root'):
+        parent_id = None
+    try:
+        data = doc_svc.browse_library_folder(
+            _supabase(), ctx, parent_id=parent_id, for_meeting_id=meeting_id,
+        )
+        items = doc_svc.attach_download_urls(data.get('documents') or [])
+        data['documents'] = items
+        return jsonify({'success': True, **data})
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except Exception as exc:
+        print(f'api_browse_library: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/documents/library/upload', methods=['POST'])
+@require_auth
+def api_upload_library_document():
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    supabase = _supabase()
+    parent_id = request.form.get('parent_id') or None
+    if parent_id in ('', 'null', 'root'):
+        parent_id = None
+    upload = request.files.get('file')
+    if not upload or not upload.filename:
+        return jsonify({'success': False, 'message': 'Thiếu file upload'}), 400
+    try:
+        lib_id = doc_svc.ensure_library_meeting(supabase, ctx)
+        data = upload.read()
+        doc = doc_svc.upload_file(
+            supabase, lib_id, ctx,
+            upload.filename, data, upload.mimetype, parent_id,
+        )
+        return jsonify({'success': True, 'document': doc}), 201
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception as exc:
+        print(f'api_upload_library_document: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/documents/library/folder', methods=['POST'])
+@require_auth
+def api_create_library_folder():
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    body = request.json or {}
+    supabase = _supabase()
+    parent_id = body.get('parent_id') or None
+    if parent_id in ('', 'null', 'root'):
+        parent_id = None
+    try:
+        lib_id = doc_svc.ensure_library_meeting(supabase, ctx)
+        doc = doc_svc.create_folder(
+            supabase, lib_id, ctx, body.get('name') or '', parent_id=parent_id,
+        )
+        return jsonify({'success': True, 'document': doc})
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+
+
+@meetings_bp.route('/api/meetings/documents/library/tree', methods=['GET'])
+@require_auth
+def api_library_document_tree():
+    """Cây kho tài liệu chung — chọn tài liệu họp (tạo/sửa cuộc họp)."""
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    meeting_id = request.args.get('meeting_id') or None
+    try:
+        data = doc_svc.list_library_tree(_supabase(), ctx, for_meeting_id=meeting_id)
+        return jsonify({'success': True, **data})
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+
+
+@meetings_bp.route('/api/meetings/documents/library', methods=['GET'])
+@require_auth
+def api_list_document_library():
+    """Kho tài liệu chung — gộp tài liệu các cuộc họp user được phép xem."""
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    meeting_id = request.args.get('meeting_id') or None
+    parent_id = request.args.get('parent_id') or None
+    meeting_filter = request.args.get('meeting_filter') or None
+    if parent_id in ('', 'null', 'root'):
+        parent_id = None
+    if meeting_filter in ('', 'all'):
+        meeting_filter = None
+    try:
+        data = doc_svc.list_library_documents(
+            _supabase(), ctx,
+            meeting_id=meeting_id,
+            parent_id=parent_id,
+            meeting_filter=meeting_filter,
+        )
+        items = doc_svc.attach_download_urls(data.get('documents') or [])
+        data['documents'] = items
+        return jsonify({'success': True, **data})
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+
+
 @meetings_bp.route('/api/meetings/<meeting_id>/documents', methods=['GET'])
 @require_meeting_participant('meeting_id')
 def api_list_documents(meeting_id):
@@ -387,13 +657,16 @@ def api_list_documents(meeting_id):
         parent_id = None
     shared_only = request.args.get('shared_only', '').lower() in ('1', 'true', 'yes')
     flat = request.args.get('flat', '').lower() in ('1', 'true', 'yes')
+    skip_urls = request.args.get('skip_urls', '').lower() in ('1', 'true', 'yes')
+    supabase = _supabase()
     try:
-        can_manage = doc_svc.can_manage_documents(_supabase(), meeting_id, ctx)
+        can_manage = doc_svc.can_manage_documents(supabase, meeting_id, ctx)
         if flat:
             items = doc_svc.list_shared_files_flat(
-                _supabase(), meeting_id, ctx, shared_only=shared_only,
+                supabase, meeting_id, ctx, shared_only=shared_only,
             )
-            items = doc_svc.attach_download_urls(items)
+            if not skip_urls:
+                items = doc_svc.attach_download_urls(items)
             return jsonify({
                 'success': True,
                 'documents': items,
@@ -402,10 +675,11 @@ def api_list_documents(meeting_id):
                 'shared_only': not can_manage or shared_only,
             })
         items = doc_svc.list_documents(
-            _supabase(), meeting_id, ctx, parent_id, shared_only=shared_only,
+            supabase, meeting_id, ctx, parent_id, shared_only=shared_only,
         )
-        items = doc_svc.attach_download_urls(items)
-        breadcrumb = doc_svc.list_breadcrumb(_supabase(), meeting_id, parent_id, ctx)
+        if not skip_urls:
+            items = doc_svc.attach_download_urls(items)
+        breadcrumb = doc_svc.list_breadcrumb(supabase, meeting_id, parent_id, ctx)
         return jsonify({
             'success': True,
             'documents': items,
@@ -417,6 +691,12 @@ def api_list_documents(meeting_id):
         return jsonify({'success': False, 'message': str(exc)}), 403
     except LookupError as exc:
         return jsonify({'success': False, 'message': str(exc)}), 404
+    except Exception as exc:
+        print(f'api_list_documents: {exc}')
+        return jsonify({
+            'success': False,
+            'message': str(exc) or 'Lỗi tải danh sách tài liệu — thử lại',
+        }), 500
 
 
 @meetings_bp.route('/api/meetings/<meeting_id>/documents/shares', methods=['GET'])
