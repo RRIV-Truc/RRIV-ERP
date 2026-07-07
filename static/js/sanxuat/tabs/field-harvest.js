@@ -5135,16 +5135,52 @@ const TabFieldHarvest = (function () {
     return 'SanLuongCN_' + (ctx.period || 'day') + '_' + ctx.dateFrom + '_' + ctx.dateTo + '_' + team;
   }
 
-  function exportSummaryExcel() {
-    if (typeof XLSX === 'undefined') {
-      _toast('Thư viện Excel chưa tải — thử refresh trang (Ctrl+F5)', 'error');
-      return;
-    }
-    var ctx = _getSummaryExportContext();
-    if (!ctx.rowCount) {
-      _toast('Chưa có dữ liệu cân để xuất', 'warning');
-      return;
-    }
+  var _xlsxLoadPromise = null;
+
+  function _ensureXlsx() {
+    if (typeof XLSX !== 'undefined') return Promise.resolve(XLSX);
+    if (_xlsxLoadPromise) return _xlsxLoadPromise;
+    var sources = [
+      'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+      'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+      'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js'
+    ];
+    _xlsxLoadPromise = new Promise(function (resolve, reject) {
+      var idx = 0;
+      function tryNext() {
+        if (typeof XLSX !== 'undefined') {
+          resolve(XLSX);
+          return;
+        }
+        if (idx >= sources.length) {
+          _xlsxLoadPromise = null;
+          reject(new Error('Thư viện Excel chưa tải'));
+          return;
+        }
+        var src = sources[idx++];
+        if (document.querySelector('script[data-rriv-xlsx="' + src + '"]')) {
+          setTimeout(tryNext, 0);
+          return;
+        }
+        var s = document.createElement('script');
+        s.src = src;
+        s.async = true;
+        s.crossOrigin = 'anonymous';
+        s.referrerPolicy = 'no-referrer';
+        s.setAttribute('data-rriv-xlsx', src);
+        s.onload = function () {
+          if (typeof XLSX !== 'undefined') resolve(XLSX);
+          else tryNext();
+        };
+        s.onerror = tryNext;
+        document.head.appendChild(s);
+      }
+      tryNext();
+    });
+    return _xlsxLoadPromise;
+  }
+
+  function _writeSummaryExcel(ctx) {
     var aoa = [
       ['Tổng hợp sản lượng công nhân tại vườn'],
       ['Kỳ', ctx.periodLabel, 'Từ', ctx.dateFrom, 'Đến', ctx.dateTo],
@@ -5162,6 +5198,19 @@ const TabFieldHarvest = (function () {
     XLSX.utils.book_append_sheet(wb, ws, 'San luong');
     XLSX.writeFile(wb, _summaryExportFileBase(ctx) + '.xlsx');
     _toast('Đã xuất Excel', 'success');
+  }
+
+  function exportSummaryExcel() {
+    var ctx = _getSummaryExportContext();
+    if (!ctx.rowCount) {
+      _toast('Chưa có dữ liệu cân để xuất', 'warning');
+      return;
+    }
+    _ensureXlsx().then(function () {
+      _writeSummaryExcel(ctx);
+    }).catch(function () {
+      _toast('Thư viện Excel chưa tải — thử refresh trang (Ctrl+F5)', 'error');
+    });
   }
 
   function _loadPdfFont(doc) {
