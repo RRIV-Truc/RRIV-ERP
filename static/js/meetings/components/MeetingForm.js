@@ -44,9 +44,29 @@
     };
   }
 
+  function resolveEmployeeId(p) {
+    if (!p || p.is_external) return '';
+    if (p.employee_id) return String(p.employee_id);
+    var uname = (p.username || '').trim().toLowerCase();
+    if (!uname) return '';
+    var found = (_orgData.personnel || []).find(function (x) {
+      return String(x.username || '').trim().toLowerCase() === uname;
+    });
+    return found ? String(found.id) : '';
+  }
+
   function participantOptionKey(p) {
     if (p.is_external) return 'ext:' + (p.external_email || p.external_name || '');
-    return String(p.employee_id || p.username || '');
+    var empId = resolveEmployeeId(p);
+    return empId || String(p.username || '').trim().toLowerCase();
+  }
+
+  function labelForParticipantKey(key) {
+    if (!key) return key;
+    if (key.indexOf('ext:') === 0) return key.slice(4);
+    var person = (_orgData.personnel || []).find(function (x) { return String(x.id) === String(key); });
+    if (person && person.full_name) return person.full_name;
+    return key;
   }
 
   function participantsFromMeeting(m) {
@@ -55,9 +75,7 @@
     _pendingSecretaryId = '';
     (m.participants || []).forEach(function (p) {
       var role = (p.participant_role || '').toLowerCase();
-      var key = p.is_external
-        ? 'ext:' + (p.external_email || p.external_name || '')
-        : String(p.employee_id || p.username || '');
+      var key = participantOptionKey(p);
       if (role === 'host') _pendingHostId = key;
       if (role === 'secretary') _pendingSecretaryId = key;
     });
@@ -73,8 +91,9 @@
           participant_role: (p.participant_role || 'participant').toLowerCase()
         };
       }
+      var empId = resolveEmployeeId(p) || (p.employee_id ? String(p.employee_id) : null);
       return {
-        employee_id: p.employee_id || null,
+        employee_id: empId,
         username: p.username || null,
         participant_role: (p.participant_role || 'participant').toLowerCase(),
         is_external: false
@@ -94,20 +113,35 @@
     });
   }
 
+  function getInternalParticipantsForRoles() {
+    var base = [];
+    if (_treePicker && _treePicker.getParticipants) {
+      base = _treePicker.getParticipants();
+    } else {
+      base = _pendingParticipants || [];
+    }
+    return base.filter(function (p) { return !p.is_external; });
+  }
+
   function refreshRoleSelects() {
     var hostSel = document.getElementById('phRoleHostSelect');
     var secSel = document.getElementById('phRoleSecretarySelect');
     if (!hostSel || !secSel) return;
 
-    var parts = getSelectedParticipants().filter(function (p) { return !p.is_external; });
+    var parts = getInternalParticipantsForRoles();
+    var seen = {};
     var opts = '<option value="">— Chưa chọn —</option>' + parts.map(function (p) {
       var key = participantOptionKey(p);
-      var person = (_orgData.personnel || []).find(function (x) { return x.id === p.employee_id; });
-      var label = person && person.full_name
-        ? person.full_name
-        : (p.username || p.employee_id || key);
-      return '<option value="' + escHtml(key) + '">' + escHtml(label) + '</option>';
+      if (!key || seen[key]) return '';
+      seen[key] = true;
+      return '<option value="' + escHtml(key) + '">' + escHtml(labelForParticipantKey(key)) + '</option>';
     }).join('');
+
+    [_pendingHostId, _pendingSecretaryId].forEach(function (key) {
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      opts += '<option value="' + escHtml(key) + '">' + escHtml(labelForParticipantKey(key)) + '</option>';
+    });
 
     hostSel.innerHTML = opts;
     secSel.innerHTML = opts;
@@ -476,13 +510,14 @@
       maxWidth: '860px',
       fields: buildFields(),
       onOpen: function (editData) {
-        _pendingParticipants = [];
-        _pendingHostId = '';
-        _pendingSecretaryId = '';
-        if (editData && editData.participants) {
+        if (editData && editData.participants && editData.participants.length) {
           _pendingParticipants = participantsFromMeeting({ participants: editData.participants });
-        } else if (_editMeeting) {
+        } else if (_editMeeting && _editMeeting.participants && _editMeeting.participants.length) {
           _pendingParticipants = participantsFromMeeting(_editMeeting);
+        } else {
+          _pendingParticipants = [];
+          _pendingHostId = '';
+          _pendingSecretaryId = '';
         }
         setTimeout(function () {
           renderParticipantPicker();

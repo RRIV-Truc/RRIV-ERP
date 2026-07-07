@@ -58,6 +58,16 @@
         return internal.concat(external);
       }
 
+      function resolvePersonId(p) {
+        if (p.employee_id) return String(p.employee_id);
+        var uname = (p.username || '').trim().toLowerCase();
+        if (!uname) return null;
+        var found = orgData.personnel.find(function (x) {
+          return String(x.username || '').trim().toLowerCase() === uname;
+        });
+        return found ? String(found.id) : null;
+      }
+
       function setParticipants(list) {
         selectedIds = {};
         externals = [];
@@ -67,8 +77,9 @@
               external_name: p.external_name || p.display_name || '',
               external_email: p.external_email || ''
             });
-          } else if (p.employee_id) {
-            selectedIds[p.employee_id] = true;
+          } else {
+            var pid = resolvePersonId(p);
+            if (pid) selectedIds[pid] = true;
           }
         });
         render();

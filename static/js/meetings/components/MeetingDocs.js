@@ -423,7 +423,9 @@
         e.stopPropagation();
         var id = btn.getAttribute('data-id');
         var kind = btn.getAttribute('data-kind');
-        var msg = kind === 'folder' ? 'Xóa thư mục này?' : 'Xóa tài liệu này?';
+        var msg = kind === 'folder'
+          ? 'Xóa thư mục này và toàn bộ tài liệu bên trong?'
+          : 'Xóa tài liệu này?';
         if (!confirm(msg)) return;
         var doc = docById(id);
         var base = uploadApiBase();

@@ -1321,18 +1321,38 @@ def move_document(
     return get_document(supabase, meeting_id, doc_id, ctx, check_share=False)
 
 
+def _delete_document_shares(supabase, doc_id: str) -> None:
+    try:
+        supabase.table('meeting_document_shares').delete().eq('document_id', doc_id).execute()
+    except Exception as exc:
+        print(f'[meeting_docs] delete shares for {doc_id}: {exc}')
+
+
+def _delete_folder_recursive(supabase, meeting_id: str, folder_id: str) -> None:
+    children = supabase.table('meeting_documents').select('*').eq(
+        'parent_id', folder_id
+    ).eq('meeting_id', meeting_id).execute()
+    for child in children.data or []:
+        child_id = str(child['id'])
+        if child.get('kind') == 'folder':
+            _delete_folder_recursive(supabase, meeting_id, child_id)
+        else:
+            _delete_storage_object(child)
+            _delete_document_shares(supabase, child_id)
+            supabase.table('meeting_documents').delete().eq('id', child_id).execute()
+    _delete_document_shares(supabase, folder_id)
+    supabase.table('meeting_documents').delete().eq('id', folder_id).execute()
+
+
 def delete_document(supabase, meeting_id: str, doc_id: str, ctx: UserContext) -> bool:
     assert_can_write(supabase, meeting_id, ctx)
     doc = get_document(supabase, meeting_id, doc_id, ctx)
     if doc.get('kind') == 'folder':
-        children = supabase.table('meeting_documents').select('id').eq(
-            'parent_id', doc_id
-        ).limit(1).execute()
-        if children.data:
-            raise ValueError('Thư mục còn tài liệu con — xóa hoặc di chuyển trước')
+        _delete_folder_recursive(supabase, meeting_id, doc_id)
     else:
         _delete_storage_object(doc)
-    supabase.table('meeting_documents').delete().eq('id', doc_id).execute()
+        _delete_document_shares(supabase, doc_id)
+        supabase.table('meeting_documents').delete().eq('id', doc_id).execute()
     return True
 
 
