@@ -59,6 +59,14 @@ def _safe_name(name: str) -> str:
     return base[:200] or 'file'
 
 
+def _storage_object_key(doc_id: str, display_name: str) -> str:
+    """Key trên Supabase Storage — ASCII only (S3 không nhận Unicode/khoảng trắng)."""
+    ext = Path(display_name).suffix.lower()
+    if not ext or ext not in ALLOWED_EXT:
+        ext = '.bin'
+    return f'{doc_id}{ext}'
+
+
 def _storage_key() -> str:
     """Secret key only — KHÔNG dùng Publishable (SUPABASE_KEY) cho Storage private."""
     for env_name in ('SUPABASE_SERVICE_KEY', 'SUPABASE_SECRET_KEY'):
@@ -941,7 +949,8 @@ def upload_file(
         raise ValueError(f'Định dạng {ext} không được phép')
 
     doc_id = str(uuid.uuid4())
-    storage_path = f'{meeting_id}/{doc_id}/{safe}'
+    object_key = _storage_object_key(doc_id, safe)
+    storage_path = f'{meeting_id}/{doc_id}/{object_key}'
     _upload_bytes_supabase(data, storage_path, mime_type or 'application/octet-stream')
     backend = 'supabase'
 
