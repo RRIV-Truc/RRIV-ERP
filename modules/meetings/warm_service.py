@@ -1,4 +1,4 @@
-"""Warm job — copy metadata (+ file nếu có bucket) sang Firebase hot storage."""
+"""Warm job — Supabase (gốc) → Firebase hot cache theo phiên họp."""
 from __future__ import annotations
 
 from datetime import datetime, timezone

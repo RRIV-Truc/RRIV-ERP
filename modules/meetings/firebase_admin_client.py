@@ -12,6 +12,7 @@ KHÔNG DÙNG:
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 
@@ -23,6 +24,36 @@ def _database_url() -> str:
     return url
 
 
+def _parse_service_account_json(raw_json: str) -> dict:
+    """Parse JSON Service Account từ chuỗi env (Render thường cần một dòng)."""
+    raw = (raw_json or '').strip()
+    if not raw:
+        raise RuntimeError('FIREBASE_SERVICE_ACCOUNT rỗng')
+
+    if raw.endswith('.json') or (
+        ('\\' in raw or '/' in raw) and '{' not in raw and '"type"' not in raw
+    ):
+        raise RuntimeError(
+            f'FIREBASE_SERVICE_ACCOUNT đang là đường dẫn/tên file ({raw[:80]}…). '
+            'Trên Render phải dán toàn bộ nội dung JSON (một dòng), không dán tên file.'
+        )
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            'FIREBASE_SERVICE_ACCOUNT không phải JSON hợp lệ. '
+            'Mở file .json Service Account → copy hết → dán một dòng vào Render '
+            '(hoặc dùng FIREBASE_SERVICE_ACCOUNT_B64 — chạy '
+            'python scripts/render_firebase_env.py). '
+            f'Chi tiết: {exc}'
+        ) from exc
+
+    if not isinstance(data, dict):
+        raise RuntimeError('Service Account JSON phải là object')
+    return data
+
+
 def _load_service_account_dict() -> dict:
     """
     Đọc Service Account JSON từ env.
@@ -30,21 +61,26 @@ def _load_service_account_dict() -> dict:
     """
     path = os.getenv('FIREBASE_SERVICE_ACCOUNT_PATH', '').strip()
     raw_json = os.getenv('FIREBASE_SERVICE_ACCOUNT', '').strip()
+    raw_b64 = os.getenv('FIREBASE_SERVICE_ACCOUNT_B64', '').strip()
 
     if path and os.path.isfile(path):
         with open(path, encoding='utf-8') as fh:
             data = json.load(fh)
+    elif raw_b64:
+        try:
+            decoded = base64.b64decode(raw_b64).decode('utf-8')
+        except Exception as exc:
+            raise RuntimeError(f'FIREBASE_SERVICE_ACCOUNT_B64 không decode được: {exc}') from exc
+        data = _parse_service_account_json(decoded)
     elif raw_json:
-        data = json.loads(raw_json)
+        data = _parse_service_account_json(raw_json)
     else:
         raise RuntimeError(
-            'Thiếu Service Account: đặt FIREBASE_SERVICE_ACCOUNT_PATH (file .json) '
-            'hoặc FIREBASE_SERVICE_ACCOUNT (JSON inline). '
+            'Thiếu Service Account: đặt FIREBASE_SERVICE_ACCOUNT (JSON một dòng), '
+            'FIREBASE_SERVICE_ACCOUNT_B64, hoặc FIREBASE_SERVICE_ACCOUNT_PATH (local). '
             'Không dùng Firebase Auth user token.'
         )
 
-    if not isinstance(data, dict):
-        raise RuntimeError('Service Account JSON phải là object')
     if data.get('type') != 'service_account':
         raise RuntimeError(
             f"File/env không phải Firebase Service Account (type={data.get('type')!r}). "

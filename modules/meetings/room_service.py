@@ -184,6 +184,12 @@ def join_room(supabase, meeting: dict, ctx: UserContext) -> dict:
             'updated_at': now,
         }).eq('id', meeting_id).execute()
 
+    try:
+        from modules.meetings.session_storage import warm_session_documents_from_supabase
+        warm_session_documents_from_supabase(supabase, meeting_id)
+    except Exception as exc:
+        print(f'[room_service] warm session docs on join: {exc}')
+
     return get_room_state(supabase, meeting, ctx)
 
 

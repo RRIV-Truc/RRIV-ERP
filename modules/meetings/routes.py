@@ -179,6 +179,20 @@ def api_lookup_meeting():
     })
 
 
+def _room_api_error(exc: Exception, action: str):
+    """Trả JSON thay vì trang HTML 500 (đặc biệt khi thiếu Firebase trên Render)."""
+    msg = str(exc)
+    if isinstance(exc, RuntimeError) and (
+        'FIREBASE' in msg.upper() or 'Service Account' in msg
+    ):
+        msg = (
+            f'{msg} — Cấu hình FIREBASE_DATABASE_URL và FIREBASE_SERVICE_ACCOUNT '
+            'trong Render Dashboard → Environment.'
+        )
+    print(f'api_{action}: {exc}')
+    return jsonify({'success': False, 'message': msg}), 500
+
+
 @meetings_bp.route('/api/meetings/<meeting_id>/room', methods=['GET'])
 @require_meeting_participant('meeting_id')
 def api_get_room(meeting_id):
@@ -193,6 +207,8 @@ def api_get_room(meeting_id):
         return jsonify({'success': False, 'message': str(exc)}), 404
     except ValueError as exc:
         return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception as exc:
+        return _room_api_error(exc, 'get_room')
 
 
 @meetings_bp.route('/api/meetings/<meeting_id>/room/join', methods=['POST'])
@@ -208,6 +224,8 @@ def api_join_room(meeting_id):
         return jsonify({'success': False, 'message': str(exc)}), 404
     except ValueError as exc:
         return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception as exc:
+        return _room_api_error(exc, 'join_room')
 
 
 @meetings_bp.route('/api/meetings/<meeting_id>/room/leave', methods=['POST'])
@@ -797,8 +815,6 @@ def api_delete_document(meeting_id, doc_id):
 @require_meeting_participant('meeting_id')
 def api_warm_documents(meeting_id):
     ctx = request.meetings_user  # type: ignore[attr-defined]
-    if not doc_svc.can_manage_documents(_supabase(), meeting_id, ctx):
-        return jsonify({'success': False, 'message': 'Không có quyền warm tài liệu'}), 403
     try:
         result = warm_meeting_documents(_supabase(), meeting_id)
         return jsonify({'success': True, 'result': result})
@@ -831,10 +847,18 @@ def api_move_document(meeting_id, doc_id):
 def api_document_download_link(meeting_id, doc_id):
     ctx = request.meetings_user  # type: ignore[attr-defined]
     inline = request.args.get('disposition', '').lower() == 'inline'
+    supabase = _supabase()
     try:
         link = doc_svc.get_download_link(
-            _supabase(), meeting_id, doc_id, ctx, inline=inline,
+            supabase, meeting_id, doc_id, ctx, inline=inline,
         )
+        if link.get('direct'):
+            try:
+                doc = doc_svc.get_document(supabase, meeting_id, doc_id, ctx, check_share=True)
+                if doc.get('warm_status') in ('pending', 'failed'):
+                    warm_meeting_documents(supabase, meeting_id, doc_ids=[doc_id])
+            except Exception as warm_exc:
+                print(f'api_document_download_link warm: {warm_exc}')
         if not link.get('direct'):
             link['url'] = (
                 f'/api/meetings/{meeting_id}/documents/{doc_id}/download'
@@ -853,7 +877,7 @@ def api_document_download_link(meeting_id, doc_id):
 @meetings_bp.route('/api/meetings/<meeting_id>/documents/<doc_id>/download', methods=['GET'])
 @require_meeting_participant('meeting_id')
 def api_download_document(meeting_id, doc_id):
-    from flask import Response, redirect, send_file
+    from flask import Response, redirect
     ctx = request.meetings_user  # type: ignore[attr-defined]
     inline = request.args.get('disposition', '').lower() == 'inline'
     presentation = request.args.get('presentation') == '1'
@@ -879,18 +903,13 @@ def api_download_document(meeting_id, doc_id):
                 },
             )
 
+        direct = doc_svc.resolve_direct_download_url(doc)
+        if direct and (not inline or doc_svc.is_pdf_document(name, mime)):
+            return redirect(direct, code=302)
+
         signed = doc_svc.create_signed_download_url(doc)
         if signed and (not inline or doc_svc.is_pdf_document(name, mime)):
             return redirect(signed, code=302)
-
-        local_path = doc_svc.local_file_path(doc)
-        if local_path:
-            return send_file(
-                local_path,
-                mimetype=mime,
-                as_attachment=not inline,
-                download_name=name,
-            )
 
         data = doc_svc.read_file_bytes(_supabase(), doc)
         return Response(

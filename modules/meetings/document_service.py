@@ -1,4 +1,8 @@
-"""Kho tài liệu cuộc họp — Cold Storage (Supabase DB + Storage/local)."""
+"""Kho tài liệu cuộc họp — Supabase Storage (nguồn chính thức, vĩnh viễn).
+
+Phiên họp realtime: warm_service copy tài liệu đã chọn lên Firebase (hot).
+Trình duyệt: IndexedDB cache (doc-cache.js) — không dùng ổ đĩa server.
+"""
 from __future__ import annotations
 
 import os
@@ -20,6 +24,29 @@ ALLOWED_EXT = {
     '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
     '.png', '.jpg', '.jpeg', '.webp', '.txt', '.csv',
 }
+
+
+def _allow_local_storage() -> bool:
+    """Chỉ bật khi dev tường minh — production/Render luôn Supabase."""
+    explicit = os.getenv('MEETING_DOCS_ALLOW_LOCAL', '').strip().lower()
+    if explicit not in ('1', 'true', 'yes'):
+        return False
+    return os.getenv('FLASK_DEBUG', '0').strip().lower() in ('1', 'true', 'yes')
+
+
+def _repair_storage_backend(supabase, doc: dict) -> None:
+    """Sửa metadata cũ ghi nhầm local khi file thực tế nằm trên Supabase."""
+    doc_id = doc.get('id')
+    if not doc_id or (doc.get('storage_backend') or '') == 'supabase':
+        return
+    try:
+        supabase.table('meeting_documents').update({
+            'storage_backend': 'supabase',
+            'updated_at': _now_iso(),
+        }).eq('id', doc_id).execute()
+        doc['storage_backend'] = 'supabase'
+    except Exception as exc:
+        print(f'[meeting_docs] repair storage_backend {doc_id}: {exc}')
 
 
 def _now_iso() -> str:
@@ -784,6 +811,9 @@ def create_folder(
 
 
 def _upload_bytes_supabase(data: bytes, path: str, mime: str) -> bool:
+    if not _storage_key():
+        print('[meeting_docs] supabase upload: thiếu SUPABASE_SERVICE_KEY hoặc SUPABASE_KEY')
+        return False
     try:
         from supabase import create_client
         client = create_client(os.getenv('SUPABASE_URL', ''), _storage_key())
@@ -828,10 +858,17 @@ def upload_file(
 
     doc_id = str(uuid.uuid4())
     storage_path = f'{meeting_id}/{doc_id}/{safe}'
-    backend = 'supabase'
     if not _upload_bytes_supabase(data, storage_path, mime_type or 'application/octet-stream'):
-        backend = 'local'
-        _upload_bytes_local(data, storage_path)
+        if _allow_local_storage():
+            _upload_bytes_local(data, storage_path)
+            backend = 'local'
+        else:
+            raise RuntimeError(
+                'Không upload được lên Supabase Storage (nguồn chính thức). '
+                f'Kiểm tra bucket «{BUCKET}» và SUPABASE_SERVICE_KEY trên server.'
+            )
+    else:
+        backend = 'supabase'
 
     row = {
         'id': doc_id,
@@ -864,21 +901,40 @@ def upload_file(
 
 
 def read_file_bytes(supabase, doc: dict) -> bytes:
+    """Đọc file từ Supabase Storage — nguồn chính thức duy nhất trên production."""
     path = doc.get('storage_path') or ''
+    if not path:
+        raise FileNotFoundError('Tài liệu thiếu storage_path trên Supabase')
+
     backend = doc.get('storage_backend') or 'supabase'
-    if backend == 'local':
-        full = LOCAL_ROOT / path
-        if not full.is_file():
-            raise FileNotFoundError('File local không tồn tại')
-        return full.read_bytes()
-    client = _supabase_storage_client()
-    return client.storage.from_(BUCKET).download(path)
+    try:
+        data = _supabase_storage_client().storage.from_(BUCKET).download(path)
+        if supabase and backend != 'supabase':
+            _repair_storage_backend(supabase, doc)
+        return data
+    except Exception as supa_exc:
+        if _allow_local_storage() and backend == 'local':
+            full = LOCAL_ROOT / path
+            if full.is_file():
+                return full.read_bytes()
+        raise FileNotFoundError(
+            f'Không tìm thấy file trên Supabase Storage (bucket {BUCKET}). '
+            'Upload lại tài liệu — dữ liệu gốc phải nằm trên Supabase.'
+        ) from supa_exc
 
 
 def read_presentation_bytes(doc: dict) -> bytes:
-    """Tải file đầy đủ cho trình chiếu — pdf.js cần body hoàn chỉnh + Content-Length."""
+    """Tải file trình chiếu — ưu tiên Firebase hot → Supabase signed URL."""
     import urllib.error
     import urllib.request
+
+    fb_url = create_firebase_download_url(doc)
+    if fb_url:
+        try:
+            with urllib.request.urlopen(fb_url, timeout=300) as resp:
+                return resp.read()
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            print(f'[meeting_docs] read_presentation_bytes firebase: {exc}')
 
     signed = create_signed_download_url(doc)
     if signed:
@@ -888,21 +944,29 @@ def read_presentation_bytes(doc: dict) -> bytes:
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             print(f'[meeting_docs] read_presentation_bytes signed: {exc}')
 
-    local_path = local_file_path(doc)
-    if local_path:
-        return local_path.read_bytes()
-
     path = doc.get('storage_path') or ''
     if path:
-        client = _supabase_storage_client()
-        return client.storage.from_(BUCKET).download(path)
-    raise FileNotFoundError('Không tải được file trình chiếu')
+        return _supabase_storage_client().storage.from_(BUCKET).download(path)
+    raise FileNotFoundError('Không tải được file trình chiếu từ Supabase/Firebase')
 
 
 def iter_presentation_file(doc: dict):
-    """Stream file cho trình chiếu — tránh load cả file lớn vào RAM."""
+    """Stream file trình chiếu — Firebase hot → Supabase."""
     import urllib.error
     import urllib.request
+
+    fb_url = create_firebase_download_url(doc)
+    if fb_url:
+        try:
+            with urllib.request.urlopen(fb_url, timeout=180) as resp:
+                while True:
+                    chunk = resp.read(65536)
+                    if not chunk:
+                        break
+                    yield chunk
+            return
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            print(f'[meeting_docs] stream firebase url: {exc}')
 
     signed = create_signed_download_url(doc)
     if signed:
@@ -916,16 +980,6 @@ def iter_presentation_file(doc: dict):
             return
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             print(f'[meeting_docs] stream signed url: {exc}')
-
-    local_path = local_file_path(doc)
-    if local_path:
-        with open(local_path, 'rb') as fh:
-            while True:
-                chunk = fh.read(65536)
-                if not chunk:
-                    break
-                yield chunk
-        return
 
     data = read_file_bytes(None, doc)  # type: ignore[arg-type]
     if data:
@@ -990,10 +1044,9 @@ def resolve_direct_download_url(doc: dict) -> Optional[str]:
 
 def create_signed_download_url(doc: dict, expires_in: int = 3600) -> Optional[str]:
     """URL tải trực tiếp từ Supabase Storage — tránh proxy file lớn qua Flask."""
-    backend = doc.get('storage_backend') or ''
     path = doc.get('storage_path') or ''
     doc_id = str(doc.get('id') or path)
-    if backend != 'supabase' or not path:
+    if not path:
         return None
 
     now = time.time()
@@ -1069,9 +1122,9 @@ def get_download_link(
     return {
         'name': name,
         'mime': mime,
-        'direct': bool(signed),
-        'url': signed,
-        'source': 'supabase' if signed else 'proxy',
+        'direct': bool(signed or fb_url),
+        'url': fb_url or signed,
+        'source': 'firebase' if fb_url else ('supabase' if signed else 'supabase_proxy'),
         'inline': inline and is_pdf_document(name, mime),
     }
 
@@ -1096,6 +1149,8 @@ def presentation_download_url(
 
 
 def local_file_path(doc: dict) -> Optional[Path]:
+    if not _allow_local_storage():
+        return None
     if (doc.get('storage_backend') or '') != 'local':
         return None
     path = doc.get('storage_path') or ''
@@ -1206,11 +1261,11 @@ def _delete_storage_object(doc: dict) -> None:
     if not path:
         return
     try:
-        if backend == 'local':
+        if backend == 'local' and _allow_local_storage():
             full = LOCAL_ROOT / path
             if full.is_file():
                 full.unlink()
-        elif backend == 'supabase':
+        if backend == 'supabase' or not _allow_local_storage():
             from supabase import create_client
             client = create_client(os.getenv('SUPABASE_URL', ''), _storage_key())
             client.storage.from_(BUCKET).remove([path])

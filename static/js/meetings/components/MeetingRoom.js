@@ -362,7 +362,7 @@
           window.PhonghopDocCache.prefetchMeetingDocs(meetingId, docs).then(function (r) {
             if (r && r.ok > 0 && window.PhonghopServices && window.PhonghopServices.showDocToast) {
               window.PhonghopServices.showDocToast(
-                'Đã cache ' + r.ok + ' tài liệu trên máy này — mở lại sẽ nhanh hơn', 5000
+                'Đã cache ' + r.ok + ' tài liệu (IndexedDB) — mở lại tức thì, offline ngắn', 5000
               );
             }
           });
@@ -371,7 +371,6 @@
           return d.warm_status === 'pending' || d.warm_status === 'failed';
         });
         if (needWarm && window.PhonghopServices && window.PhonghopServices.warmMeetingDocuments &&
-            window.PhonghopPerms && window.PhonghopPerms.canCreateMeeting() &&
             !listEl.dataset.warmRequested) {
           listEl.dataset.warmRequested = '1';
           window.PhonghopServices.warmMeetingDocuments(meetingId)

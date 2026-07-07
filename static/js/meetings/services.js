@@ -576,18 +576,29 @@
       closeDocViewer();
       var modal = ensureDocViewerModal();
       modal.querySelector('#phDocViewerTitle').textContent = name;
-      modal.querySelector('#phDocViewerFrame').src = presetUrl;
+      var frame = modal.querySelector('#phDocViewerFrame');
+      frame.removeAttribute('src');
+      frame.src = presetUrl;
       modal.querySelector('#phDocViewerDownload').onclick = function () {
         openExternalDownload(presetUrl, name);
       };
       modal.hidden = false;
       return;
     }
+    closeDocViewer();
+    var loadingModal = ensureDocViewerModal();
+    loadingModal.querySelector('#phDocViewerTitle').textContent = name;
+    loadingModal.querySelector('#phDocViewerFrame').src = 'about:blank';
+    loadingModal.hidden = false;
+    showDocToast('Đang mở ' + name + '…');
     fetchDownloadLink(meetingId, docId, true).then(function (link) {
+      if (!link || !link.url) {
+        throw new Error('Không lấy được link xem PDF');
+      }
       openPdfInViewer(meetingId, docId, name, link.url);
     }).catch(function (e) {
-      var inlineUrl = absoluteDownloadUrl(meetingId, docId, 'inline');
-      openPdfInViewer(meetingId, docId, name, inlineUrl);
+      closeDocViewer();
+      alert(e.message || 'Không mở được PDF. Kiểm tra tài liệu trên Supabase Storage.');
     });
   }
 
@@ -666,8 +677,10 @@
       headers: headers(),
       body: JSON.stringify({ username: username() })
     });
-    var data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Không vào được phòng');
+    var data = await parseMeetingApiResponse(
+      res,
+      'Không vào được phòng họp (server trả HTML — kiểm tra Firebase trên Render)'
+    );
     return data.room;
   }
 
@@ -704,16 +717,14 @@
       headers: headers(),
       body: JSON.stringify({ username: username() })
     });
-    var data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Lỗi rời phòng');
+    var data = await parseMeetingApiResponse(res, 'Lỗi rời phòng');
     return data.result;
   }
 
   async function getRoomState(meetingId) {
     var url = API + '/' + encodeURIComponent(meetingId) + '/room?username=' + encodeURIComponent(username());
     var res = await fetch(url, { headers: headers() });
-    var data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Không tải phòng họp');
+    var data = await parseMeetingApiResponse(res, 'Không tải phòng họp');
     return data.room;
   }
 
