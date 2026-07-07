@@ -60,7 +60,73 @@ def _safe_name(name: str) -> str:
 
 
 def _storage_key() -> str:
-    return os.getenv('SUPABASE_SERVICE_KEY') or os.getenv('SUPABASE_KEY') or ''
+    """Secret key only — KHÔNG dùng Publishable (SUPABASE_KEY) cho Storage private."""
+    for env_name in ('SUPABASE_SERVICE_KEY', 'SUPABASE_SECRET_KEY'):
+        val = (os.getenv(env_name) or '').strip()
+        if val:
+            return val
+    return ''
+
+
+def _using_anon_storage_key() -> bool:
+    return not bool(
+        (os.getenv('SUPABASE_SERVICE_KEY') or '').strip()
+        or (os.getenv('SUPABASE_SECRET_KEY') or '').strip()
+    )
+
+
+def probe_storage_access() -> dict:
+    """Kiểm tra upload Storage (dùng trên Render để debug env)."""
+    import uuid as _uuid
+
+    if not _storage_key():
+        return {
+            'ok': False,
+            'bucket': BUCKET,
+            'error': 'Thiếu SUPABASE_SERVICE_KEY (sb_secret_...) trên server',
+        }
+    test_path = f'_healthcheck/{_uuid.uuid4().hex}.txt'
+    try:
+        _upload_bytes_supabase(b'probe', test_path, 'text/plain')
+        _supabase_storage_client().storage.from_(BUCKET).remove([test_path])
+        return {
+            'ok': True,
+            'bucket': BUCKET,
+            'supabase_url': (os.getenv('SUPABASE_URL') or '')[:40] + '...',
+            'key_type': 'secret' if _storage_key().startswith('sb_secret_') else 'other',
+        }
+    except Exception as exc:
+        return {
+            'ok': False,
+            'bucket': BUCKET,
+            'error': str(exc)[:500],
+        }
+
+
+def _storage_download_error_message(doc: dict, exc: Exception) -> str:
+    path = doc.get('storage_path') or '(trống)'
+    backend = doc.get('storage_backend') or '?'
+    name = doc.get('name') or doc.get('id') or 'tài liệu'
+    parts = [
+        f'Không đọc được «{name}» từ Supabase Storage (bucket {BUCKET}).',
+        f'Đường dẫn trong DB: {path}',
+        f'storage_backend: {backend}',
+        'Lưu ý: bảng meeting_documents (Table Editor) chỉ là metadata — file PDF phải có trong Storage → meeting-docs.',
+    ]
+    if _using_anon_storage_key() and (os.getenv('RENDER') or os.getenv('RENDER_SERVICE_ID')):
+        parts.append(
+            'Render thiếu SUPABASE_SERVICE_KEY (service role) — bucket private cần key này để tải file.'
+        )
+    elif backend == 'local':
+        parts.append(
+            'File này từng lưu local (máy dev) — upload lại trên production hoặc Kho tài liệu web.'
+        )
+    else:
+        parts.append('Upload lại file qua https://rriv-erp.onrender.com → Kho tài liệu / cuộc họp.')
+    err = str(exc).strip()
+    if err and len(err) < 200:
+        parts.append(f'Chi tiết: {err}')
+    return ' '.join(parts)
 
 
 def is_library_meeting(meeting: dict | None) -> bool:
@@ -810,22 +876,40 @@ def create_folder(
     return _row_to_doc(res.data[0])
 
 
-def _upload_bytes_supabase(data: bytes, path: str, mime: str) -> bool:
-    if not _storage_key():
-        print('[meeting_docs] supabase upload: thiếu SUPABASE_SERVICE_KEY hoặc SUPABASE_KEY')
-        return False
+def _upload_bytes_supabase(data: bytes, path: str, mime: str) -> None:
+    key = _storage_key()
+    if not key:
+        raise RuntimeError(
+            'Thiếu SUPABASE_SERVICE_KEY trên server (Supabase → API → Secret keys → default).'
+        )
+    if _using_anon_storage_key():
+        raise RuntimeError(
+            'Đang dùng Publishable key — upload Storage cần Secret key (sb_secret_...) '
+            'trong biến SUPABASE_SERVICE_KEY trên Render.'
+        )
     try:
         from supabase import create_client
-        client = create_client(os.getenv('SUPABASE_URL', ''), _storage_key())
+        client = create_client(os.getenv('SUPABASE_URL', ''), key)
         client.storage.from_(BUCKET).upload(
             path,
             data,
-            {'content-type': mime or 'application/octet-stream', 'upsert': 'true'},
+            file_options={
+                'content-type': mime or 'application/octet-stream',
+                'upsert': 'true',
+            },
         )
-        return True
     except Exception as exc:
-        print(f'[meeting_docs] supabase upload: {exc}')
-        return False
+        err = str(exc).strip()
+        hint = (
+            f'Không upload được lên Supabase Storage (bucket {BUCKET}). '
+            f'Kiểm tra: (1) Storage → tạo bucket «{BUCKET}» (private), '
+            '(2) Render → SUPABASE_SERVICE_KEY = Secret key sb_secret_..., '
+            '(3) Save và deploy lại.'
+        )
+        if err:
+            hint += f' Chi tiết: {err[:300]}'
+        print(f'[meeting_docs] supabase upload {path}: {exc}')
+        raise RuntimeError(hint) from exc
 
 
 def _upload_bytes_local(data: bytes, path: str) -> str:
@@ -858,17 +942,8 @@ def upload_file(
 
     doc_id = str(uuid.uuid4())
     storage_path = f'{meeting_id}/{doc_id}/{safe}'
-    if not _upload_bytes_supabase(data, storage_path, mime_type or 'application/octet-stream'):
-        if _allow_local_storage():
-            _upload_bytes_local(data, storage_path)
-            backend = 'local'
-        else:
-            raise RuntimeError(
-                'Không upload được lên Supabase Storage (nguồn chính thức). '
-                f'Kiểm tra bucket «{BUCKET}» và SUPABASE_SERVICE_KEY trên server.'
-            )
-    else:
-        backend = 'supabase'
+    _upload_bytes_supabase(data, storage_path, mime_type or 'application/octet-stream')
+    backend = 'supabase'
 
     row = {
         'id': doc_id,
@@ -917,10 +992,7 @@ def read_file_bytes(supabase, doc: dict) -> bytes:
             full = LOCAL_ROOT / path
             if full.is_file():
                 return full.read_bytes()
-        raise FileNotFoundError(
-            f'Không tìm thấy file trên Supabase Storage (bucket {BUCKET}). '
-            'Upload lại tài liệu — dữ liệu gốc phải nằm trên Supabase.'
-        ) from supa_exc
+        raise FileNotFoundError(_storage_download_error_message(doc, supa_exc)) from supa_exc
 
 
 def read_presentation_bytes(doc: dict) -> bytes:

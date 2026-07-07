@@ -551,6 +551,13 @@ def api_list_meeting_rooms():
 # ----- Kho tài liệu cuộc họp (Cold → Hot) -----
 
 
+@meetings_bp.route('/api/meetings/storage-probe', methods=['GET'])
+@require_meeting_manager
+def api_storage_probe():
+    """Debug: kiểm tra SUPABASE_SERVICE_KEY + bucket meeting-docs trên server."""
+    return jsonify({'success': True, 'probe': doc_svc.probe_storage_access()})
+
+
 @meetings_bp.route('/api/meetings/documents/library/browse', methods=['GET'])
 @require_auth
 def api_browse_library():
