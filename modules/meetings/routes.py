@@ -23,6 +23,7 @@ from modules.meetings.room_service import (
 from modules.meetings.sync.firebase_sync import FirebaseMeetingSync
 from modules.meetings import document_service as doc_svc
 from modules.meetings import presentation_service as pres_svc
+from modules.meetings import hand_service as hand_svc
 from modules.meetings import screen_share_service as share_svc
 from modules.meetings import slide_service as slide_svc
 from modules.meetings.warm_service import warm_meeting_documents
@@ -249,10 +250,72 @@ def api_room_chat(meeting_id):
     body = request.json or {}
     try:
         meeting = assert_can_access(supabase, meeting_id, ctx)
-        msg = post_chat(supabase, meeting, ctx, body.get('message') or '')
+        msg = post_chat(
+            supabase,
+            meeting,
+            ctx,
+            body.get('message') or '',
+            channel=body.get('channel') or 'all',
+            to_username=body.get('to_username') or body.get('toUsername'),
+        )
         return jsonify({'success': True, 'message': msg})
     except LookupError as exc:
         return jsonify({'success': False, 'message': str(exc)}), 404
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/room/hand/raise', methods=['POST'])
+@require_meeting_participant('meeting_id')
+def api_raise_hand(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    supabase = _supabase()
+    try:
+        meeting = assert_can_access(supabase, meeting_id, ctx)
+        result = hand_svc.raise_hand(supabase, meeting, ctx)
+        return jsonify({'success': True, 'hand': result})
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/room/hand/lower', methods=['POST'])
+@require_meeting_participant('meeting_id')
+def api_lower_hand(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    supabase = _supabase()
+    body = request.json or {}
+    try:
+        meeting = assert_can_access(supabase, meeting_id, ctx)
+        result = hand_svc.lower_hand(
+            supabase,
+            meeting,
+            ctx,
+            target_username=body.get('target_username') or body.get('targetUsername'),
+        )
+        return jsonify({'success': True, 'result': result})
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/room/hand/clear', methods=['POST'])
+@require_meeting_participant('meeting_id')
+def api_clear_hands(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    supabase = _supabase()
+    try:
+        meeting = assert_can_access(supabase, meeting_id, ctx)
+        result = hand_svc.clear_all_hands(supabase, meeting, ctx)
+        return jsonify({'success': True, 'result': result})
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
     except ValueError as exc:
         return jsonify({'success': False, 'message': str(exc)}), 400
 

@@ -728,15 +728,51 @@
     return data.room;
   }
 
-  async function sendRoomChat(meetingId, message) {
+  async function sendRoomChat(meetingId, payload) {
+    var body = typeof payload === 'string'
+      ? { username: username(), message: payload, channel: 'all' }
+      : Object.assign({ username: username() }, payload || {});
+    if (!body.message) throw new Error('Tin nhắn trống');
     var res = await fetch(API + '/' + encodeURIComponent(meetingId) + '/room/chat', {
       method: 'POST',
       headers: headers(),
-      body: JSON.stringify({ username: username(), message: message })
+      body: JSON.stringify(body)
     });
     var data = await res.json();
     if (!res.ok) throw new Error(data.message || 'Không gửi được tin nhắn');
     return data.message;
+  }
+
+  async function raiseHand(meetingId) {
+    var res = await fetch(API + '/' + encodeURIComponent(meetingId) + '/room/hand/raise', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ username: username() })
+    });
+    var data = await parseMeetingApiResponse(res, 'Không giơ tay được');
+    return data.hand;
+  }
+
+  async function lowerHand(meetingId, targetUsername) {
+    var body = { username: username() };
+    if (targetUsername) body.target_username = targetUsername;
+    var res = await fetch(API + '/' + encodeURIComponent(meetingId) + '/room/hand/lower', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(body)
+    });
+    var data = await parseMeetingApiResponse(res, 'Không hạ tay được');
+    return data.result;
+  }
+
+  async function clearRaisedHands(meetingId) {
+    var res = await fetch(API + '/' + encodeURIComponent(meetingId) + '/room/hand/clear', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ username: username() })
+    });
+    var data = await parseMeetingApiResponse(res, 'Không hạ tất cả tay được');
+    return data.result;
   }
 
   function localDayMs(isoOrDate) {
@@ -1119,6 +1155,9 @@
     leaveRoom: leaveRoom,
     getRoomState: getRoomState,
     sendRoomChat: sendRoomChat,
+    raiseHand: raiseHand,
+    lowerHand: lowerHand,
+    clearRaisedHands: clearRaisedHands,
     canJoinMeeting: canJoinMeeting,
     isMeetingPastByDay: isMeetingPastByDay,
     loadEmployees: loadEmployees,

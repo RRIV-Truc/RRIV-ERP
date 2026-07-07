@@ -200,12 +200,21 @@ def leave_room(supabase, meeting: dict, ctx: UserContext) -> dict:
     now = _now_iso()
     key = _user_key(ctx)
     ref = _rtdb_ref(f'meetings/{room_id}/presence/{key}')
-    ref.update({'online': False, 'leftAt': now, 'lastSeen': now})
+    ref.update({'online': False, 'leftAt': now, 'lastSeen': now, 'handRaised': False})
     _rtdb_ref(f'meetings/{room_id}/participants/{key}').update({'leftAt': now, 'lastSeen': now})
+    _rtdb_ref(f'meetings/{room_id}/raisedHands/{key}').delete()
     return {'left': True, 'at': now}
 
 
-def post_chat(supabase, meeting: dict, ctx: UserContext, message: str) -> dict:
+def post_chat(
+    supabase,
+    meeting: dict,
+    ctx: UserContext,
+    message: str,
+    *,
+    channel: str = 'all',
+    to_username: Optional[str] = None,
+) -> dict:
     room_id = meeting.get('firebase_room_id')
     if not room_id:
         raise ValueError('Cuộc họp chưa có phòng online')
@@ -214,6 +223,18 @@ def post_chat(supabase, meeting: dict, ctx: UserContext, message: str) -> dict:
         raise ValueError('Tin nhắn trống')
     if len(text) > 4000:
         raise ValueError('Tin nhắn quá dài')
+
+    ch = _normalize_chat_channel(channel)
+    my_user = (ctx.username or '').strip().lower()
+    to_user = (to_username or '').strip().lower() if to_username else ''
+
+    if ch == 'private':
+        if not to_user:
+            raise ValueError('Cần chọn người nhận khi chat riêng')
+        if to_user == my_user:
+            raise ValueError('Không thể chat riêng với chính mình')
+    elif ch == 'hosts':
+        to_user = ''
 
     now = _now_iso()
     msg_id = uuid.uuid4().hex[:16]
@@ -224,10 +245,73 @@ def post_chat(supabase, meeting: dict, ctx: UserContext, message: str) -> dict:
         'employeeId': ctx.employee_id,
         'displayName': _display_name(supabase, ctx),
         'at': now,
+        'channel': ch,
     }
+    if ch == 'private':
+        payload['toUsername'] = to_user
+        payload['toDisplayName'] = _display_name_for_username(
+            supabase, meeting.get('id'), to_user
+        )
     _rtdb_ref(f'meetings/{room_id}/chat/{msg_id}').set(payload)
     _rtdb_ref(f'meetings/{room_id}/meta').update({'lastActivity': now})
     return payload
+
+
+def _normalize_chat_channel(channel: str) -> str:
+    c = (channel or 'all').strip().lower()
+    if c in ('all', 'public', 'everyone', 'room', 'group'):
+        return 'all'
+    if c in ('hosts', 'host', 'moderators', 'host_secretary', 'staff'):
+        return 'hosts'
+    if c in ('private', 'dm', 'direct', 'personal'):
+        return 'private'
+    return 'all'
+
+
+def _display_name_for_username(supabase, meeting_id: Optional[str], username: str) -> str:
+    username = (username or '').strip().lower()
+    if not username:
+        return ''
+    if meeting_id:
+        try:
+            pr = supabase.table('meeting_participants').select(
+                'username, employee_id, is_external, external_name'
+            ).eq('meeting_id', meeting_id).execute()
+            emp_ids = []
+            for p in pr.data or []:
+                if (p.get('username') or '').strip().lower() == username:
+                    if p.get('is_external'):
+                        return p.get('external_name') or username
+                    if p.get('employee_id'):
+                        emp_ids.append(p['employee_id'])
+            if emp_ids:
+                er = supabase.table('employee').select('full_name').in_('id', emp_ids).limit(1).execute()
+                if er.data and er.data[0].get('full_name'):
+                    return er.data[0]['full_name']
+        except Exception:
+            pass
+    return username
+
+
+def _can_view_chat_message(msg: dict, ctx: UserContext, roles: dict) -> bool:
+    channel = (msg.get('channel') or 'all').lower()
+    my_user = (ctx.username or '').strip().lower()
+    if channel in ('', 'all'):
+        return True
+    if channel == 'hosts':
+        if roles.get('can_approve_share') or roles.get('can_moderate'):
+            return True
+        from_user = (msg.get('username') or '').strip().lower()
+        return from_user == my_user
+    if channel == 'private':
+        from_user = (msg.get('username') or '').strip().lower()
+        to_user = (msg.get('toUsername') or '').strip().lower()
+        return my_user in (from_user, to_user)
+    return True
+
+
+def _filter_chat_for_viewer(chat: list, ctx: UserContext, roles: dict) -> list:
+    return [m for m in chat if _can_view_chat_message(m, ctx, roles)]
 
 
 def _parse_chat(chat: Any) -> list:
@@ -394,25 +478,34 @@ def get_room_state(supabase, meeting: dict, ctx: UserContext) -> dict:
 
     snap = _rtdb_ref(f'meetings/{room_id}').get() or {}
     meta = snap.get('meta') or {}
-    chat = _parse_chat(snap.get('chat'))
     presence_raw = snap.get('presence')
     presence = _parse_presence(presence_raw, online_only=True)
     meeting_id = meeting.get('id')
     attendees = _build_attendee_roster(supabase, meeting_id, presence_raw)
     online_count = sum(1 for a in attendees if a.get('online'))
+
+    from modules.meetings.hand_service import parse_raised_hands_for_client
     from modules.meetings.meeting_roles import resolve_session_roles
     from modules.meetings.presentation_service import parse_presentation_for_client
     from modules.meetings.screen_share_service import (
         parse_screen_share_for_client,
         parse_screen_share_requests_for_client,
     )
+
     roles = resolve_session_roles(supabase, meeting_id, ctx)
+    chat_raw = _parse_chat(snap.get('chat'))
+    chat = _filter_chat_for_viewer(chat_raw, ctx, roles)
     presentation = parse_presentation_for_client(snap.get('presentation'))
     screen_share = parse_screen_share_for_client(snap.get('screenShare'))
     screen_share_requests = parse_screen_share_requests_for_client(
         snap.get('screenShareRequests'),
         ctx,
         is_host=roles.get('can_approve_share', False),
+    )
+    raised_hands = parse_raised_hands_for_client(
+        snap.get('raisedHands'),
+        ctx,
+        can_moderate=roles.get('can_moderate', False),
     )
 
     return {
@@ -435,6 +528,7 @@ def get_room_state(supabase, meeting: dict, ctx: UserContext) -> dict:
         'presentation': presentation,
         'screen_share': screen_share,
         'screen_share_requests': screen_share_requests,
+        'raised_hands': raised_hands,
     }
 
 

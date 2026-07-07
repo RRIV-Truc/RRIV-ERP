@@ -767,6 +767,65 @@ body {
   border-color: rgba(14, 165, 233, 0.35);
 }
 
+.ph-chat-target-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ph-muted);
+  margin-bottom: 8px;
+}
+
+.ph-chat-target-select {
+  width: 100%;
+  font-size: 13px;
+  padding: 6px 8px;
+}
+
+.ph-room-msg-channel {
+  color: var(--ph-accent);
+  font-size: 10px;
+}
+
+.ph-raised-hands-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ph-hand-btn.is-raised {
+  border-color: #f59e0b;
+  color: #fbbf24;
+}
+
+.ph-raised-hands-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ph-raised-hand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--ph-border);
+  font-size: 13px;
+}
+
+.ph-raised-hand-name { flex: 1; min-width: 0; }
+
+.ph-presence-hand {
+  margin-left: 4px;
+  font-size: 12px;
+}
+
+.ph-raised-hands-wait {
+  margin: 0;
+  font-size: 12px;
+}
+
 .ph-room-empty, .ph-room-empty-inline {
   color: var(--ph-muted);
   font-size: 13px;

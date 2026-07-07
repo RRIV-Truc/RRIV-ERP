@@ -85,6 +85,9 @@
     if (window.MeetingScreenShare) {
       window.MeetingScreenShare.cleanup();
     }
+    if (window.MeetingChat) {
+      window.MeetingChat.cleanup();
+    }
 
     var leavingId = _meetingId;
     var hadJoined = _joined;
@@ -164,22 +167,13 @@
     }
   }
 
-  function buildChatHtml(chat) {
-    if (!chat.length) {
-      return '<div class="ph-room-empty">Chưa có tin nhắn. Chào mọi người!</div>';
-    }
-    var uname = window.PhonghopServices.username && window.PhonghopServices.username();
-    return chat.map(function (m) {
-      var mine = m.username === uname;
-      return '<div class="ph-room-msg' + (mine ? ' mine' : '') + '">' +
-        '<div class="ph-room-msg-head"><strong>' + esc(m.displayName || m.username) + '</strong>' +
-        '<span>' + esc(fmtTime(m.at)) + '</span></div>' +
-        '<div class="ph-room-msg-text">' + esc(m.text) + '</div></div>';
-    }).join('');
-  }
-
-  function buildPresenceHtml(attendees) {
+  function buildPresenceHtml(attendees, raisedHands) {
     var list = attendees || [];
+    var handUsers = {};
+    (raisedHands && raisedHands.hands || []).forEach(function (h) {
+      var u = (h.username || '').trim().toLowerCase();
+      if (u) handUsers[u] = true;
+    });
     if (!list.length) {
       return '<li class="ph-room-empty-inline">Chưa có người được mời</li>';
     }
@@ -187,14 +181,81 @@
       var online = !!p.online;
       var dotClass = online ? 'ph-presence-dot is-online' : 'ph-presence-dot is-offline';
       var statusText = online ? 'Online' : 'Offline';
+      var u = (p.username || '').trim().toLowerCase();
+      var handIcon = handUsers[u] ? ' <span class="ph-presence-hand" title="Đang giơ tay">✋</span>' : '';
       var roleTag = p.role_label && p.participant_role !== 'participant'
         ? ' <span class="ph-presence-role">' + esc(p.role_label) + '</span>'
         : '';
       return '<li class="ph-presence-row' + (online ? ' is-online' : ' is-offline') + '">' +
         '<span class="' + dotClass + '" title="' + esc(statusText) + '"></span>' +
-        '<span class="ph-presence-name">' + esc(p.displayName || p.username) + roleTag + '</span>' +
+        '<span class="ph-presence-name">' + esc(p.displayName || p.username) + roleTag + handIcon + '</span>' +
         '<span class="ph-presence-status">' + esc(statusText) + '</span></li>';
     }).join('');
+  }
+
+  function buildRaisedHandsHtml(room) {
+    var rh = room.raised_hands || {};
+    var hands = rh.hands || [];
+    var canMod = !!(room.can_moderate);
+    var mine = rh.mine;
+    var btnLabel = mine ? '✋ Hạ tay' : '✋ Giơ tay xin phát biểu';
+    var btnClass = mine ? 'ph-btn ph-btn-ghost ph-hand-btn is-raised' : 'ph-btn ph-btn-primary ph-hand-btn';
+
+    var listHtml = '';
+    if (canMod && hands.length) {
+      listHtml = '<ul class="ph-raised-hands-list">' + hands.map(function (h) {
+        return '<li class="ph-raised-hand-row">' +
+          '<span class="ph-raised-hand-name">✋ ' + esc(h.display_name || h.username) + '</span>' +
+          '<button type="button" class="ph-btn ph-btn-ghost ph-hand-lower-one" data-username="' +
+            esc(h.username || '') + '">Hạ tay</button>' +
+        '</li>';
+      }).join('') + '</ul>' +
+        '<button type="button" class="ph-btn ph-btn-ghost ph-hand-clear-all">Hạ tất cả (' + hands.length + ')</button>';
+    } else if (hands.length) {
+      listHtml = '<p class="ph-detail-muted ph-raised-hands-wait">' + hands.length +
+        ' người đang giơ tay — chờ Chủ trì/Thư ký gọi phát biểu.</p>';
+    } else {
+      listHtml = '<p class="ph-detail-muted ph-raised-hands-wait">Chưa ai giơ tay.</p>';
+    }
+
+    return (
+      '<div class="ph-raised-hands-block">' +
+        '<button type="button" class="' + btnClass + '" id="phRaiseHandToggle">' + btnLabel + '</button>' +
+        listHtml +
+      '</div>'
+    );
+  }
+
+  function bindRaisedHandDelegation() {
+    if (!_host || _host.dataset.handBound) return;
+    _host.dataset.handBound = '1';
+    _host.addEventListener('click', function (e) {
+      if (!_meetingId) return;
+      var toggle = e.target.closest('#phRaiseHandToggle');
+      if (toggle) {
+        var rh = (_lastRoom && _lastRoom.raised_hands) || {};
+        var p = rh.mine
+          ? window.PhonghopServices.lowerHand(_meetingId)
+          : window.PhonghopServices.raiseHand(_meetingId);
+        p.then(function () { return refresh(); }).catch(function (err) { alert(err.message); });
+        return;
+      }
+      var lowerBtn = e.target.closest('.ph-hand-lower-one');
+      if (lowerBtn) {
+        var target = lowerBtn.getAttribute('data-username');
+        window.PhonghopServices.lowerHand(_meetingId, target)
+          .then(function () { return refresh(); })
+          .catch(function (err) { alert(err.message); });
+        return;
+      }
+      var clearBtn = e.target.closest('.ph-hand-clear-all');
+      if (clearBtn) {
+        if (!confirm('Hạ tay tất cả đại biểu?')) return;
+        window.PhonghopServices.clearRaisedHands(_meetingId)
+          .then(function () { return refresh(); })
+          .catch(function (err) { alert(err.message); });
+      }
+    });
   }
 
   function getAttendeesFromRoom(room) {
@@ -524,7 +585,13 @@
           '<aside class="ph-session-aside">' +
             '<div class="ph-session-aside-block">' +
               '<h3>Tham dự phiên (<span id="phRoomPresenceCount">' + (room.presence_count || 0) + '</span> online)</h3>' +
-              '<ul class="ph-room-presence" id="phRoomPresence">' + buildPresenceHtml(room.presence || []) + '</ul>' +
+              '<ul class="ph-room-presence" id="phRoomPresence">' +
+                buildPresenceHtml(room.attendees || room.presence || [], room.raised_hands) +
+              '</ul>' +
+            '</div>' +
+            '<div class="ph-session-aside-block">' +
+              '<h3>Giơ tay xin phát biểu</h3>' +
+              '<div id="phRaisedHandsHost">' + buildRaisedHandsHtml(room) + '</div>' +
             '</div>' +
             '<div class="ph-session-aside-block ph-session-aside-hint">' +
               '<p class="ph-detail-muted">Chủ trì hoặc đại biểu (khi được duyệt) chia sẻ màn hình — mọi người xem đồng bộ trong phiên.</p>' +
@@ -537,40 +604,7 @@
     bindLeaveButtons();
     bindEndMeetingButton();
     bindAgendaSteps(room);
-  }
-
-  function ensureChatShell() {
-    if (!_chatHost) return;
-    if (_chatHost.querySelector('#phRoomChatList')) return;
-
-    _chatHost.innerHTML =
-      '<div class="ph-ctx-chat-inner">' +
-        '<div class="ph-room-chat ph-ctx-chat-list" id="phRoomChatList"></div>' +
-        '<footer class="ph-room-footer ph-ctx-chat-footer">' +
-          '<input type="text" id="phRoomChatInput" placeholder="Nhập tin nhắn…" maxlength="4000" autocomplete="off">' +
-          '<button type="button" class="ph-btn ph-btn-primary" id="phRoomSend">Gửi</button>' +
-        '</footer>' +
-      '</div>';
-
-    var sendBtn = _chatHost.querySelector('#phRoomSend');
-    var input = _chatHost.querySelector('#phRoomChatInput');
-    function sendChat() {
-      if (!input || !_meetingId) return;
-      var text = input.value.trim();
-      if (!text) return;
-      input.value = '';
-      window.PhonghopServices.sendRoomChat(_meetingId, text).then(function () {
-        return refresh();
-      }).catch(function (e) {
-        alert(e.message || 'Không gửi được tin nhắn');
-      });
-    }
-    if (sendBtn) sendBtn.addEventListener('click', sendChat);
-    if (input) {
-      input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); sendChat(); }
-      });
-    }
+    bindRaisedHandDelegation();
   }
 
   function updateRoomParts(room) {
@@ -593,14 +627,18 @@
     var presCount = _host.querySelector('#phRoomPresenceCount');
     var presList = _host.querySelector('#phRoomPresence');
     if (presCount) presCount.textContent = String(onlineCount);
-    if (presList) presList.innerHTML = buildPresenceHtml(attendees);
+    if (presList) presList.innerHTML = buildPresenceHtml(attendees, room.raised_hands);
 
-    ensureChatShell();
-    var chatList = _chatHost && _chatHost.querySelector('#phRoomChatList');
-    if (chatList) {
-      var atBottom = chatList.scrollHeight - chatList.scrollTop - chatList.clientHeight < 48;
-      chatList.innerHTML = buildChatHtml(room.chat || []);
-      if (atBottom) chatList.scrollTop = chatList.scrollHeight;
+    var handsHost = _host.querySelector('#phRaisedHandsHost');
+    if (handsHost) {
+      handsHost.innerHTML = buildRaisedHandsHtml(room);
+    }
+
+    if (window.MeetingChat && _chatHost && _meetingId) {
+      if (!_chatHost.querySelector('#phRoomChatList')) {
+        window.MeetingChat.mount(_chatHost, _meetingId);
+      }
+      window.MeetingChat.syncFromRoom(room);
     }
 
     if (window.MeetingScreenShare && _meetingId) {
