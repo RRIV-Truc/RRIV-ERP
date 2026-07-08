@@ -739,14 +739,14 @@ const TabFieldHarvest = (function () {
   }
 
   function _workerLabel(id) {
-    var w = workers.find(function (x) { return x.id === id; });
+    var w = workers.find(function (x) { return _sameWorkerId(x.id, id); });
     if (!w) return id;
     return _workerGroupLabel(id) + _workerName(w);
   }
 
   function _workerGroupCode(workerId) {
     if (!workerId) return '';
-    var w = workers.find(function (x) { return x.id === workerId; });
+    var w = workers.find(function (x) { return _sameWorkerId(x.id, workerId); });
     if (w && (w.work_group_code || w.workGroupCode)) return w.work_group_code || w.workGroupCode;
     return workerGroupMap[String(workerId)] || '';
   }
@@ -1788,6 +1788,16 @@ const TabFieldHarvest = (function () {
     return Object.assign(_blankAssignConfig(), { lot_code: _sectionLotCode(section) });
   }
 
+  /** Công nhân cạo được phân công cho phần cạo (theo phiên/ngày hiện tại). */
+  function _assignedTappersForSectionId(sectionId) {
+    var sec = _findSectionById(sectionId) || _resolveSectionForUi(sectionId);
+    if (!sec) return [];
+    var cfg = _getAssignDraft(sectionId) || _configForSection(sec);
+    return _stagePeople(cfg.slots || [], 'tapper_id', 'tapper_pct').filter(function (p) {
+      return p.worker_id;
+    });
+  }
+
   /** Cấu hình hiển thị — ưu tiên draft/lưu DB; DOM chỉ ghi đè khi người dùng đã chọn lô. */
   function _resolveAssignCfg(section) {
     var cfg = _getAssignDraft(section.id) || _configForSection(section);
@@ -2761,7 +2771,7 @@ const TabFieldHarvest = (function () {
   }
 
   function _getWeighWorkers(sectionId) {
-    var section = sections.find(function (s) { return s.id === sectionId; });
+    var section = sections.find(function (s) { return _sameSectionId(s.id, sectionId); });
     if (!section) return [];
     var cfg = _getAssignDraft(sectionId) || _configForSection(section);
     return _stagePeople(cfg.slots, 'tapper_id', 'tapper_pct').map(function (p) {
@@ -2867,7 +2877,8 @@ const TabFieldHarvest = (function () {
     var out = { workers: {} };
     workers.forEach(function (w) {
       var rec = weighings.find(function (r) {
-        return r.tapping_section_id === sectionId && r.worker_id === w.worker_id;
+        return _sameSectionId(r.tapping_section_id, sectionId) &&
+          _sameWorkerId(r.worker_id, w.worker_id);
       });
       out.workers[w.worker_id] = _workerWeighFromRecord(rec);
     });
@@ -3182,7 +3193,8 @@ const TabFieldHarvest = (function () {
 
   function _quickRowFromWorker(sectionId, sectionCode, worker) {
     var rec = weighings.find(function (r) {
-      return r.tapping_section_id === sectionId && r.worker_id === worker.worker_id;
+      return _sameSectionId(r.tapping_section_id, sectionId) &&
+        _sameWorkerId(r.worker_id, worker.worker_id);
     });
     var row = {
       section_id: sectionId,
@@ -4285,8 +4297,8 @@ const TabFieldHarvest = (function () {
     var usedFallback = false;
 
     for (wi = 0; wi < workers.length; wi++) {
-      var wid = workers[wi].worker_id;
-      var wdata = draft.workers[wid];
+      var wid = String(workers[wi].worker_id || '').trim();
+      var wdata = draft.workers[workers[wi].worker_id] || draft.workers[wid];
       if (!wdata) continue;
       var agg = _aggregateWorkerBins(wdata);
       if (agg.total_fresh_kg <= 0) continue;
@@ -4298,7 +4310,7 @@ const TabFieldHarvest = (function () {
       sectionCoagDry += agg.coag_dry_kg;
 
       var prevWeigh = weighings.find(function (w) {
-        return w.tapping_section_id === sectionId && String(w.worker_id) === String(wid);
+        return _sameSectionId(w.tapping_section_id, sectionId) && _sameWorkerId(w.worker_id, wid);
       });
       var weighAudit = _auditUserSnapshot(prevWeigh ? _parseMeta(prevWeigh.metadata) : null);
 
@@ -4335,6 +4347,19 @@ const TabFieldHarvest = (function () {
           _applyWeighingLocal(sectionId, wid, tapPayload);
           pendingPayloads.push({ workerId: wid, payload: tapPayload });
         }
+      }
+    }
+
+    var assignedTappers = _assignedTappersForSectionId(sectionId);
+    if (assignedTappers.length === 1) {
+      var correctTapperId = String(assignedTappers[0].worker_id).trim();
+      for (wi = weighings.length - 1; wi >= 0; wi--) {
+        var ow = weighings[wi];
+        if (!_sameSectionId(ow.tapping_section_id, sectionId)) continue;
+        if (String(ow.record_date || '').slice(0, 10) !== date) continue;
+        if (!_isTapperWeighing(ow)) continue;
+        if (_sameWorkerId(ow.worker_id, correctTapperId)) continue;
+        weighings.splice(wi, 1);
       }
     }
 
@@ -4782,26 +4807,62 @@ const TabFieldHarvest = (function () {
 
   function _buildWorkerSummaryData() {
     var map = {};
-    _weighingsForAggregatedSummary().forEach(function (w) {
-      var wid = String(w.worker_id || '').trim();
-      if (!wid) return;
-      var sec = _sectionForSummaryWeighing(w.tapping_section_id);
-      if (!map[wid]) {
-        var wr = workers.find(function (x) { return _sameWorkerId(x.id, wid); });
+    var bySection = {};
+    _weighingsForSummary().filter(_isTapperWeighing).forEach(function (w) {
+      var sid = String(w.tapping_section_id || '');
+      if (!sid) return;
+      if (!bySection[sid]) bySection[sid] = [];
+      bySection[sid].push(w);
+    });
+
+    function _ensureWorkerRow(creditId, sec) {
+      if (!map[creditId]) {
+        var wr = workers.find(function (x) { return _sameWorkerId(x.id, creditId); });
         var teamId = wr ? String(wr.team_id || wr.team || wr.production_team_id || '') :
           (sec ? String(sec.team_id || sec.squad || selectedTeam || '') : '');
-        map[wid] = {
-          key: wid,
+        map[creditId] = {
+          key: creditId,
           team_id: teamId,
           team_name: _teamNameById(teamId),
           section_code: '',
           session: '',
-          worker_id: wid,
-          worker_name: wr ? _workerName(wr) : _workerLabel(wid),
+          worker_id: creditId,
+          worker_name: wr ? _workerName(wr) : _workerLabel(creditId),
           totals: _emptyWeighTotals()
         };
       }
-      _mergeWeighTotals(map[wid].totals, _totalsFromWeighingForSummary(w, sec));
+      return map[creditId];
+    }
+
+    Object.keys(bySection).forEach(function (sid) {
+      var sec = _sectionForSummaryWeighing(sid);
+      var rows = bySection[sid];
+      var tappers = _assignedTappersForSectionId(sid);
+
+      if (tappers.length === 1) {
+        // Solo: toàn bộ sản lượng phần cạo → đúng công nhân cạo trong phân công
+        var creditId = String(tappers[0].worker_id).trim();
+        var row = _ensureWorkerRow(creditId, sec);
+        rows.forEach(function (w) {
+          _mergeWeighTotals(row.totals, _totalsFromWeighingForSummary(w, sec));
+        });
+        return;
+      }
+
+      if (tappers.length > 1) {
+        rows.forEach(function (w) {
+          var wid = String(w.worker_id || '').trim();
+          if (!tappers.some(function (t) { return _sameWorkerId(t.worker_id, wid); })) return;
+          _mergeWeighTotals(_ensureWorkerRow(wid, sec).totals, _totalsFromWeighingForSummary(w, sec));
+        });
+        return;
+      }
+
+      rows.forEach(function (w) {
+        var wid = String(w.worker_id || '').trim();
+        if (!wid) return;
+        _mergeWeighTotals(_ensureWorkerRow(wid, sec).totals, _totalsFromWeighingForSummary(w, sec));
+      });
     });
     return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) {
       var tc = a.team_name.localeCompare(b.team_name, undefined, { numeric: true });
@@ -5000,7 +5061,7 @@ const TabFieldHarvest = (function () {
       var sessLabel = summarySession === '__all__' ? 'Tất cả phiên' : ('Phiên ' + summarySession);
       var offlineNote = (summaryPeriod !== 'day' && !_isOnline()) ? ' · Cần mạng để tải kỳ dài' : '';
       hint.textContent = summaryRangeLabel + ' · ' + sessLabel + ' · ' +
-          (rows.length ? rows.length + ' dòng' : 'Chưa có dữ liệu cân') + offlineNote + ' · fh66';
+          (rows.length ? rows.length + ' dòng' : 'Chưa có dữ liệu cân') + offlineNote + ' · fh67';
     }
 
     head.innerHTML = _summaryHeadHtml(mode, showTeam);

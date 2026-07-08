@@ -24,7 +24,7 @@ var SHELL = [
   '/static/js/sanxuat/services/TscDrcConverter.js',
   '/static/js/sanxuat/services/FieldHarvestOffline.js',
   '/static/js/sanxuat/tabs/delivery.js?v=40',
-  '/static/js/sanxuat/tabs/field-harvest.js?v=66',
+  '/static/js/sanxuat/tabs/field-harvest.js?v=67',
   '/static/manifest.json',
   '/static/icon-192.png',
   '/static/icon-512.png'
