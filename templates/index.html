@@ -507,6 +507,44 @@ function navigateToApp(appName) {
     window.location.href = route;
 }
 
+(function setupAppPrefetch() {
+    var prefetched = {};
+    var ASSETS = {
+        nhansu: [
+            '/static/css/app-nhansu.css',
+            '/static/js/nhansu/lazy-loader.js?v=1',
+            '/static/js/nhansu/main.js?v=40'
+        ],
+        phonghop: [
+            '/static/css/app-phonghop.css?v=67',
+            '/static/js/meetings/lazy-loader.js?v=2',
+            '/static/js/meetings/main.js?v=55'
+        ],
+        sanxuat: [
+            '/static/css/app-sanxuat.css',
+            '/static/js/sanxuat/sanxuat-app.js?v=2'
+        ]
+    };
+    function prefetchApp(appName) {
+        if (prefetched[appName]) return;
+        prefetched[appName] = true;
+        (ASSETS[appName] || []).forEach(function (href) {
+            var link = document.createElement('link');
+            link.rel = 'prefetch';
+            link.href = href;
+            document.head.appendChild(link);
+        });
+    }
+    document.querySelectorAll('[data-app]').forEach(function (card) {
+        card.addEventListener('mouseenter', function () {
+            prefetchApp(card.getAttribute('data-app'));
+        }, { once: true });
+        card.addEventListener('touchstart', function () {
+            prefetchApp(card.getAttribute('data-app'));
+        }, { once: true, passive: true });
+    });
+})();
+
     </script>
 </body>
 </html>

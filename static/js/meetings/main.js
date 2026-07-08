@@ -17,6 +17,23 @@
     return Lazy.ensure(bundles);
   }
 
+  function ensureOrgDirectory() {
+    if (NS.state._orgLoaded && NS.state.orgDirectory && NS.state.orgDirectory.personnel) {
+      return Promise.resolve(NS.state.orgDirectory);
+    }
+    if (!db) db = ErpDb.firestore();
+    return ensureModules('org').then(function () {
+      return SVC.loadOrgDirectory(db).then(function (org) {
+        NS.state.orgDirectory = org;
+        NS.state._orgLoaded = true;
+        NS.state.employees = org.personnel.map(function (p) {
+          return SVC.normalizeEmployee(p, p.id);
+        }).filter(Boolean);
+        return org;
+      });
+    });
+  }
+
   function moduleLoadError(e) {
     alert((e && e.message) || 'Không tải được module. Thử Ctrl+F5 hoặc kiểm tra mạng.');
   }
@@ -101,6 +118,8 @@
 
   function openDetail(meetingId) {
     ensureModules('forms').then(function () {
+      return ensureOrgDirectory();
+    }).then(function () {
       if (!window.MeetingDetail) throw new Error('Module chi tiết chưa sẵn sàng.');
       window.MeetingDetail.open({
         meetingId: meetingId,
@@ -108,10 +127,7 @@
         orgData: NS.state.orgDirectory,
         currentUser: NS.state.currentUser,
         reloadOrg: function () {
-          return SVC.loadOrgDirectory(db).then(function (org) {
-            NS.state.orgDirectory = org;
-            return org;
-          });
+          return ensureOrgDirectory();
         },
         onUpdated: function () { refresh(); }
       });
@@ -120,6 +136,8 @@
 
   function openEdit(meeting) {
     ensureModules('forms').then(function () {
+      return ensureOrgDirectory();
+    }).then(function () {
       if (!window.MeetingForm || !window.MeetingForm.open) {
         throw new Error('Module form chưa sẵn sàng.');
       }
@@ -134,11 +152,7 @@
         rooms: NS.state.rooms,
         orgData: NS.state.orgDirectory,
         reloadOrg: function () {
-          if (!db) return Promise.resolve(NS.state.orgDirectory || { personnel: [], departments: [], teams: [] });
-          return SVC.loadOrgDirectory(db).then(function (org) {
-            NS.state.orgDirectory = org;
-            return org;
-          });
+          return ensureOrgDirectory();
         },
         onSaved: function () { refresh(); }
       });
@@ -291,13 +305,15 @@
     NS.state.loading = true;
     if (!NS.state.meetings.length) showListsLoading();
     try {
-      NS.state.meetings = (await SVC.listMeetings(80)).map(normalizeMeeting);
-      try {
-        NS.state.rooms = await SVC.listRooms();
-      } catch (roomErr) {
-        console.warn('[phonghop] listRooms', roomErr);
-        NS.state.rooms = NS.state.rooms || [];
-      }
+      var results = await Promise.all([
+        SVC.listMeetings(80),
+        SVC.listRooms().catch(function (roomErr) {
+          console.warn('[phonghop] listRooms', roomErr);
+          return NS.state.rooms || [];
+        })
+      ]);
+      NS.state.meetings = results[0].map(normalizeMeeting);
+      NS.state.rooms = results[1];
       renderList();
     } catch (e) {
       console.error('[phonghop] refresh', e);
@@ -527,6 +543,8 @@
       return;
     }
     return ensureModules('forms').then(function () {
+      return ensureOrgDirectory();
+    }).then(function () {
       if (!window.MeetingForm || !window.MeetingForm.open) {
         throw new Error('Module form chưa sẵn sàng.');
       }
@@ -534,10 +552,7 @@
         rooms: NS.state.rooms,
         orgData: NS.state.orgDirectory,
         reloadOrg: function () {
-          return SVC.loadOrgDirectory(db).then(function (org) {
-            NS.state.orgDirectory = org;
-            return org;
-          });
+          return ensureOrgDirectory();
         },
         onSaved: function () { refresh(); }
       });
@@ -629,43 +644,51 @@
     if (typeof RrivAppBar !== 'undefined' && RrivAppBar.refresh) {
       RrivAppBar.refresh(NS.state.currentUser);
     }
+  }
 
-    if (window.PhonghopLazy && window.PhonghopLazy.preloadAll) {
-      window.PhonghopLazy.preloadAll();
-    }
+  function enrichInBackground(authUser) {
+    var profileP = (authUser.username && typeof Auth.loadUserProfile === 'function')
+      ? Auth.loadUserProfile(authUser.username).catch(function () { /* ignore */ })
+      : Promise.resolve();
+    var rolesP = (typeof Permissions !== 'undefined' && Permissions.loadRoleDefinitions)
+      ? Permissions.loadRoleDefinitions(db).catch(function () { /* ignore */ })
+      : Promise.resolve();
+
+    Promise.all([profileP, rolesP]).then(function () {
+      var profile = Auth.getProfile?.() || authUser;
+      NS.state.currentUser = Object.assign({}, authUser, profile);
+      localStorage.setItem('currentUser', JSON.stringify(NS.state.currentUser));
+      if (typeof Permissions !== 'undefined') {
+        Permissions.initFromUserData(NS.state.currentUser);
+      }
+      bindUi();
+      if (typeof RrivAppBar !== 'undefined' && RrivAppBar.refresh) {
+        RrivAppBar.refresh(NS.state.currentUser);
+      }
+    });
   }
 
   async function loadBackgroundData(authUser, joinCode) {
     if (dataLoading) return;
     dataLoading = true;
     try {
-      if (authUser.username && typeof Auth.loadUserProfile === 'function') {
-        await Auth.loadUserProfile(authUser.username).catch(function () { /* offline */ });
-      }
-      var profile = Auth.getProfile?.() || authUser;
-      NS.state.currentUser = Object.assign({}, authUser, profile);
-      localStorage.setItem('currentUser', JSON.stringify(NS.state.currentUser));
-
-      if (typeof Permissions !== 'undefined') {
-        Permissions.initFromUserData(NS.state.currentUser);
-        if (Permissions.loadRoleDefinitions) await Permissions.loadRoleDefinitions(db);
-        Permissions.initFromUserData(NS.state.currentUser);
-      }
-
       if (!PERMS.canAccessApp()) {
         alert('Bạn không có quyền truy cập ứng dụng Phòng họp.');
         window.location.href = '/';
         return;
       }
 
-      bindUi();
-
-      NS.state.orgDirectory = await SVC.loadOrgDirectory(db);
-      NS.state.employees = NS.state.orgDirectory.personnel.map(function (p) {
-        return SVC.normalizeEmployee(p, p.id);
-      }).filter(Boolean);
+      if (typeof Permissions !== 'undefined') {
+        Permissions.initFromUserData(NS.state.currentUser);
+      }
 
       await refresh();
+
+      if (window.PhonghopLazy && window.PhonghopLazy.scheduleBackgroundPreload) {
+        window.PhonghopLazy.scheduleBackgroundPreload({ joinCode: joinCode });
+      }
+
+      enrichInBackground(authUser);
 
       if (joinCode && window.PhonghopJoin) {
         try {
@@ -681,7 +704,7 @@
           });
         } catch (_) { /* onError */ }
         window.PhonghopJoin.cleanJoinQueryFromHistory();
-      } else {
+      } else if (window.PhonghopLazy && window.PhonghopLazy.needsSessionPreload && window.PhonghopLazy.needsSessionPreload()) {
         try {
           await ensureModules(['docs', 'session']);
           if (window.MeetingRoom && window.MeetingRoom.resumeStoredSession) {
@@ -690,7 +713,7 @@
               window.PhonghopShell.showSessionView();
             }
           }
-        } catch (_) { /* preload/resume optional */ }
+        } catch (_) { /* optional */ }
       }
     } catch (e) {
       console.error('[phonghop] bootstrap', e);
@@ -736,6 +759,8 @@
     if (e.persisted) resumeFromCache();
   });
 
+  var lastVisibilityRefresh = 0;
+
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState !== 'visible') return;
     if (window.MeetingRoom && window.MeetingRoom.isActive && window.MeetingRoom.isActive()) {
@@ -743,6 +768,10 @@
       updateMeetingFloatBar(!isSessionViewVisible());
       return;
     }
+    if (NS.state.loading) return;
+    var now = Date.now();
+    if (now - lastVisibilityRefresh < 30000) return;
+    lastVisibilityRefresh = now;
     if (NS.state.meetings.length) refresh();
   });
 

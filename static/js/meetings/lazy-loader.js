@@ -1,14 +1,17 @@
 /**
  * lazy-loader.js — tải module phòng họp nền sau khi shell hiển thị.
- * Gọi preloadAll() ngay khi mở app; ensure() khi user bấm tính năng (thường đã xong).
  */
 (function () {
   'use strict';
 
+  var SESSION_STORE_KEY = 'phonghop_active_meeting';
   var loaded = Object.create(null);
   var loading = Object.create(null);
 
   var BUNDLES = {
+    org: [
+      '/static/js/meetings/org-directory.js?v=37'
+    ],
     forms: [
       '/static/js/vendor/qrcode.min.js',
       'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js',
@@ -18,6 +21,7 @@
       '/static/js/meetings/components/MeetingDetail.js?v=50'
     ],
     docs: [
+      '/static/js/meetings/doc-cache.js?v=2',
       '/static/js/meetings/components/MeetingDocs.js?v=56'
     ],
     session: [
@@ -58,14 +62,8 @@
     }, Promise.resolve());
   }
 
-  function normalizeBundles(input) {
-    if (!input) return [];
-    if (typeof input === 'string') return [input];
-    return input.slice();
-  }
-
   function ensure(input) {
-    var names = normalizeBundles(input);
+    var names = typeof input === 'string' ? [input] : (input || []).slice();
     return names.reduce(function (chain, name) {
       return chain.then(function () { return loadBundle(name); });
     }, Promise.resolve());
@@ -77,27 +75,51 @@
     return urls.every(function (url) { return !!loaded[url]; });
   }
 
-  var preloadPromise = null;
+  function needsSessionPreload() {
+    try {
+      return !!sessionStorage.getItem(SESSION_STORE_KEY);
+    } catch (_) {
+      return false;
+    }
+  }
 
-  function preloadAll() {
-    if (!preloadPromise) {
-      preloadPromise = Promise.all([
-        loadBundle('forms'),
-        loadBundle('docs')
-      ]).then(function () {
-        return loadBundle('session');
-      }).catch(function (e) {
-        console.warn('[PhonghopLazy] preload', e);
-        preloadPromise = null;
+  var formsPreloadPromise = null;
+
+  function preloadForms() {
+    if (!formsPreloadPromise) {
+      formsPreloadPromise = loadBundle('forms').catch(function (e) {
+        console.warn('[PhonghopLazy] preloadForms', e);
+        formsPreloadPromise = null;
       });
     }
-    return preloadPromise;
+    return formsPreloadPromise;
+  }
+
+  function scheduleBackgroundPreload(opts) {
+    opts = opts || {};
+    var run = function () {
+      preloadForms();
+      if (opts.joinCode || needsSessionPreload()) {
+        ensure(['docs', 'session']).catch(function () { /* ignore */ });
+      } else {
+        setTimeout(function () {
+          loadBundle('docs').catch(function () { /* ignore */ });
+        }, 2000);
+      }
+    };
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(run, { timeout: 4000 });
+    } else {
+      setTimeout(run, 600);
+    }
   }
 
   window.PhonghopLazy = {
     BUNDLES: BUNDLES,
     ensure: ensure,
-    preloadAll: preloadAll,
+    preloadForms: preloadForms,
+    scheduleBackgroundPreload: scheduleBackgroundPreload,
+    needsSessionPreload: needsSessionPreload,
     isReady: isReady,
     loadBundle: loadBundle
   };

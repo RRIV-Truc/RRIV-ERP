@@ -9,6 +9,7 @@
 
   var BUNDLES = {
     modals: [
+      '/static/js/services/EmployeeProductionProfile.js',
       '/static/js/nhansu/access-rights.js?v=2',
       '/static/js/nhansu/modals.js?v=37'
     ],

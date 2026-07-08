@@ -10816,6 +10816,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (currentUser) {
           updateSanxuatUserHeader();
+          try { initFactorySelector(); } catch (_) { /* ignore */ }
           applyUserPermissions().then(function () {
             initFactorySelector();
             window.currentFactory = currentFactory;
@@ -10824,19 +10825,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         _getSXShiftsFromAdmin().catch(function() {});
 
-        if (typeof TabGardens !== 'undefined') {
-          TabGardens.loadGardens();
-        } else {
-          loadGardens();
-        }
-
-        setTimeout(() => {
-          if (typeof TabGardens !== 'undefined' && TabGardens.initGardenMap) {
-            TabGardens.initGardenMap();
-          } else {
-            initGardenMap();
-          }
-        }, 100);
+        setTimeout(function () {
+          if (typeof showTab === 'function') showTab(0);
+        }, 0);
 
         var openHarvest = !online || window.location.hash === '#harvest' ||
           localStorage.getItem('sanxuat_open_harvest') === '1';
@@ -10845,6 +10836,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       };
 
+      if (!currentUser) {
+        currentUser = mergeSessionIntoUser({
+          id: personnelId || sessionUser.uid || sessionUser.id,
+          uid: personnelId || sessionUser.uid || sessionUser.id,
+          name: sessionUser.displayName || sessionUser.name
+        }, sessionUser);
+      }
+      finishBoot();
+
       var profilePromise = Promise.resolve();
       if (sessionUser.username && typeof Auth !== 'undefined' && Auth.loadUserProfile) {
         profilePromise = Auth.loadUserProfile(sessionUser.username).then(function () {
@@ -10852,6 +10852,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (prof) {
             currentUser = mergeSessionIntoUser(prof, sessionUser);
             localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            updateSanxuatUserHeader();
           }
         }).catch(function () { /* offline */ });
       }
@@ -10865,18 +10866,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 sessionUser
               );
               localStorage.setItem('currentUser', JSON.stringify(currentUser));
+              updateSanxuatUserHeader();
+              applyUserPermissions().then(function () {
+                initFactorySelector();
+                window.currentFactory = currentFactory;
+              });
             }
           }).catch(function () { /* offline */ });
         }
-      }).then(function () {
-        if (!currentUser) {
-          currentUser = mergeSessionIntoUser({
-            id: personnelId || sessionUser.uid || sessionUser.id,
-            uid: personnelId || sessionUser.uid || sessionUser.id,
-            name: sessionUser.displayName || sessionUser.name
-          }, sessionUser);
-        }
-        finishBoot();
       });
     } catch (error) {
       console.error('Init error:', error);

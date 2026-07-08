@@ -160,6 +160,16 @@
   async function enrichUser(baseUser) {
     var user = baseUser || getUser();
     if (!user || !user.username) return user;
+    if (resolvePosition(user) || user.department) return user;
+    if (typeof Auth !== 'undefined' && typeof Auth.getProfile === 'function') {
+      var cached = Auth.getProfile();
+      if (cached && (resolvePosition(cached) || cached.department)) {
+        if (typeof Auth.mergeDisplayFields === 'function') {
+          return Auth.mergeDisplayFields(user, cached);
+        }
+        return user;
+      }
+    }
     if (typeof Auth !== 'undefined' && typeof Auth.loadUserProfile === 'function') {
       try {
         await Auth.loadUserProfile(user.username);

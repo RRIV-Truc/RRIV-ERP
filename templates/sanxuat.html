@@ -9,20 +9,14 @@
 <meta name="theme-color" content="#0891b2">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 
-<!-- SheetJS for Excel export (cdnjs — ổn định hơn cdn.sheetjs.com trên production) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-
-<!-- jsPDF for PDF export (Sản lượng CN) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script src="roboto-font.js"></script>
-
-<!-- Chart.js for temperature charts -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-
-<!-- Leaflet.js for Map -->
+<!-- Vendor libs — defer: không chặn parse HTML shell -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js" defer></script>
+<script src="roboto-font.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="anonymous">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous" defer></script>
 
 <!-- Modular CSS -->
 <link rel="stylesheet" href="/static/css/app-layout.css">
@@ -3955,6 +3949,6 @@ tr:hover { background: rgba(0,104,255,0.04); }
 <script src="/static/js/sanxuat/tabs/warehouse.js"></script>
 <script src="/static/js/sanxuat/tabs/admin.js"></script>
 
-<script src="/static/js/sanxuat/sanxuat-app.js?v=1"></script>
+<script src="/static/js/sanxuat/sanxuat-app.js?v=2"></script>
 </body>
 </html>

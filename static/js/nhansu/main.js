@@ -22,6 +22,29 @@
     return Lazy.ensure(bundle);
   }
 
+  function scheduleModalsPreload() {
+    var run = function () {
+      if (window.NhansuLazy && window.NhansuLazy.preloadAll) {
+        window.NhansuLazy.preloadAll();
+      }
+    };
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(run, { timeout: 3000 });
+    } else {
+      setTimeout(run, 800);
+    }
+  }
+
+  function findUserFromOrgData(lookupId, username) {
+    const personnel = NS.state._lastOrgRaw?.[0] || NS.state.allPersonnel || [];
+    let u = personnel.find(p => p.id === lookupId);
+    if (!u && username) {
+      const un = String(username).toLowerCase();
+      u = personnel.find(p => String(p.username || '').toLowerCase() === un);
+    }
+    return u || null;
+  }
+
   function buildUserFromAuth(authUser, profile) {
     profile = profile || authUser;
     const lookupId = profile.id || authUser.id || authUser.uid || authUser.username;
@@ -71,10 +94,6 @@
       return;
     }
 
-    if (window.NhansuLazy?.preloadAll) {
-      window.NhansuLazy.preloadAll();
-    }
-
     try {
       const [orgData, managedTeams] = await Promise.all([
         fetchOrgData(),
@@ -86,6 +105,7 @@
       TREE.render();
       PANEL.render();
 
+      scheduleModalsPreload();
       enrichInBackground(authUser, u);
     } catch (e) {
       console.error('Bootstrap error:', e);
@@ -97,16 +117,26 @@
 
   async function enrichInBackground(authUser, u) {
     try {
-      if (authUser.username && typeof Auth.loadUserProfile === 'function') {
-        await Auth.loadUserProfile(authUser.username).catch(function () { /* offline */ });
-      }
+      const lookupId = u.id || authUser.id || authUser.uid || authUser.username;
+      const rolesPromise = (typeof Permissions?.loadRoleDefinitions === 'function')
+        ? Permissions.loadRoleDefinitions(db).catch(function () { /* ignore */ })
+        : Promise.resolve();
+
+      const profilePromise = (authUser.username && typeof Auth.loadUserProfile === 'function')
+        ? Auth.loadUserProfile(authUser.username).catch(function () { /* offline */ })
+        : Promise.resolve();
+
+      await Promise.all([profilePromise, rolesPromise]);
+
       const profile = Auth.getProfile?.() || authUser;
       localStorage.setItem('currentUser', JSON.stringify(authUser));
 
-      const lookupId = profile.id || authUser.id || authUser.uid || authUser.username;
-      let loaded = await SVC.loadCurrentUser(lookupId);
-      if (!loaded && authUser.username) {
-        loaded = await SVC.loadCurrentUser(authUser.username);
+      let loaded = findUserFromOrgData(lookupId, authUser.username);
+      if (!loaded) {
+        loaded = await SVC.loadCurrentUser(lookupId);
+        if (!loaded && authUser.username) {
+          loaded = await SVC.loadCurrentUser(authUser.username);
+        }
       }
       if (loaded) u = loaded;
       NS.state.currentUser = u;
@@ -114,10 +144,6 @@
       if (typeof Auth.persistSession === 'function') Auth.persistSession();
 
       try { Permissions.initFromUserData?.({ uid: u.id, ...u }); } catch (_) { /* ignore */ }
-      if (typeof Permissions?.loadRoleDefinitions === 'function') {
-        await Permissions.loadRoleDefinitions(db);
-        Permissions.initFromUserData?.({ uid: u.id, ...u });
-      }
 
       updateUserChip(u);
       if (typeof RrivAppBar !== 'undefined' && RrivAppBar.refresh) {
