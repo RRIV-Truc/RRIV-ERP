@@ -10,10 +10,17 @@
   const PERMS = window.NhansuPerms;
   const TREE = window.NhansuTree;
   const PANEL = window.NhansuPanel;
-  const MOD = window.NhansuModals;
 
   let booted = false;
   let dataLoading = false;
+
+  function ensureModules(bundle) {
+    var Lazy = window.NhansuLazy;
+    if (!Lazy || !Lazy.ensure) {
+      return Promise.reject(new Error('Trình tải module chưa sẵn sàng.'));
+    }
+    return Lazy.ensure(bundle);
+  }
 
   function buildUserFromAuth(authUser, profile) {
     profile = profile || authUser;
@@ -52,6 +59,43 @@
   async function loadBackgroundData(authUser) {
     if (dataLoading) return;
     dataLoading = true;
+
+    const sessionProfile = Auth.getProfile?.() || authUser;
+    let u = buildUserFromAuth(authUser, sessionProfile);
+    NS.state.currentUser = u;
+
+    if (!PERMS.canAccessApp(u)) {
+      alert('Bạn không có quyền truy cập ứng dụng Nhân sự.');
+      window.location.href = '/';
+      dataLoading = false;
+      return;
+    }
+
+    if (window.NhansuLazy?.preloadAll) {
+      window.NhansuLazy.preloadAll();
+    }
+
+    try {
+      const [orgData, managedTeams] = await Promise.all([
+        fetchOrgData(),
+        SVC.loadManagedTeams(u.id).catch(function () { return []; })
+      ]);
+
+      NS.state.managedTeams = managedTeams || [];
+      applyOrgData(orgData);
+      TREE.render();
+      PANEL.render();
+
+      enrichInBackground(authUser, u);
+    } catch (e) {
+      console.error('Bootstrap error:', e);
+      NS.toast('Lỗi tải dữ liệu: ' + e.message, 'error');
+    } finally {
+      dataLoading = false;
+    }
+  }
+
+  async function enrichInBackground(authUser, u) {
     try {
       if (authUser.username && typeof Auth.loadUserProfile === 'function') {
         await Auth.loadUserProfile(authUser.username).catch(function () { /* offline */ });
@@ -60,11 +104,11 @@
       localStorage.setItem('currentUser', JSON.stringify(authUser));
 
       const lookupId = profile.id || authUser.id || authUser.uid || authUser.username;
-      let u = await SVC.loadCurrentUser(lookupId);
-      if (!u && authUser.username) {
-        u = await SVC.loadCurrentUser(authUser.username);
+      let loaded = await SVC.loadCurrentUser(lookupId);
+      if (!loaded && authUser.username) {
+        loaded = await SVC.loadCurrentUser(authUser.username);
       }
-      if (!u) u = buildUserFromAuth(authUser, profile);
+      if (loaded) u = loaded;
       NS.state.currentUser = u;
 
       if (typeof Auth.persistSession === 'function') Auth.persistSession();
@@ -73,12 +117,6 @@
       if (typeof Permissions?.loadRoleDefinitions === 'function') {
         await Permissions.loadRoleDefinitions(db);
         Permissions.initFromUserData?.({ uid: u.id, ...u });
-      }
-
-      if (!PERMS.canAccessApp(u)) {
-        alert('Bạn không có quyền truy cập ứng dụng Nhân sự.');
-        window.location.href = '/';
-        return;
       }
 
       updateUserChip(u);
@@ -92,21 +130,13 @@
 
       PERMS.subscribeRoleDefs(u.id, () => { if (booted) refresh(); });
 
-      NS.state.managedTeams = await SVC.loadManagedTeams(u.id);
-
-      if (window.NhansuAccessRights?.loadCatalog) {
-        await window.NhansuAccessRights.loadCatalog();
+      if (NS.state._lastOrgRaw) {
+        applyOrgData(NS.state._lastOrgRaw);
+        TREE.render();
+        PANEL.render();
       }
-      if (typeof Permissions?.loadRoleDefinitions === 'function') {
-        await Permissions.loadRoleDefinitions(db);
-      }
-
-      await loadAll();
     } catch (e) {
-      console.error('Bootstrap error:', e);
-      NS.toast('Lỗi tải dữ liệu: ' + e.message, 'error');
-    } finally {
-      dataLoading = false;
+      console.warn('[Nhansu] enrich', e);
     }
   }
 
@@ -138,18 +168,20 @@
     });
   }
 
-  async function loadAll() {
-    const root = document.getElementById('treeRoot');
-    if (root) root.innerHTML = '<div class="tree-loading"><div class="spinner"></div></div>';
-
-    const [personnel, depts, poss, teams, factories, systemRoles] = await Promise.all([
+  async function fetchOrgData() {
+    return Promise.all([
       SVC.loadPersonnel(),
       SVC.loadDepartments(),
       SVC.loadPositions(),
       SVC.loadTeams(),
-      SVC.loadFactories().catch(() => []),
+      SVC.loadFactories().catch(function () { return []; }),
       SVC.loadSystemRoles()
     ]);
+  }
+
+  function applyOrgData(orgData) {
+    NS.state._lastOrgRaw = orgData;
+    const [personnel, depts, poss, teams, factories, systemRoles] = orgData;
 
     const factMap = new Map();
     factories.forEach(f => factMap.set(f.id, { ...f }));
@@ -185,7 +217,6 @@
     NS.state.allTeams = teams.filter(t => !t.metadata?.retired);
     NS.state.factories = Array.from(factMap.values());
 
-    // employee_assignment lưu tên PB/CV — bổ sung id để lọc cây tổ chức
     filtered.forEach(p => {
       (p.concurrentPositions || []).forEach(cp => {
         if (!cp.departmentId && cp.departmentName) {
@@ -200,7 +231,14 @@
     });
 
     NS.state.expanded.add('root');
+  }
 
+  async function loadAll() {
+    const root = document.getElementById('treeRoot');
+    if (root) root.innerHTML = '<div class="tree-loading"><div class="spinner"></div></div>';
+
+    const orgData = await fetchOrgData();
+    applyOrgData(orgData);
     TREE.render();
     PANEL.render();
   }
@@ -219,7 +257,13 @@
       <div class="avatar">${NS.esc(initials)}</div>
       <div class="name">${NS.esc(u.hoTen || 'User')}${NS.esc(roleBadge)}</div>
     `;
-    chip.onclick = () => MOD.openMyPerms();
+    chip.onclick = () => {
+      ensureModules('modals').then(function () {
+        window.NhansuModals?.openMyPerms();
+      }).catch(function (e) {
+        NS.toast(e.message || 'Không tải được form quyền', 'error');
+      });
+    };
   }
 
   function bindSearch() {
@@ -261,7 +305,8 @@
     document.getElementById('btnTreeRoot')?.addEventListener('click', () => TREE.selectRoot());
   }
 
-  function exportExcel() {
+  async function exportExcel() {
+    await ensureModules('export');
     const list = NS.filterPersonnel(NS.state.allPersonnel);
     const rows = list.map(p => ({
       'Mã NV': p.employeeCode || '',

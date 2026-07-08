@@ -361,21 +361,25 @@
   }
 
   function handleAction(act, id) {
-    const M = window.NhansuModals;
-    if (!M) return;
-    switch (act) {
-      case 'add-employee': M.openEmployeeForm(); break;
-      case 'edit-emp':     M.openEmployeeForm(id); break;
-      case 'detail-emp':   M.openEmployeeDetail(id); break;
-      case 'add-dept':     M.openDeptForm(); break;
-      case 'edit-dept':    M.openDeptForm(id); break;
-      case 'add-team':     M.openTeamForm(null, state.selection.id); break;
-      case 'edit-team':    M.openTeamForm(id); break;
-      case 'assign-manager': M.openAssignManager(id); break;
-      case 'manage-positions': M.openPositionsList(); break;
-      case 'import':       M.openImport(); break;
-      case 'export':       window.NhansuMain?.exportExcel(); break;
-    }
+    ensureModules('modals').then(function () {
+      const M = window.NhansuModals;
+      if (!M) return;
+      switch (act) {
+        case 'add-employee': M.openEmployeeForm(); break;
+        case 'edit-emp':     M.openEmployeeForm(id); break;
+        case 'detail-emp':   M.openEmployeeDetail(id); break;
+        case 'add-dept':     M.openDeptForm(); break;
+        case 'edit-dept':    M.openDeptForm(id); break;
+        case 'add-team':     M.openTeamForm(null, state.selection.id); break;
+        case 'edit-team':    M.openTeamForm(id); break;
+        case 'assign-manager': M.openAssignManager(id); break;
+        case 'manage-positions': M.openPositionsList(); break;
+        case 'import':       M.openImport(); break;
+        case 'export':       window.NhansuMain?.exportExcel(); break;
+      }
+    }).catch(function (e) {
+      NS.toast(e.message || 'Đang tải form…', 'error');
+    });
   }
 
   async function handleOrderInput(e) {
