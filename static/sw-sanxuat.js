@@ -1,7 +1,7 @@
 /**
  * Service Worker — cache shell Sản xuất + tab Sản lượng CN (mở lại khi không có mạng).
  */
-var CACHE = 'rriv-sanxuat-v28';
+var CACHE = 'rriv-sanxuat-v29';
 var SHELL = [
   '/',
   '/sanxuat',
@@ -19,10 +19,12 @@ var SHELL = [
   '/static/css/app-layout.css',
   '/static/css/app-components.css',
   '/static/css/app-sanxuat.css',
+  '/static/js/sanxuat/sanxuat-dialog.js?v=1',
+  '/static/js/sanxuat/sanxuat-app.js?v=1',
   '/static/js/sanxuat/services/TscDrcConverter.js',
   '/static/js/sanxuat/services/FieldHarvestOffline.js',
-  '/static/js/sanxuat/tabs/delivery.js?v=38',
-  '/static/js/sanxuat/tabs/field-harvest.js?v=65',
+  '/static/js/sanxuat/tabs/delivery.js?v=40',
+  '/static/js/sanxuat/tabs/field-harvest.js?v=66',
   '/static/manifest.json',
   '/static/icon-192.png',
   '/static/icon-512.png'

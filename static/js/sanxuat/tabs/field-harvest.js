@@ -945,20 +945,18 @@ const TabFieldHarvest = (function () {
     return meta;
   }
 
-  /** Chỉ lấy dòng cân của công nhân cạo — tránh cộng trùng trút/bốc khi tổng hợp theo phần cạo/lô. */
+  /** Chỉ lấy dòng cân của công nhân cạo — tránh cộng trùng trút/bốc khi tổng hợp theo phần cạo/lô/công nhân. */
   function _isTapperWeighing(w) {
     var meta = _weighingMeta(w);
     var roles = meta.roles || [];
     if (roles.length) {
-      return roles.some(function (r) { return r.role === 'tapper'; });
+      return roles.some(function (r) { return r.role === 'tapper' || r.role === 'primary'; });
     }
-    return !!(meta.weigh_detail || meta.section_total_fresh_kg);
+    return !!meta.weigh_detail;
   }
 
   function _weighingsForAggregatedSummary() {
-    var pool = _weighingsForSummary();
-    if (summaryViewMode === 'worker') return pool;
-    return pool.filter(_isTapperWeighing);
+    return _weighingsForSummary().filter(_isTapperWeighing);
   }
 
   /** Luôn có trạm SX (mặc định Trạm Lai Khê) trước khi render phân công. */
@@ -1682,6 +1680,10 @@ const TabFieldHarvest = (function () {
 
   function _sameSectionId(a, b) {
     return String(a || '') === String(b || '');
+  }
+
+  function _sameWorkerId(a, b) {
+    return String(a || '').trim() === String(b || '').trim();
   }
 
   function _findSectionById(sectionId) {
@@ -4780,11 +4782,12 @@ const TabFieldHarvest = (function () {
 
   function _buildWorkerSummaryData() {
     var map = {};
-    _weighingsForSummary().forEach(function (w) {
-      var wid = w.worker_id;
+    _weighingsForAggregatedSummary().forEach(function (w) {
+      var wid = String(w.worker_id || '').trim();
+      if (!wid) return;
+      var sec = _sectionForSummaryWeighing(w.tapping_section_id);
       if (!map[wid]) {
-        var wr = workers.find(function (x) { return _sameSectionId(x.id, wid); });
-        var sec = _sectionForSummaryWeighing(w.tapping_section_id);
+        var wr = workers.find(function (x) { return _sameWorkerId(x.id, wid); });
         var teamId = wr ? String(wr.team_id || wr.team || wr.production_team_id || '') :
           (sec ? String(sec.team_id || sec.squad || selectedTeam || '') : '');
         map[wid] = {
@@ -4997,7 +5000,7 @@ const TabFieldHarvest = (function () {
       var sessLabel = summarySession === '__all__' ? 'Tất cả phiên' : ('Phiên ' + summarySession);
       var offlineNote = (summaryPeriod !== 'day' && !_isOnline()) ? ' · Cần mạng để tải kỳ dài' : '';
       hint.textContent = summaryRangeLabel + ' · ' + sessLabel + ' · ' +
-        (rows.length ? rows.length + ' dòng' : 'Chưa có dữ liệu cân') + offlineNote + ' · fh63';
+          (rows.length ? rows.length + ' dòng' : 'Chưa có dữ liệu cân') + offlineNote + ' · fh66';
     }
 
     head.innerHTML = _summaryHeadHtml(mode, showTeam);
