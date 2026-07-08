@@ -89,9 +89,9 @@ body {
     width: 65px !important; 
     height: 65px !important;
     object-fit: contain;
-    background: white;
+    background: #fff;
     border-radius: 12px;
-    padding: 5px;
+    padding: 4px;
 }
 .vrg-main-title { margin: 0; font-size: 28px; font-weight: 800; line-height: 1; }
 .vrg-subtitle { font-size: 14px; opacity: 0.8; margin-top: 4px; }
