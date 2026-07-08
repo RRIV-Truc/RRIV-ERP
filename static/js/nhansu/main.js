@@ -13,17 +13,50 @@
   const MOD = window.NhansuModals;
 
   let booted = false;
+  let dataLoading = false;
 
-  async function bootstrap() {
-    const authUser = await Auth.init();
-    if (!authUser) {
-      window.location.href = '/';
-      return;
+  function buildUserFromAuth(authUser, profile) {
+    profile = profile || authUser;
+    const lookupId = profile.id || authUser.id || authUser.uid || authUser.username;
+    return {
+      id: lookupId,
+      username: authUser.username,
+      hoTen: profile.hoTen || profile.name || authUser.name || authUser.username,
+      role: profile.role || authUser.role || 'user',
+      department: profile.department || authUser.department || '',
+      appRolesCache: profile.appRolesCache || authUser.appRolesCache || {}
+    };
+  }
+
+  function showBootShell() {
+    const head = document.getElementById('panelHead');
+    if (!head || head.innerHTML.trim()) return;
+    head.innerHTML = `
+      <div class="breadcrumb"><span class="current">${NS.esc(NS.ROOT_LABEL)}</span></div>
+      <div class="panel-title-row">
+        <div class="panel-title">🌿 ${NS.esc(NS.ROOT_LABEL)}</div>
+      </div>`;
+  }
+
+  function finishBoot(u) {
+    NS.state.currentUser = u;
+    try { Permissions.initFromUserData?.({ uid: u.id, ...u }); } catch (_) { /* ignore */ }
+    updateUserChip(u);
+    showBootShell();
+    if (typeof RrivAppBar !== 'undefined' && RrivAppBar.refresh) {
+      RrivAppBar.refresh(u);
     }
+    booted = true;
+  }
 
+  async function loadBackgroundData(authUser) {
+    if (dataLoading) return;
+    dataLoading = true;
     try {
-      await Auth.loadUserProfile(authUser.username);
-      const profile = Auth.getProfile() || authUser;
+      if (authUser.username && typeof Auth.loadUserProfile === 'function') {
+        await Auth.loadUserProfile(authUser.username).catch(function () { /* offline */ });
+      }
+      const profile = Auth.getProfile?.() || authUser;
       localStorage.setItem('currentUser', JSON.stringify(authUser));
 
       const lookupId = profile.id || authUser.id || authUser.uid || authUser.username;
@@ -31,16 +64,7 @@
       if (!u && authUser.username) {
         u = await SVC.loadCurrentUser(authUser.username);
       }
-      if (!u) {
-        u = {
-          id: lookupId,
-          username: authUser.username,
-          hoTen: profile.hoTen || profile.name || authUser.name || authUser.username,
-          role: profile.role || authUser.role || 'user',
-          department: profile.department || authUser.department || '',
-          appRolesCache: profile.appRolesCache || authUser.appRolesCache || {}
-        };
-      }
+      if (!u) u = buildUserFromAuth(authUser, profile);
       NS.state.currentUser = u;
 
       if (typeof Auth.persistSession === 'function') Auth.persistSession();
@@ -57,6 +81,7 @@
         return;
       }
 
+      updateUserChip(u);
       if (typeof RrivAppBar !== 'undefined' && RrivAppBar.refresh) {
         RrivAppBar.refresh(u);
       }
@@ -76,13 +101,28 @@
         await Permissions.loadRoleDefinitions(db);
       }
 
-      updateUserChip(u);
       await loadAll();
-      booted = true;
     } catch (e) {
       console.error('Bootstrap error:', e);
       NS.toast('Lỗi tải dữ liệu: ' + e.message, 'error');
+    } finally {
+      dataLoading = false;
     }
+  }
+
+  async function bootstrap() {
+    let authUser = (typeof Auth !== 'undefined' && Auth.restoreSession && Auth.restoreSession()) || null;
+    if (!authUser) {
+      authUser = await Auth.init();
+      if (!authUser) {
+        window.location.href = '/';
+        return;
+      }
+    }
+
+    const profile = Auth.getProfile?.() || authUser;
+    finishBoot(buildUserFromAuth(authUser, profile));
+    loadBackgroundData(authUser);
   }
 
   function normalizeOrgIds(personnel, depts, teams) {

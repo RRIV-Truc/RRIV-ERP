@@ -9,6 +9,18 @@
   var listFilter = { dash: 'live', calendar: 'upcoming' };
   var searchQuery = '';
 
+  function ensureModules(bundles) {
+    var Lazy = window.PhonghopLazy;
+    if (!Lazy || !Lazy.ensure) {
+      return Promise.reject(new Error('Trình tải module chưa sẵn sàng.'));
+    }
+    return Lazy.ensure(bundles);
+  }
+
+  function moduleLoadError(e) {
+    alert((e && e.message) || 'Không tải được module. Thử Ctrl+F5 hoặc kiểm tra mạng.');
+  }
+
   function fmtDt(iso) {
     if (!iso) return '—';
     try {
@@ -88,59 +100,65 @@
   }
 
   function openDetail(meetingId) {
-    if (!window.MeetingDetail) return;
-    window.MeetingDetail.open({
-      meetingId: meetingId,
-      rooms: NS.state.rooms,
-      orgData: NS.state.orgDirectory,
-      currentUser: NS.state.currentUser,
-      reloadOrg: function () {
-        return SVC.loadOrgDirectory(db).then(function (org) {
-          NS.state.orgDirectory = org;
-          return org;
-        });
-      },
-      onUpdated: function () { refresh(); }
-    });
+    ensureModules('forms').then(function () {
+      if (!window.MeetingDetail) throw new Error('Module chi tiết chưa sẵn sàng.');
+      window.MeetingDetail.open({
+        meetingId: meetingId,
+        rooms: NS.state.rooms,
+        orgData: NS.state.orgDirectory,
+        currentUser: NS.state.currentUser,
+        reloadOrg: function () {
+          return SVC.loadOrgDirectory(db).then(function (org) {
+            NS.state.orgDirectory = org;
+            return org;
+          });
+        },
+        onUpdated: function () { refresh(); }
+      });
+    }).catch(moduleLoadError);
   }
 
   function openEdit(meeting) {
-    if (!window.MeetingForm || !window.MeetingForm.open) {
-      alert('Không mở được form sửa — tải lại trang (Ctrl+F5).');
-      return;
-    }
-    var m = normalizeMeeting(Object.assign({}, meeting || {}));
-    if (!m.id && m.meeting_id) m.id = m.meeting_id;
-    if (!m.id) {
-      alert('Không xác định được cuộc họp cần sửa.');
-      return;
-    }
-    window.MeetingForm.open({
-      meeting: m,
-      rooms: NS.state.rooms,
-      orgData: NS.state.orgDirectory,
-      reloadOrg: function () {
-        if (!db) return Promise.resolve(NS.state.orgDirectory || { personnel: [], departments: [], teams: [] });
-        return SVC.loadOrgDirectory(db).then(function (org) {
-          NS.state.orgDirectory = org;
-          return org;
-        });
-      },
-      onSaved: function () { refresh(); }
+    ensureModules('forms').then(function () {
+      if (!window.MeetingForm || !window.MeetingForm.open) {
+        throw new Error('Module form chưa sẵn sàng.');
+      }
+      var m = normalizeMeeting(Object.assign({}, meeting || {}));
+      if (!m.id && m.meeting_id) m.id = m.meeting_id;
+      if (!m.id) {
+        alert('Không xác định được cuộc họp cần sửa.');
+        return;
+      }
+      return window.MeetingForm.open({
+        meeting: m,
+        rooms: NS.state.rooms,
+        orgData: NS.state.orgDirectory,
+        reloadOrg: function () {
+          if (!db) return Promise.resolve(NS.state.orgDirectory || { personnel: [], departments: [], teams: [] });
+          return SVC.loadOrgDirectory(db).then(function (org) {
+            NS.state.orgDirectory = org;
+            return org;
+          });
+        },
+        onSaved: function () { refresh(); }
+      });
     }).catch(function (e) {
-      alert(e.message || 'Không mở được form sửa cuộc họp');
+      if (e && e.message && e.message.indexOf('cuộc họp cần sửa') !== -1) return;
+      moduleLoadError(e);
     });
   }
 
   function openRoom(meetingId) {
-    if (!window.MeetingRoom) return;
-    window.MeetingRoom.open({
-      meetingId: meetingId,
-      onClose: function () {
-        resetViewAfterRoom();
-        refresh();
-      }
-    });
+    ensureModules(['docs', 'session']).then(function () {
+      if (!window.MeetingRoom) throw new Error('Module phòng họp chưa sẵn sàng.');
+      return window.MeetingRoom.open({
+        meetingId: meetingId,
+        onClose: function () {
+          resetViewAfterRoom();
+          refresh();
+        }
+      });
+    }).catch(moduleLoadError);
   }
 
   function joinByCodeInput() {
@@ -150,15 +168,15 @@
       alert('Nhập mã cuộc họp (vd. MTG-2026-0001).');
       return;
     }
-    if (!window.MeetingRoom) return;
-    window.MeetingRoom.openByCode(code, {
-      onClose: function () {
-        resetViewAfterRoom();
-        refresh();
-      }
-    }).catch(function (e) {
-      alert(e.message || 'Không vào được phòng');
-    });
+    ensureModules(['docs', 'session']).then(function () {
+      if (!window.MeetingRoom) throw new Error('Module phòng họp chưa sẵn sàng.');
+      return window.MeetingRoom.openByCode(code, {
+        onClose: function () {
+          resetViewAfterRoom();
+          refresh();
+        }
+      });
+    }).catch(moduleLoadError);
   }
 
   function renderCard(m) {
@@ -261,8 +279,17 @@
     if (retry) retry.addEventListener('click', function () { refresh(); });
   }
 
+  function showListsLoading() {
+    var html = '<div class="ph-empty">Đang tải dữ liệu…</div>';
+    ['meetingsList', 'meetingsListFull'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.innerHTML = html;
+    });
+  }
+
   async function refresh() {
     NS.state.loading = true;
+    if (!NS.state.meetings.length) showListsLoading();
     try {
       NS.state.meetings = (await SVC.listMeetings(80)).map(normalizeMeeting);
       try {
@@ -294,13 +321,14 @@
       window.MeetingRoom.restoreUi && window.MeetingRoom.restoreUi();
       return;
     }
-    if (window.MeetingRoom && window.MeetingRoom.resumeStoredSession) {
-      window.MeetingRoom.resumeStoredSession().then(function (ok) {
-        if (!ok) refresh();
-      });
-      return;
-    }
-    refresh();
+    ensureModules(['docs', 'session']).then(function () {
+      if (window.MeetingRoom && window.MeetingRoom.resumeStoredSession) {
+        return window.MeetingRoom.resumeStoredSession().then(function (ok) {
+          if (!ok) refresh();
+        });
+      }
+      refresh();
+    }).catch(function () { refresh(); });
   }
 
   function switchViewSilent(viewId) {
@@ -354,10 +382,14 @@
 
     switchViewSilent(viewId);
     updateMeetingFloatBar(false);
-    if (viewId === 'documents' && window.MeetingDocs) {
-      window.MeetingDocs.refresh().catch(function (e) {
-        console.warn('[Phonghop] MeetingDocs', e.message);
-      });
+    if (viewId === 'documents') {
+      ensureModules('docs').then(function () {
+        if (window.MeetingDocs) {
+          window.MeetingDocs.refresh().catch(function (e) {
+            console.warn('[Phonghop] MeetingDocs', e.message);
+          });
+        }
+      }).catch(moduleLoadError);
     }
     var sidebar = document.getElementById('phSidebar');
     if (sidebar) sidebar.classList.remove('is-open');
@@ -494,41 +526,27 @@
       alert('Chỉ Manager hoặc Admin mới được tạo cuộc họp.');
       return;
     }
-    return window.MeetingForm.open({
-      rooms: NS.state.rooms,
-      orgData: NS.state.orgDirectory,
-      reloadOrg: function () {
-        return SVC.loadOrgDirectory(db).then(function (org) {
-          NS.state.orgDirectory = org;
-          return org;
-        });
-      },
-      onSaved: function () { refresh(); }
-    });
+    return ensureModules('forms').then(function () {
+      if (!window.MeetingForm || !window.MeetingForm.open) {
+        throw new Error('Module form chưa sẵn sàng.');
+      }
+      return window.MeetingForm.open({
+        rooms: NS.state.rooms,
+        orgData: NS.state.orgDirectory,
+        reloadOrg: function () {
+          return SVC.loadOrgDirectory(db).then(function (org) {
+            NS.state.orgDirectory = org;
+            return org;
+          });
+        },
+        onSaved: function () { refresh(); }
+      });
+    }).catch(moduleLoadError);
   }
 
-  function bindUi() {
-    ['btnCreateMeeting', 'btnCreateMeeting2'].forEach(function (id) {
-      var btn = document.getElementById(id);
-      if (btn) btn.addEventListener('click', function () { openCreateForm(); });
-    });
-    ['btnRefresh', 'btnRefresh2'].forEach(function (id) {
-      var btn = document.getElementById(id);
-      if (btn) btn.addEventListener('click', refresh);
-    });
+  var uiBound = false;
 
-    var btnJoin = document.getElementById('btnJoinByCode');
-    var joinInput = document.getElementById('joinCodeInput');
-    if (btnJoin) btnJoin.addEventListener('click', joinByCodeInput);
-    if (joinInput) {
-      joinInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); joinByCodeInput(); }
-      });
-    }
-
-    var btnHome = document.getElementById('btnHome');
-    if (btnHome) btnHome.addEventListener('click', function () { window.location.href = '/'; });
-
+  function updateUserChipUi() {
     var chip = document.getElementById('userChip');
     var u = NS.state.currentUser;
     if (chip && u) {
@@ -537,7 +555,9 @@
       if (av) av.textContent = (u.hoTen || u.name || u.username || '?').charAt(0).toUpperCase();
       if (nm) nm.textContent = u.hoTen || u.name || u.username;
     }
+  }
 
+  function updatePermsUi() {
     var permsEl = document.getElementById('phSettingsPerms');
     if (permsEl) {
       var parts = [];
@@ -547,53 +567,57 @@
       permsEl.textContent = parts.length ? parts.join(' · ') : 'Xem và tham gia cuộc họp được mời';
     }
 
-    if (!PERMS.canCreateMeeting()) {
-      ['btnCreateMeeting', 'btnCreateMeeting2'].forEach(function (id) {
-        var b = document.getElementById(id);
-        if (b) b.style.display = 'none';
-      });
-    }
+    var showCreate = PERMS.canCreateMeeting();
+    ['btnCreateMeeting', 'btnCreateMeeting2'].forEach(function (id) {
+      var b = document.getElementById(id);
+      if (b) b.style.display = showCreate ? '' : 'none';
+    });
   }
 
-  async function bootstrap() {
-    var joinCode = window.PhonghopJoin && window.PhonghopJoin.getCodeFromUrl();
+  function bindUi() {
+    if (!uiBound) {
+      uiBound = true;
+      ['btnCreateMeeting', 'btnCreateMeeting2'].forEach(function (id) {
+        var btn = document.getElementById(id);
+        if (btn) btn.addEventListener('click', function () { openCreateForm(); });
+      });
+      ['btnRefresh', 'btnRefresh2'].forEach(function (id) {
+        var btn = document.getElementById(id);
+        if (btn) btn.addEventListener('click', refresh);
+      });
 
-    var authUser = await Auth.init();
-    if (!authUser) {
-      if (joinCode && window.PhonghopJoin) {
-        window.PhonghopJoin.redirectToLoginWithReturn();
-        return;
+      var btnJoin = document.getElementById('btnJoinByCode');
+      var joinInput = document.getElementById('joinCodeInput');
+      if (btnJoin) btnJoin.addEventListener('click', joinByCodeInput);
+      if (joinInput) {
+        joinInput.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); joinByCodeInput(); }
+        });
       }
-      window.location.href = '/';
-      return;
+
+      var btnHome = document.getElementById('btnHome');
+      if (btnHome) btnHome.addEventListener('click', function () { window.location.href = '/'; });
     }
 
-    await Auth.loadUserProfile(authUser.username);
-    var profile = Auth.getProfile() || authUser;
+    updateUserChipUi();
+    updatePermsUi();
+  }
+
+  var dataLoading = false;
+
+  function finishBoot(authUser, profile) {
+    profile = profile || Auth.getProfile?.() || authUser;
     NS.state.currentUser = Object.assign({}, authUser, profile);
     localStorage.setItem('currentUser', JSON.stringify(NS.state.currentUser));
-
     db = ErpDb.firestore();
 
     if (typeof Permissions !== 'undefined') {
       Permissions.initFromUserData(NS.state.currentUser);
-      if (Permissions.loadRoleDefinitions) await Permissions.loadRoleDefinitions(db);
-      Permissions.initFromUserData(NS.state.currentUser);
     }
-
-    if (!PERMS.canAccessApp()) {
-      alert('Bạn không có quyền truy cập ứng dụng Phòng họp.');
-      window.location.href = '/';
-      return;
-    }
-
-    NS.state.orgDirectory = await SVC.loadOrgDirectory(db);
-    NS.state.employees = NS.state.orgDirectory.personnel.map(function (p) {
-      return SVC.normalizeEmployee(p, p.id);
-    }).filter(Boolean);
 
     bindShell();
     bindUi();
+    showListsLoading();
 
     var floatReturn = document.getElementById('phMeetingFloatReturn');
     if (floatReturn) {
@@ -602,31 +626,99 @@
       });
     }
 
-    await refresh();
+    if (typeof RrivAppBar !== 'undefined' && RrivAppBar.refresh) {
+      RrivAppBar.refresh(NS.state.currentUser);
+    }
 
-    if (typeof RrivAppBar !== 'undefined' && RrivAppBar.refresh) RrivAppBar.refresh();
+    if (window.PhonghopLazy && window.PhonghopLazy.preloadAll) {
+      window.PhonghopLazy.preloadAll();
+    }
+  }
 
-    if (joinCode && window.PhonghopJoin) {
-      try {
-        await window.PhonghopJoin.enterByCode(joinCode, {
-          onClose: function () {
-            resetViewAfterRoom();
-            refresh();
-          },
-          onError: function (e) {
-            alert(e.message || 'Không vào được phòng họp');
+  async function loadBackgroundData(authUser, joinCode) {
+    if (dataLoading) return;
+    dataLoading = true;
+    try {
+      if (authUser.username && typeof Auth.loadUserProfile === 'function') {
+        await Auth.loadUserProfile(authUser.username).catch(function () { /* offline */ });
+      }
+      var profile = Auth.getProfile?.() || authUser;
+      NS.state.currentUser = Object.assign({}, authUser, profile);
+      localStorage.setItem('currentUser', JSON.stringify(NS.state.currentUser));
+
+      if (typeof Permissions !== 'undefined') {
+        Permissions.initFromUserData(NS.state.currentUser);
+        if (Permissions.loadRoleDefinitions) await Permissions.loadRoleDefinitions(db);
+        Permissions.initFromUserData(NS.state.currentUser);
+      }
+
+      if (!PERMS.canAccessApp()) {
+        alert('Bạn không có quyền truy cập ứng dụng Phòng họp.');
+        window.location.href = '/';
+        return;
+      }
+
+      bindUi();
+
+      NS.state.orgDirectory = await SVC.loadOrgDirectory(db);
+      NS.state.employees = NS.state.orgDirectory.personnel.map(function (p) {
+        return SVC.normalizeEmployee(p, p.id);
+      }).filter(Boolean);
+
+      await refresh();
+
+      if (joinCode && window.PhonghopJoin) {
+        try {
+          await ensureModules(['docs', 'session']);
+          await window.PhonghopJoin.enterByCode(joinCode, {
+            onClose: function () {
+              resetViewAfterRoom();
+              refresh();
+            },
+            onError: function (e) {
+              alert(e.message || 'Không vào được phòng họp');
+            }
+          });
+        } catch (_) { /* onError */ }
+        window.PhonghopJoin.cleanJoinQueryFromHistory();
+      } else {
+        try {
+          await ensureModules(['docs', 'session']);
+          if (window.MeetingRoom && window.MeetingRoom.resumeStoredSession) {
+            var resumed = await window.MeetingRoom.resumeStoredSession();
+            if (resumed && window.PhonghopShell && window.PhonghopShell.showSessionView) {
+              window.PhonghopShell.showSessionView();
+            }
           }
-        });
-      } catch (_) { /* onError */ }
-      window.PhonghopJoin.cleanJoinQueryFromHistory();
-    } else if (window.MeetingRoom && window.MeetingRoom.resumeStoredSession) {
-      var resumed = await window.MeetingRoom.resumeStoredSession();
-      if (resumed) {
-        if (window.PhonghopShell && window.PhonghopShell.showSessionView) {
-          window.PhonghopShell.showSessionView();
+        } catch (_) { /* preload/resume optional */ }
+      }
+    } catch (e) {
+      console.error('[phonghop] bootstrap', e);
+      showListError(e.message || 'Lỗi tải dữ liệu');
+    } finally {
+      dataLoading = false;
+    }
+  }
+
+  async function bootstrap() {
+    var joinCode = window.PhonghopJoin && window.PhonghopJoin.getCodeFromUrl();
+
+    var authUser = (typeof Auth !== 'undefined' && Auth.restoreSession && Auth.restoreSession()) || null;
+    if (!authUser) {
+      authUser = await Auth.init();
+      if (!authUser) {
+        if (joinCode && window.PhonghopJoin) {
+          window.PhonghopJoin.redirectToLoginWithReturn();
+          return;
         }
+        window.location.href = '/';
+        return;
       }
     }
+
+    var profile = Auth.getProfile?.() || authUser;
+    finishBoot(authUser, profile);
+    loadBackgroundData(authUser, joinCode);
   }
 
   window.addEventListener('pagehide', function () {
