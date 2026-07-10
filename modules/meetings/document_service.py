@@ -788,6 +788,8 @@ def set_document_shares(
     meeting_id: str,
     ctx: UserContext,
     document_ids: list[str],
+    *,
+    defer_firebase_sync: bool = False,
 ) -> dict:
     assert_can_write(supabase, meeting_id, ctx)
     _assert_shares_table(supabase)
@@ -828,6 +830,12 @@ def set_document_shares(
             'shared_by_username': ctx.username,
         } for did in clean_ids]
         supabase.table('meeting_document_shares').insert(rows).execute()
+
+    if defer_firebase_sync:
+        return {
+            'shared_document_ids': clean_ids,
+            'deferred_firebase_sync': True,
+        }
 
     warm_result = None
     try:

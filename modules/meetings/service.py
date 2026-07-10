@@ -152,7 +152,8 @@ def create_meeting(
     }
 
     platform_result: PlatformMeetingResult | None = None
-    if platform != 'internal' or payload.meeting_mode != 'in_person':
+    defer_firebase = platform == 'internal'
+    if not defer_firebase and (platform != 'internal' or payload.meeting_mode != 'in_person'):
         provider = get_provider(platform)
         platform_result = provider.create_meeting(payload, meeting_id)
         row['online_meeting_url'] = platform_result.online_meeting_url
@@ -160,31 +161,36 @@ def create_meeting(
         row['online_meeting_password'] = platform_result.online_meeting_password
         row['firebase_room_id'] = platform_result.firebase_room_id
 
-    if platform == 'internal' and not row.get('firebase_room_id'):
-        provider = get_provider('internal')
-        platform_result = provider.create_meeting(payload, meeting_id)
-        row['online_meeting_url'] = platform_result.online_meeting_url
-        row['firebase_room_id'] = platform_result.firebase_room_id
-        row['online_meeting_id'] = platform_result.online_meeting_id
-
     res = supabase.table('meetings').insert(row).execute()
     if not res.data:
         raise RuntimeError('Không thể lưu cuộc họp vào Supabase')
 
     _insert_participants(supabase, meeting_id, payload.participants, ctx)
 
+    has_shared_docs = False
     if payload.shared_document_ids is not None:
         from modules.meetings import document_service as doc_svc
         try:
             doc_svc.set_document_shares(
                 supabase, meeting_id, ctx, payload.shared_document_ids,
+                defer_firebase_sync=True,
             )
+            has_shared_docs = bool(payload.shared_document_ids)
         except (RuntimeError, ValueError) as exc:
             raise ValueError(str(exc)) from exc
 
     doc = dict(res.data[0])
+    doc['participant_count'] = len(payload.participants or []) + 1
     if platform_result:
         doc['platform'] = platform_result.model_dump()
+
+    if defer_firebase:
+        from modules.meetings.background import defer_meeting_firebase_setup
+        defer_meeting_firebase_setup(
+            meeting_id,
+            warm_documents=has_shared_docs or payload.shared_document_ids is not None,
+        )
+
     return doc
 
 
@@ -205,16 +211,35 @@ def update_meeting(supabase, meeting_id: str, payload: MeetingUpdate, ctx: UserC
         supabase.table('meeting_participants').delete().eq('meeting_id', meeting_id).execute()
         _insert_participants(supabase, meeting_id, payload.participants, ctx)
 
+    participant_count = None
+    if payload.participants is not None:
+        participant_count = len(payload.participants) + 1
+
+    warm_docs = False
     if payload.shared_document_ids is not None:
         from modules.meetings import document_service as doc_svc
         try:
             doc_svc.set_document_shares(
                 supabase, meeting_id, ctx, payload.shared_document_ids,
+                defer_firebase_sync=True,
             )
+            warm_docs = True
         except RuntimeError as exc:
             raise ValueError(str(exc)) from exc
 
-    return get_meeting_detail_enriched(supabase, meeting_id) or {}
+    res = supabase.table('meetings').select('*').eq('id', meeting_id).limit(1).execute()
+    if not res.data:
+        return {}
+    doc = dict(res.data[0])
+    if participant_count is not None:
+        doc['participant_count'] = participant_count
+
+    meeting_platform = (doc.get('platform_type') or 'internal').lower()
+    if meeting_platform == 'internal':
+        from modules.meetings.background import defer_meeting_firebase_setup
+        defer_meeting_firebase_setup(meeting_id, warm_documents=warm_docs)
+
+    return doc
 
 
 def list_meetings(supabase, ctx: UserContext, limit: int = 50) -> list:

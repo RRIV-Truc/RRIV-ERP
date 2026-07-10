@@ -162,7 +162,7 @@
         reloadOrg: function () {
           return ensureOrgDirectory();
         },
-        onSaved: function () { refresh(); }
+        onSaved: function (saved) { applySavedMeeting(saved); }
       });
     }).catch(function (e) {
       if (e && e.message && e.message.indexOf('cuộc họp cần sửa') !== -1) return;
@@ -329,6 +329,26 @@
     } finally {
       NS.state.loading = false;
     }
+  }
+
+  function upsertMeetingInList(meeting) {
+    var m = normalizeMeeting(meeting);
+    var id = m.id || m.meeting_id;
+    if (!id) return;
+    NS.state.meetings = [m].concat(
+      NS.state.meetings.filter(function (x) {
+        return (x.id || x.meeting_id) !== id;
+      })
+    );
+  }
+
+  /** Hiện cuộc họp vừa lưu ngay; refresh đầy đủ chạy nền. */
+  function applySavedMeeting(meeting) {
+    if (meeting) {
+      upsertMeetingInList(meeting);
+      renderList();
+    }
+    refresh();
   }
 
   function resetViewAfterRoom() {
@@ -562,7 +582,7 @@
         reloadOrg: function () {
           return ensureOrgDirectory(true);
         },
-        onSaved: function () { refresh(); }
+        onSaved: function (saved) { applySavedMeeting(saved); }
       });
     }).catch(moduleLoadError);
   }
