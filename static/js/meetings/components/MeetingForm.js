@@ -571,10 +571,28 @@
         if (editId) {
           payload.shared_document_ids = sharedIds;
           savedMeeting = await window.PhonghopServices.updateMeeting(editId, payload);
+          savedMeeting = Object.assign({}, savedMeeting || {}, {
+            id: editId,
+            scheduled_start: payload.scheduled_start,
+            scheduled_end: payload.scheduled_end,
+            title: payload.title,
+            description: payload.description,
+            meeting_mode: payload.meeting_mode,
+            physical_room_id: payload.physical_room_id
+          });
         } else {
           payload.status = 'scheduled';
           payload.shared_document_ids = sharedIds;
           savedMeeting = await window.PhonghopServices.createMeeting(payload);
+          savedMeeting = Object.assign({}, savedMeeting || {}, {
+            scheduled_start: payload.scheduled_start,
+            scheduled_end: payload.scheduled_end,
+            title: payload.title,
+            description: payload.description,
+            meeting_mode: payload.meeting_mode,
+            physical_room_id: payload.physical_room_id,
+            status: 'scheduled'
+          });
         }
         if (typeof _onSaved === 'function') _onSaved(savedMeeting);
         _editMeeting = null;

@@ -18,7 +18,7 @@
       'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js',
       '/static/js/components/ModalForm.js',
       '/static/js/meetings/components/ParticipantTreePicker.js?v=3',
-      '/static/js/meetings/components/MeetingForm.js?v=57',
+      '/static/js/meetings/components/MeetingForm.js?v=58',
       '/static/js/meetings/components/MeetingDetail.js?v=52'
     ],
     docs: [

@@ -10,6 +10,7 @@
   var searchQuery = '';
   /** Cuộc họp vừa lưu — giữ trên UI cho đến khi API list xác nhận. */
   var pendingLocalMeetings = Object.create(null);
+  var PENDING_MEETING_TTL_MS = 120000;
   /** Cuộc họp vừa xóa — ẩn khỏi UI cho đến khi API không còn trả về. */
   var deletedMeetingIds = Object.create(null);
 
@@ -363,27 +364,48 @@
     });
   }
 
+  function pendingMeetingEntry(id) {
+    var raw = pendingLocalMeetings[id];
+    if (!raw) return null;
+    if (raw.data) return raw;
+    return { data: raw, savedAt: Date.now() };
+  }
+
+  function isPendingMeetingFresh(entry) {
+    return !!(entry && entry.savedAt && (Date.now() - entry.savedAt) < PENDING_MEETING_TTL_MS);
+  }
+
+  function setPendingMeeting(id, meeting) {
+    pendingLocalMeetings[id] = { data: meeting, savedAt: Date.now() };
+  }
+
   function mergeServerMeetings(serverList) {
     var merged = (serverList || []).map(normalizeMeeting).filter(function (m) {
       if (isLibraryMeeting(m)) return false;
       var id = m.id || m.meeting_id;
       return !(id && deletedMeetingIds[id]);
     });
-    var seen = Object.create(null);
+    var byId = Object.create(null);
     merged.forEach(function (m) {
       var id = m.id || m.meeting_id;
-      if (id) {
-        seen[id] = true;
+      if (!id) return;
+      var pending = pendingMeetingEntry(id);
+      if (isPendingMeetingFresh(pending)) {
+        byId[id] = normalizeMeeting(pending.data);
+      } else {
+        byId[id] = m;
         delete pendingLocalMeetings[id];
       }
     });
     Object.keys(deletedMeetingIds).forEach(function (id) {
-      if (!seen[id]) delete deletedMeetingIds[id];
+      if (!byId[id]) delete deletedMeetingIds[id];
     });
     Object.keys(pendingLocalMeetings).forEach(function (id) {
-      if (!seen[id] && !deletedMeetingIds[id]) merged.unshift(pendingLocalMeetings[id]);
+      if (deletedMeetingIds[id] || byId[id]) return;
+      var pending = pendingMeetingEntry(id);
+      if (pending && pending.data) byId[id] = normalizeMeeting(pending.data);
     });
-    return sortMeetingsByStart(merged);
+    return sortMeetingsByStart(Object.keys(byId).map(function (k) { return byId[k]; }));
   }
 
   async function refresh(opts) {
@@ -414,16 +436,14 @@
   }
 
   function upsertMeetingInList(meeting) {
-    var m = enrichSavedMeetingForList(meeting);
-    var id = m.id || m.meeting_id;
+    var id = (meeting && (meeting.id || meeting.meeting_id)) || '';
     if (!id) return;
     var prev = NS.state.meetings.find(function (x) {
       return (x.id || x.meeting_id) === id;
     });
-    if (prev) {
-      m = enrichSavedMeetingForList(Object.assign({}, normalizeMeeting(prev), m));
-    }
-    pendingLocalMeetings[id] = m;
+    var merged = Object.assign({}, normalizeMeeting(prev || {}), meeting || {});
+    var m = enrichSavedMeetingForList(merged);
+    setPendingMeeting(id, m);
     NS.state.meetings = sortMeetingsByStart(
       [m].concat(
         NS.state.meetings.filter(function (x) {
