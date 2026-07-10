@@ -10,6 +10,8 @@
   var searchQuery = '';
   /** Cuộc họp vừa lưu — giữ trên UI cho đến khi API list xác nhận. */
   var pendingLocalMeetings = Object.create(null);
+  /** Cuộc họp vừa xóa — ẩn khỏi UI cho đến khi API không còn trả về. */
+  var deletedMeetingIds = Object.create(null);
 
   function ensureModules(bundles) {
     var Lazy = window.PhonghopLazy;
@@ -91,6 +93,8 @@
   function filterMeetings(list, bucket) {
     return list.filter(function (raw) {
       var m = normalizeMeeting(raw);
+      var mid = m.id || m.meeting_id;
+      if (mid && deletedMeetingIds[mid]) return false;
       if (searchQuery) {
         var q = searchQuery.toLowerCase();
         var hay = [m.title, m.meeting_code, m.description].join(' ').toLowerCase();
@@ -120,12 +124,7 @@
     if (!confirm(msg)) return;
     try {
       await SVC.deleteMeeting(id);
-      delete pendingLocalMeetings[id];
-      NS.state.meetings = NS.state.meetings.filter(function (m) {
-        return (m.id || m.meeting_id) !== id;
-      });
-      renderList();
-      refresh();
+      applyDeletedMeeting(id);
     } catch (e) {
       alert(e.message || 'Không xóa được cuộc họp');
     }
@@ -353,7 +352,10 @@
   }
 
   function mergeServerMeetings(serverList) {
-    var merged = (serverList || []).map(normalizeMeeting);
+    var merged = (serverList || []).map(normalizeMeeting).filter(function (m) {
+      var id = m.id || m.meeting_id;
+      return !(id && deletedMeetingIds[id]);
+    });
     var seen = Object.create(null);
     merged.forEach(function (m) {
       var id = m.id || m.meeting_id;
@@ -362,15 +364,19 @@
         delete pendingLocalMeetings[id];
       }
     });
+    Object.keys(deletedMeetingIds).forEach(function (id) {
+      if (!seen[id]) delete deletedMeetingIds[id];
+    });
     Object.keys(pendingLocalMeetings).forEach(function (id) {
-      if (!seen[id]) merged.unshift(pendingLocalMeetings[id]);
+      if (!seen[id] && !deletedMeetingIds[id]) merged.unshift(pendingLocalMeetings[id]);
     });
     return sortMeetingsByStart(merged);
   }
 
-  async function refresh() {
+  async function refresh(opts) {
+    opts = opts || {};
     NS.state.loading = true;
-    if (!NS.state.meetings.length) showListsLoading();
+    if (!opts.soft && !NS.state.meetings.length) showListsLoading();
     try {
       var results = await Promise.all([
         SVC.listMeetings(80),
@@ -406,6 +412,19 @@
         })
       )
     );
+  }
+
+  /** Xóa cuộc họp khỏi danh sách ngay sau khi API xóa thành công. */
+  function applyDeletedMeeting(meetingId) {
+    var id = meetingId;
+    if (!id) return;
+    deletedMeetingIds[id] = true;
+    delete pendingLocalMeetings[id];
+    NS.state.meetings = NS.state.meetings.filter(function (m) {
+      return (m.id || m.meeting_id) !== id;
+    });
+    renderList();
+    window.setTimeout(function () { refresh({ soft: true }); }, 600);
   }
 
   /** Hiện cuộc họp vừa lưu ngay; refresh đầy đủ chạy nền (không ghi đè). */
@@ -526,6 +545,7 @@
   window.PhonghopShell = {
     switchView: switchView,
     switchViewSilent: switchViewSilent,
+    applyDeletedMeeting: applyDeletedMeeting,
     showSessionView: function () {
       switchViewSilent('session');
       document.querySelectorAll('.ph-nav-item').forEach(function (btn) {

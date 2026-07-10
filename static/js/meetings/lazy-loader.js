@@ -19,7 +19,7 @@
       '/static/js/components/ModalForm.js',
       '/static/js/meetings/components/ParticipantTreePicker.js?v=3',
       '/static/js/meetings/components/MeetingForm.js?v=56',
-      '/static/js/meetings/components/MeetingDetail.js?v=50'
+      '/static/js/meetings/components/MeetingDetail.js?v=51'
     ],
     docs: [
       '/static/js/meetings/doc-cache.js?v=2',

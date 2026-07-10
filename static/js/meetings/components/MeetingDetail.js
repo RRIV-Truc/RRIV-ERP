@@ -340,9 +340,14 @@
         if (!confirm(msg)) return;
         try {
           var onUpdated = _opts && _opts.onUpdated;
-          await window.PhonghopServices.deleteMeeting(_meeting.id);
+          var deletedId = _meeting.id || _meeting.meeting_id;
+          await window.PhonghopServices.deleteMeeting(deletedId);
           destroy();
-          if (typeof onUpdated === 'function') onUpdated();
+          if (window.PhonghopShell && window.PhonghopShell.applyDeletedMeeting) {
+            window.PhonghopShell.applyDeletedMeeting(deletedId);
+          } else if (typeof onUpdated === 'function') {
+            onUpdated();
+          }
         } catch (e) {
           alert(e.message || 'Không xóa được cuộc họp');
         }
