@@ -10,7 +10,7 @@ from modules.meetings.decorators import (
     require_meeting_participant,
 )
 from modules.meetings.schemas import MeetingCreate, MeetingUpdate
-from modules.meetings.service import create_meeting, delete_meeting, get_meeting_detail, list_meetings, update_meeting
+from modules.meetings.service import create_meeting, delete_meeting, get_meeting_detail, get_meeting_detail_light, list_meetings, update_meeting
 from modules.meetings.room_service import (
     assert_can_access,
     find_meeting_by_code,
@@ -104,13 +104,20 @@ def api_update_meeting(meeting_id):
 
 
 @meetings_bp.route('/api/meetings/<meeting_id>', methods=['DELETE'])
+@meetings_bp.route('/api/meetings/<meeting_id>/delete', methods=['POST'])
 @require_meeting_manager
 def api_delete_meeting(meeting_id):
-    supabase = _supabase()
-    if not get_meeting_detail(supabase, meeting_id):
-        return jsonify({'success': False, 'message': 'Không tìm thấy cuộc họp'}), 404
     try:
-        delete_meeting(supabase, meeting_id, request.meetings_user)  # type: ignore[attr-defined]
+        supabase = _supabase()
+        meeting = get_meeting_detail_light(supabase, meeting_id)
+        if not meeting:
+            return jsonify({'success': False, 'message': 'Không tìm thấy cuộc họp'}), 404
+        delete_meeting(
+            supabase,
+            meeting_id,
+            request.meetings_user,  # type: ignore[attr-defined]
+            meeting=meeting,
+        )
         return jsonify({'success': True})
     except Exception as exc:
         print(f'api_delete_meeting: {exc}')

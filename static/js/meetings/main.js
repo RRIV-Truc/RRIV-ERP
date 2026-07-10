@@ -120,7 +120,12 @@
     if (!confirm(msg)) return;
     try {
       await SVC.deleteMeeting(id);
-      await refresh();
+      delete pendingLocalMeetings[id];
+      NS.state.meetings = NS.state.meetings.filter(function (m) {
+        return (m.id || m.meeting_id) !== id;
+      });
+      renderList();
+      refresh();
     } catch (e) {
       alert(e.message || 'Không xóa được cuộc họp');
     }

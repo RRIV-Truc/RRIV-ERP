@@ -50,3 +50,18 @@ def _sync_meeting_firebase(meeting_id: str, *, warm_documents: bool) -> None:
 def defer_meeting_firebase_setup(meeting_id: str, *, warm_documents: bool = False) -> None:
     """Tạo phòng Firebase + (tuỳ chọn) warm tài liệu chia sẻ — không chặn HTTP response."""
     _run_in_background(_sync_meeting_firebase, meeting_id, warm_documents=warm_documents)
+
+
+def _delete_firebase_room(room_id: str) -> None:
+    try:
+        from modules.meetings.providers.internal import InternalFirebaseProvider
+        InternalFirebaseProvider().delete_meeting(room_id)
+    except Exception as exc:
+        print(f'[meetings.background] delete firebase room {room_id}: {exc}')
+
+
+def defer_firebase_room_delete(room_id: str) -> None:
+    """Xóa phòng Firebase RTDB nền sau khi đã xóa Supabase."""
+    if not room_id:
+        return
+    _run_in_background(_delete_firebase_room, room_id)

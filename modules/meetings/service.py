@@ -324,18 +324,43 @@ def get_meeting_detail(supabase, meeting_id: str) -> dict | None:
     return get_meeting_detail_enriched(supabase, meeting_id)
 
 
-def delete_meeting(supabase, meeting_id: str, ctx: UserContext) -> bool:
+def get_meeting_detail_light(supabase, meeting_id: str) -> dict | None:
+    """Đọc metadata cuộc họp — không enrich (dùng cho xóa nhanh)."""
+    res = supabase.table('meetings').select('*').eq('id', meeting_id).limit(1).execute()
+    return res.data[0] if res.data else None
+
+
+def delete_meeting(
+    supabase,
+    meeting_id: str,
+    ctx: UserContext,
+    meeting: dict | None = None,
+) -> bool:
     """Xóa vĩnh viễn cuộc họp (chỉ admin/manager — kiểm tra ở route)."""
-    meeting = get_meeting_detail(supabase, meeting_id)
+    if not meeting:
+        meeting = get_meeting_detail_light(supabase, meeting_id)
     if not meeting:
         return False
 
     room_id = meeting.get('firebase_room_id')
-    if room_id and meeting.get('platform_type') == 'internal':
-        try:
-            get_provider('internal').delete_meeting(room_id)
-        except Exception as exc:
-            print(f'delete_meeting firebase cleanup: {exc}')
+    platform = (meeting.get('platform_type') or 'internal').lower()
 
-    supabase.table('meetings').delete().eq('id', meeting_id).execute()
+    try:
+        supabase.table('meeting_document_shares').delete().eq('meeting_id', meeting_id).execute()
+    except Exception as exc:
+        print(f'delete_meeting shares cleanup: {exc}')
+
+    try:
+        supabase.table('meeting_participants').delete().eq('meeting_id', meeting_id).execute()
+    except Exception as exc:
+        print(f'delete_meeting participants cleanup: {exc}')
+
+    res = supabase.table('meetings').delete().eq('id', meeting_id).execute()
+    if getattr(res, 'data', None) is None and getattr(res, 'error', None):
+        raise RuntimeError(str(res.error))
+
+    if room_id and platform == 'internal':
+        from modules.meetings.background import defer_firebase_room_delete
+        defer_firebase_room_delete(room_id)
+
     return True

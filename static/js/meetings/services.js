@@ -649,12 +649,16 @@
   }
 
   async function deleteMeeting(meetingId) {
-    var url = API + '/' + encodeURIComponent(meetingId) + '?username=' + encodeURIComponent(username());
-    var res = await fetch(url, {
-      method: 'DELETE',
+    var id = encodeURIComponent(meetingId);
+    var q = '?username=' + encodeURIComponent(username());
+    var res = await fetch(API + '/' + id + '/delete' + q, {
+      method: 'POST',
       headers: headers()
     });
-    var data = await res.json();
+    var data = await parseJsonResponse(
+      res,
+      'Không xóa được cuộc họp — server trả lỗi không hợp lệ (thử Ctrl+F5)'
+    );
     if (!res.ok) {
       var msg = data.message;
       if (Array.isArray(msg)) msg = msg.map(function (e) { return e.msg || JSON.stringify(e); }).join('; ');
