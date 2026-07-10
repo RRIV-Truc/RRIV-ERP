@@ -4,10 +4,13 @@
 (function () {
   'use strict';
 
-  var ORG = window.PhonghopOrg;
+  function phOrg() {
+    return window.PhonghopOrg;
+  }
 
   function escapeHtml(s) {
-    return ORG.esc(s);
+    var ORG = phOrg();
+    return ORG ? ORG.esc(s) : String(s == null ? '' : s);
   }
 
   function externalKey(ext) {
@@ -23,6 +26,18 @@
       options = options || {};
       var host = document.getElementById(hostId);
       if (!host) return null;
+
+      var ORG = phOrg();
+      if (!ORG || typeof ORG.buildOrgTree !== 'function') {
+        host.innerHTML =
+          '<p class="ph-detail-muted ph-doc-share-error">Chưa tải được danh sách nhân sự. Đóng form và thử lại, hoặc Ctrl+F5.</p>';
+        return {
+          getParticipants: function () { return []; },
+          setParticipants: function () {},
+          setOrgData: function () {},
+          destroy: function () { if (host) host.innerHTML = ''; }
+        };
+      }
 
       var orgData = options.orgData || { personnel: [], departments: [], teams: [] };
       var tree = ORG.buildOrgTree(orgData);
@@ -444,6 +459,7 @@
 
       function setOrgData(data) {
         orgData = data || { personnel: [], departments: [], teams: [] };
+        ORG = phOrg() || ORG;
         tree = ORG.buildOrgTree(orgData);
         render();
       }

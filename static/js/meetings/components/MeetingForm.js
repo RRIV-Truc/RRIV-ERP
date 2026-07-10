@@ -489,11 +489,15 @@
       },
       {
         key: '_participants', label: 'Người tham dự', type: 'custom', full: true,
-        html: '<div id="phParticipantsHost" class="ph-participants-host"></div>'
+        html:
+          '<label class="mf-label">Người tham dự</label>' +
+          '<div id="phParticipantsHost" class="ph-participants-host"></div>'
       },
       {
         key: '_doc_share', label: 'Tài liệu họp', type: 'custom', full: true,
-        html: '<div id="phDocShareHost" class="ph-doc-share-host"></div>'
+        html:
+          '<label class="mf-label">Tài liệu họp</label>' +
+          '<div id="phDocShareHost" class="ph-doc-share-host"></div>'
       }
     ];
   }
@@ -519,13 +523,28 @@
           _pendingHostId = '';
           _pendingSecretaryId = '';
         }
-        setTimeout(function () {
-          renderParticipantPicker();
-          var mid = (editData && editData.id) ||
-            (_editMeeting && (_editMeeting.id || _editMeeting.meeting_id)) ||
-            null;
+        var mid = (editData && editData.id) ||
+          (_editMeeting && (_editMeeting.id || _editMeeting.meeting_id)) ||
+          null;
+        function mountSections(attempt) {
+          var pHost = document.getElementById('phParticipantsHost');
+          var dHost = document.getElementById('phDocShareHost');
+          if ((!pHost || !dHost) && attempt < 12) {
+            setTimeout(function () { mountSections(attempt + 1); }, 50);
+            return;
+          }
+          try {
+            renderParticipantPicker();
+          } catch (e) {
+            console.warn('[MeetingForm] renderParticipantPicker', e);
+            if (pHost) {
+              pHost.innerHTML =
+                '<p class="ph-detail-muted ph-doc-share-error">Không hiển thị được danh sách nhân sự. Thử Ctrl+F5.</p>';
+            }
+          }
           loadDocShareSection(mid);
-        }, 80);
+        }
+        mountSections(0);
       },
       onClose: function () {
         fullCleanup();

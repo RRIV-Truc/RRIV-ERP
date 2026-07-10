@@ -17,21 +17,29 @@
     return Lazy.ensure(bundles);
   }
 
-  function ensureOrgDirectory() {
-    if (NS.state._orgLoaded && NS.state.orgDirectory && NS.state.orgDirectory.personnel) {
+  function orgDirectoryReady(org) {
+    return !!(org && org.personnel && org.personnel.length > 0);
+  }
+
+  function ensureOrgDirectory(force) {
+    if (!force && NS.state._orgLoaded && orgDirectoryReady(NS.state.orgDirectory)) {
       return Promise.resolve(NS.state.orgDirectory);
     }
     if (!db) db = ErpDb.firestore();
     return ensureModules('org').then(function () {
       return SVC.loadOrgDirectory(db).then(function (org) {
         NS.state.orgDirectory = org;
-        NS.state._orgLoaded = true;
-        NS.state.employees = org.personnel.map(function (p) {
+        NS.state._orgLoaded = orgDirectoryReady(org);
+        NS.state.employees = (org.personnel || []).map(function (p) {
           return SVC.normalizeEmployee(p, p.id);
         }).filter(Boolean);
         return org;
       });
     });
+  }
+
+  function ensureFormModules() {
+    return ensureModules(['org', 'forms']);
   }
 
   function moduleLoadError(e) {
@@ -117,8 +125,8 @@
   }
 
   function openDetail(meetingId) {
-    ensureModules('forms').then(function () {
-      return ensureOrgDirectory();
+    ensureFormModules().then(function () {
+      return ensureOrgDirectory(true);
     }).then(function () {
       if (!window.MeetingDetail) throw new Error('Module chi tiết chưa sẵn sàng.');
       window.MeetingDetail.open({
@@ -135,8 +143,8 @@
   }
 
   function openEdit(meeting) {
-    ensureModules('forms').then(function () {
-      return ensureOrgDirectory();
+    ensureFormModules().then(function () {
+      return ensureOrgDirectory(true);
     }).then(function () {
       if (!window.MeetingForm || !window.MeetingForm.open) {
         throw new Error('Module form chưa sẵn sàng.');
@@ -542,8 +550,8 @@
       alert('Chỉ Manager hoặc Admin mới được tạo cuộc họp.');
       return;
     }
-    return ensureModules('forms').then(function () {
-      return ensureOrgDirectory();
+    return ensureFormModules().then(function () {
+      return ensureOrgDirectory(true);
     }).then(function () {
       if (!window.MeetingForm || !window.MeetingForm.open) {
         throw new Error('Module form chưa sẵn sàng.');
@@ -552,7 +560,7 @@
         rooms: NS.state.rooms,
         orgData: NS.state.orgDirectory,
         reloadOrg: function () {
-          return ensureOrgDirectory();
+          return ensureOrgDirectory(true);
         },
         onSaved: function () { refresh(); }
       });
