@@ -242,6 +242,21 @@ def update_meeting(supabase, meeting_id: str, payload: MeetingUpdate, ctx: UserC
     return doc
 
 
+def _row_is_library_meeting(m: dict) -> bool:
+    """Ẩn cuộc họp ảo MTG-LIB-KHO khỏi danh sách họp."""
+    code = (m.get('meeting_code') or '').strip().upper()
+    if code == 'MTG-LIB-KHO':
+        return True
+    meta = m.get('metadata') or {}
+    if isinstance(meta, str):
+        try:
+            import json
+            meta = json.loads(meta) if meta else {}
+        except Exception:
+            meta = {}
+    return bool(meta.get('is_document_library'))
+
+
 def list_meetings(supabase, ctx: UserContext, limit: int = 50) -> list:
     from modules.meetings.rbac import can_create_meeting
     if (
@@ -252,7 +267,8 @@ def list_meetings(supabase, ctx: UserContext, limit: int = 50) -> list:
         res = supabase.table('meetings').select('*').order(
             'scheduled_start', desc=True
         ).limit(limit).execute()
-        return [_enrich_meeting(supabase, row) for row in (res.data or [])]
+        rows = [_enrich_meeting(supabase, row) for row in (res.data or [])]
+        return [m for m in rows if not _row_is_library_meeting(m)]
 
     if not ctx.employee_id and not ctx.username:
         return []
@@ -278,7 +294,7 @@ def list_meetings(supabase, ctx: UserContext, limit: int = 50) -> list:
         except Exception as exc:
             print(f'[list_meetings] skip meeting {mid}: {exc}')
             rows.append(_enrich_meeting(supabase, row))
-    return rows
+    return [m for m in rows if not _row_is_library_meeting(m)]
 
 
 def _user_is_app_admin(supabase, ctx: UserContext) -> bool:
@@ -342,8 +358,30 @@ def delete_meeting(
     if not meeting:
         return False
 
+    from modules.meetings.document_service import ensure_library_meeting, is_library_meeting
+
+    if is_library_meeting(meeting):
+        raise ValueError(
+            'Không thể xóa kho tài liệu chung (MTG-LIB-KHO). '
+            'Đây là nơi lưu toàn bộ tài liệu của Viện.'
+        )
+
     room_id = meeting.get('firebase_room_id')
     platform = (meeting.get('platform_type') or 'internal').lower()
+
+    try:
+        lib_id = ensure_library_meeting(supabase, ctx)
+        pending = supabase.table('meeting_documents').select('id').eq(
+            'meeting_id', meeting_id
+        ).execute()
+        cnt = len(pending.data or [])
+        if cnt:
+            supabase.table('meeting_documents').update({
+                'meeting_id': lib_id,
+            }).eq('meeting_id', meeting_id).execute()
+            print(f'[delete_meeting] preserved {cnt} document(s) in library before delete')
+    except Exception as exc:
+        print(f'delete_meeting preserve docs: {exc}')
 
     try:
         supabase.table('meeting_document_shares').delete().eq('meeting_id', meeting_id).execute()

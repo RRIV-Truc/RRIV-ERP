@@ -119,6 +119,8 @@ def api_delete_meeting(meeting_id):
             meeting=meeting,
         )
         return jsonify({'success': True})
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as exc:
         print(f'api_delete_meeting: {exc}')
         return jsonify({'success': False, 'message': str(exc)}), 500

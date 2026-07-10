@@ -296,9 +296,12 @@ def _list_library_items_at_parent(
     supabase,
     ctx: UserContext,
     parent_id: Optional[str],
+    lib_id: Optional[str] = None,
 ) -> list[dict]:
-    """Liệt kê file/thư mục tại một cấp — toàn kho (theo parent_id, không tách cuộc họp)."""
+    """Liệt kê file/thư mục tại một cấp trong kho tài liệu chung."""
     q = supabase.table('meeting_documents').select('*')
+    if lib_id:
+        q = q.eq('meeting_id', lib_id)
     if parent_id:
         q = q.eq('parent_id', parent_id)
     else:
@@ -308,6 +311,8 @@ def _list_library_items_at_parent(
     if can_create_meeting(ctx, supabase):
         return items
     allowed = _accessible_meeting_ids_for_user(supabase, ctx)
+    if lib_id:
+        allowed.add(str(lib_id))
     return [d for d in items if str(d.get('meeting_id') or '') in allowed]
 
 
@@ -639,7 +644,7 @@ def browse_library_folder(
         migrated = consolidate_documents_to_library(supabase, lib_id)
         if migrated:
             print(f'[meeting_docs] consolidated {migrated} document(s) into library')
-    items = _list_library_items_at_parent(supabase, ctx, parent_id)
+    items = _list_library_items_at_parent(supabase, ctx, parent_id, lib_id=lib_id)
     trail = _library_breadcrumb(supabase, parent_id) if parent_id else []
     breadcrumb = [{'id': '', 'name': 'Kho tài liệu'}] + trail
     shared_ids = sorted(get_shared_root_ids(supabase, for_meeting_id)) if for_meeting_id else []

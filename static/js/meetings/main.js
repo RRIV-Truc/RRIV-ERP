@@ -75,6 +75,17 @@
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  function isLibraryMeeting(m) {
+    if (!m) return false;
+    var code = String(m.meeting_code || '').trim().toUpperCase();
+    if (code === 'MTG-LIB-KHO') return true;
+    var meta = m.metadata;
+    if (typeof meta === 'string') {
+      try { meta = JSON.parse(meta); } catch (_) { meta = null; }
+    }
+    return !!(meta && meta.is_document_library);
+  }
+
   function normalizeMeeting(m) {
     if (!m) return m;
     if (m.meeting_status && !m.status) m.status = m.meeting_status;
@@ -93,6 +104,7 @@
   function filterMeetings(list, bucket) {
     return list.filter(function (raw) {
       var m = normalizeMeeting(raw);
+      if (isLibraryMeeting(m)) return false;
       var mid = m.id || m.meeting_id;
       if (mid && deletedMeetingIds[mid]) return false;
       if (searchQuery) {
@@ -353,6 +365,7 @@
 
   function mergeServerMeetings(serverList) {
     var merged = (serverList || []).map(normalizeMeeting).filter(function (m) {
+      if (isLibraryMeeting(m)) return false;
       var id = m.id || m.meeting_id;
       return !(id && deletedMeetingIds[id]);
     });
