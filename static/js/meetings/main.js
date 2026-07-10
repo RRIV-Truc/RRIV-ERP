@@ -8,6 +8,8 @@
   var db = null;
   var listFilter = { dash: 'live', calendar: 'upcoming' };
   var searchQuery = '';
+  /** Cuộc họp vừa lưu — giữ trên UI cho đến khi API list xác nhận. */
+  var pendingLocalMeetings = Object.create(null);
 
   function ensureModules(bundles) {
     var Lazy = window.PhonghopLazy;
@@ -309,6 +311,58 @@
     });
   }
 
+  function sortMeetingsByStart(list) {
+    return list.slice().sort(function (a, b) {
+      var ta = new Date(a.scheduled_start || 0).getTime();
+      var tb = new Date(b.scheduled_start || 0).getTime();
+      return tb - ta;
+    });
+  }
+
+  function enrichSavedMeetingForList(meeting) {
+    var m = normalizeMeeting(Object.assign({}, meeting || {}));
+    if (!m.status && m.meeting_status) m.status = m.meeting_status;
+    if (!m.meeting_status && m.status) m.meeting_status = m.status;
+    if (!m.status && !m.meeting_status) {
+      m.status = 'scheduled';
+      m.meeting_status = 'scheduled';
+    }
+    if (m.physical_room_id && NS.state.rooms && NS.state.rooms.length) {
+      var room = NS.state.rooms.find(function (r) { return r.id === m.physical_room_id; });
+      if (room) {
+        m.room_code = room.room_code;
+        m.room_name = room.name;
+      }
+    }
+    return m;
+  }
+
+  function activateListTab(groupKey, filter) {
+    listFilter[groupKey] = filter;
+    var sel = groupKey === 'dash' ? '[data-tabs="dash"]' : '[data-tabs="calendar"]';
+    var container = document.querySelector(sel);
+    if (!container) return;
+    container.querySelectorAll('.ph-tab').forEach(function (t) {
+      t.classList.toggle('is-active', t.getAttribute('data-filter') === filter);
+    });
+  }
+
+  function mergeServerMeetings(serverList) {
+    var merged = (serverList || []).map(normalizeMeeting);
+    var seen = Object.create(null);
+    merged.forEach(function (m) {
+      var id = m.id || m.meeting_id;
+      if (id) {
+        seen[id] = true;
+        delete pendingLocalMeetings[id];
+      }
+    });
+    Object.keys(pendingLocalMeetings).forEach(function (id) {
+      if (!seen[id]) merged.unshift(pendingLocalMeetings[id]);
+    });
+    return sortMeetingsByStart(merged);
+  }
+
   async function refresh() {
     NS.state.loading = true;
     if (!NS.state.meetings.length) showListsLoading();
@@ -320,35 +374,46 @@
           return NS.state.rooms || [];
         })
       ]);
-      NS.state.meetings = results[0].map(normalizeMeeting);
+      NS.state.meetings = mergeServerMeetings(results[0]);
       NS.state.rooms = results[1];
       renderList();
     } catch (e) {
       console.error('[phonghop] refresh', e);
-      showListError(e.message || 'Lỗi tải dữ liệu');
+      if (NS.state.meetings.length) {
+        renderList();
+      } else {
+        showListError(e.message || 'Lỗi tải dữ liệu');
+      }
     } finally {
       NS.state.loading = false;
     }
   }
 
   function upsertMeetingInList(meeting) {
-    var m = normalizeMeeting(meeting);
+    var m = enrichSavedMeetingForList(meeting);
     var id = m.id || m.meeting_id;
     if (!id) return;
-    NS.state.meetings = [m].concat(
-      NS.state.meetings.filter(function (x) {
-        return (x.id || x.meeting_id) !== id;
-      })
+    pendingLocalMeetings[id] = m;
+    NS.state.meetings = sortMeetingsByStart(
+      [m].concat(
+        NS.state.meetings.filter(function (x) {
+          return (x.id || x.meeting_id) !== id;
+        })
+      )
     );
   }
 
-  /** Hiện cuộc họp vừa lưu ngay; refresh đầy đủ chạy nền. */
+  /** Hiện cuộc họp vừa lưu ngay; refresh đầy đủ chạy nền (không ghi đè). */
   function applySavedMeeting(meeting) {
-    if (meeting) {
-      upsertMeetingInList(meeting);
-      renderList();
+    if (!meeting) {
+      refresh();
+      return;
     }
-    refresh();
+    upsertMeetingInList(meeting);
+    activateListTab('dash', 'upcoming');
+    activateListTab('calendar', 'upcoming');
+    renderList();
+    window.setTimeout(function () { refresh(); }, 1500);
   }
 
   function resetViewAfterRoom() {

@@ -243,7 +243,12 @@ def update_meeting(supabase, meeting_id: str, payload: MeetingUpdate, ctx: UserC
 
 
 def list_meetings(supabase, ctx: UserContext, limit: int = 50) -> list:
-    if ctx.is_global_admin or _user_is_app_admin(supabase, ctx):
+    from modules.meetings.rbac import can_create_meeting
+    if (
+        ctx.is_global_admin
+        or _user_is_app_admin(supabase, ctx)
+        or can_create_meeting(ctx, supabase)
+    ):
         res = supabase.table('meetings').select('*').order(
             'scheduled_start', desc=True
         ).limit(limit).execute()
