@@ -311,7 +311,13 @@
             rooms: opts.rooms,
             orgData: opts.orgData,
             reloadOrg: opts.reloadOrg,
-            onSaved: opts.onUpdated
+            onSaved: function (saved) {
+              if (window.PhonghopShell && window.PhonghopShell.applySavedMeeting) {
+                window.PhonghopShell.applySavedMeeting(saved);
+              } else if (typeof opts.onUpdated === 'function') {
+                opts.onUpdated();
+              }
+            }
           });
         }
       });

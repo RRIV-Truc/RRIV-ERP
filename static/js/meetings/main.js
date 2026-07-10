@@ -417,6 +417,12 @@
     var m = enrichSavedMeetingForList(meeting);
     var id = m.id || m.meeting_id;
     if (!id) return;
+    var prev = NS.state.meetings.find(function (x) {
+      return (x.id || x.meeting_id) === id;
+    });
+    if (prev) {
+      m = enrichSavedMeetingForList(Object.assign({}, normalizeMeeting(prev), m));
+    }
     pendingLocalMeetings[id] = m;
     NS.state.meetings = sortMeetingsByStart(
       [m].concat(
@@ -425,6 +431,29 @@
         })
       )
     );
+  }
+
+  function visibleListView() {
+    var v = document.querySelector('.ph-view.is-visible');
+    return v ? v.getAttribute('data-view') : 'dashboard';
+  }
+
+  /** Hiện cuộc họp vừa lưu ngay; refresh đầy đủ chạy nền (không ghi đè). */
+  function applySavedMeeting(meeting) {
+    if (!meeting) {
+      refresh({ soft: true });
+      return;
+    }
+    upsertMeetingInList(meeting);
+    activateListTab('dash', 'upcoming');
+    activateListTab('calendar', 'upcoming');
+    var view = visibleListView();
+    if (view !== 'dashboard' && view !== 'calendar') {
+      switchViewSilent('dashboard');
+    }
+    renderList();
+    updateWidgets();
+    window.setTimeout(function () { refresh({ soft: true }); }, 2500);
   }
 
   /** Xóa cuộc họp khỏi danh sách ngay sau khi API xóa thành công. */
@@ -437,20 +466,8 @@
       return (m.id || m.meeting_id) !== id;
     });
     renderList();
+    updateWidgets();
     window.setTimeout(function () { refresh({ soft: true }); }, 600);
-  }
-
-  /** Hiện cuộc họp vừa lưu ngay; refresh đầy đủ chạy nền (không ghi đè). */
-  function applySavedMeeting(meeting) {
-    if (!meeting) {
-      refresh();
-      return;
-    }
-    upsertMeetingInList(meeting);
-    activateListTab('dash', 'upcoming');
-    activateListTab('calendar', 'upcoming');
-    renderList();
-    window.setTimeout(function () { refresh(); }, 1500);
   }
 
   function resetViewAfterRoom() {
@@ -559,6 +576,7 @@
     switchView: switchView,
     switchViewSilent: switchViewSilent,
     applyDeletedMeeting: applyDeletedMeeting,
+    applySavedMeeting: applySavedMeeting,
     showSessionView: function () {
       switchViewSilent('session');
       document.querySelectorAll('.ph-nav-item').forEach(function (btn) {

@@ -183,6 +183,7 @@ def create_meeting(
     doc['participant_count'] = len(payload.participants or []) + 1
     if platform_result:
         doc['platform'] = platform_result.model_dump()
+    doc = _enrich_meeting(supabase, doc)
 
     if defer_firebase:
         from modules.meetings.background import defer_meeting_firebase_setup
@@ -233,6 +234,7 @@ def update_meeting(supabase, meeting_id: str, payload: MeetingUpdate, ctx: UserC
     doc = dict(res.data[0])
     if participant_count is not None:
         doc['participant_count'] = participant_count
+    doc = _enrich_meeting(supabase, doc)
 
     meeting_platform = (doc.get('platform_type') or 'internal').lower()
     if meeting_platform == 'internal':

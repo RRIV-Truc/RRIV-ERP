@@ -567,17 +567,18 @@
           participants: getSelectedParticipants()
         };
         var sharedIds = getSelectedSharedDocIds();
+        var savedMeeting;
         if (editId) {
           payload.shared_document_ids = sharedIds;
-          meeting = await window.PhonghopServices.updateMeeting(editId, payload);
+          savedMeeting = await window.PhonghopServices.updateMeeting(editId, payload);
         } else {
           payload.status = 'scheduled';
           payload.shared_document_ids = sharedIds;
-          meeting = await window.PhonghopServices.createMeeting(payload);
+          savedMeeting = await window.PhonghopServices.createMeeting(payload);
         }
-        if (typeof _onSaved === 'function') _onSaved(meeting);
+        if (typeof _onSaved === 'function') _onSaved(savedMeeting);
         _editMeeting = null;
-        return meeting;
+        return savedMeeting;
       }
     });
 
