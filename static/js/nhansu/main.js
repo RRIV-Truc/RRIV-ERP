@@ -61,11 +61,43 @@
   function showBootShell() {
     const head = document.getElementById('panelHead');
     if (!head || head.innerHTML.trim()) return;
-    head.innerHTML = `
-      <div class="breadcrumb"><span class="current">${NS.esc(NS.ROOT_LABEL)}</span></div>
-      <div class="panel-title-row">
-        <div class="panel-title">🌿 ${NS.esc(NS.ROOT_LABEL)}</div>
-      </div>`;
+    head.innerHTML =
+      '<div class="breadcrumb"><span class="current">' + NS.esc(NS.ROOT_LABEL) + '</span></div>' +
+      '<div class="panel-title-row">' +
+        '<div class="panel-title">🌿 ' + NS.esc(NS.ROOT_LABEL) + '</div>' +
+      '</div>';
+  }
+
+  function showLoadingState(message) {
+    const root = document.getElementById('treeRoot');
+    const body = document.getElementById('panelBody');
+    const msg = message || 'Đang tải dữ liệu từ Supabase…';
+    if (root) {
+      root.innerHTML = '<div class="tree-loading"><div class="spinner"></div><p class="tree-loading-msg">' +
+        NS.esc(msg) + '</p></div>';
+    }
+    if (body) {
+      body.innerHTML = '<div class="state"><div class="spinner"></div><div class="msg">' + NS.esc(msg) + '</div></div>';
+    }
+  }
+
+  function showLoadError(err) {
+    const root = document.getElementById('treeRoot');
+    const body = document.getElementById('panelBody');
+    const text = (err && err.message) ? err.message : String(err || 'Lỗi không xác định');
+    const html =
+      '<div class="state state-error">' +
+        '<div class="ico">⚠️</div>' +
+        '<div class="msg">Không tải được dữ liệu nhân sự</div>' +
+        '<p class="state-detail">' + NS.esc(text) + '</p>' +
+        '<button type="button" class="btn btn-primary" id="nhansuRetryLoad">Thử lại</button>' +
+      '</div>';
+    if (root) root.innerHTML = html;
+    if (body) body.innerHTML = html;
+    document.getElementById('nhansuRetryLoad')?.addEventListener('click', function () {
+      dataLoading = false;
+      loadBackgroundData(NS.state.currentUser || {});
+    });
   }
 
   function finishBoot(u) {
@@ -82,6 +114,15 @@
   async function loadBackgroundData(authUser) {
     if (dataLoading) return;
     dataLoading = true;
+    showLoadingState('Đang kết nối Supabase…');
+
+    if (authUser && authUser.username && typeof Auth.loadUserProfile === 'function') {
+      try {
+        await Auth.loadUserProfile(authUser.username);
+      } catch (e) {
+        console.warn('[Nhansu] profile preload', e);
+      }
+    }
 
     const sessionProfile = Auth.getProfile?.() || authUser;
     let u = buildUserFromAuth(authUser, sessionProfile);
@@ -95,10 +136,8 @@
     }
 
     try {
-      const [orgData, managedTeams] = await Promise.all([
-        fetchOrgData(),
-        SVC.loadManagedTeams(u.id).catch(function () { return []; })
-      ]);
+      const orgData = await fetchOrgData();
+      const managedTeams = await SVC.loadManagedTeams(u.id).catch(function () { return []; });
 
       NS.state.managedTeams = managedTeams || [];
       applyOrgData(orgData);
@@ -109,6 +148,7 @@
       enrichInBackground(authUser, u);
     } catch (e) {
       console.error('Bootstrap error:', e);
+      showLoadError(e);
       NS.toast('Lỗi tải dữ liệu: ' + e.message, 'error');
     } finally {
       dataLoading = false;
@@ -195,14 +235,35 @@
   }
 
   async function fetchOrgData() {
-    return Promise.all([
+    const labels = ['nhân sự', 'phòng ban', 'chức vụ', 'tổ', 'nhà máy', 'vai trò hệ thống'];
+    const jobs = [
       SVC.loadPersonnel(),
       SVC.loadDepartments(),
       SVC.loadPositions(),
       SVC.loadTeams(),
       SVC.loadFactories().catch(function () { return []; }),
       SVC.loadSystemRoles()
-    ]);
+    ];
+    const settled = await Promise.allSettled(jobs);
+    const out = settled.map(function (r, i) {
+      if (r.status === 'fulfilled') return r.value;
+      console.error('[Nhansu] load ' + labels[i], r.reason);
+      return [];
+    });
+    const failed = settled
+      .map(function (r, i) { return r.status === 'rejected' ? labels[i] : null; })
+      .filter(Boolean);
+    if (settled[0].status === 'rejected') {
+      const reason = settled[0].reason;
+      throw new Error(
+        'Không tải được danh sách nhân sự: ' +
+        ((reason && reason.message) ? reason.message : String(reason))
+      );
+    }
+    if (failed.length) {
+      NS.toast('Một phần dữ liệu chưa tải: ' + failed.join(', '), 'warning');
+    }
+    return out;
   }
 
   function applyOrgData(orgData) {
@@ -260,18 +321,26 @@
   }
 
   async function loadAll() {
-    const root = document.getElementById('treeRoot');
-    if (root) root.innerHTML = '<div class="tree-loading"><div class="spinner"></div></div>';
-
-    const orgData = await fetchOrgData();
-    applyOrgData(orgData);
-    TREE.render();
-    PANEL.render();
+    showLoadingState('Đang làm mới…');
+    try {
+      const orgData = await fetchOrgData();
+      applyOrgData(orgData);
+      TREE.render();
+      PANEL.render();
+    } catch (e) {
+      showLoadError(e);
+      throw e;
+    }
   }
 
   async function refresh() {
-    await loadAll();
-    NS.toast('Đã làm mới');
+    dataLoading = false;
+    try {
+      await loadAll();
+      NS.toast('Đã làm mới');
+    } catch (e) {
+      NS.toast('Làm mới thất bại: ' + (e.message || e), 'error');
+    }
   }
 
   function updateUserChip(u) {

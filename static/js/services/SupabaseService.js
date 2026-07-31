@@ -27,15 +27,43 @@ const SupabaseService = (function () {
   }
 
   async function apiFetch(path, options = {}) {
-    const res = await fetch(path, {
-      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-      ...options
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error(body.message || body.error || `HTTP ${res.status}`);
+    const retries = options.retries != null ? options.retries : 2;
+    const timeoutMs = options.timeoutMs || 90000;
+    let lastErr = null;
+
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      let timer = null;
+      try {
+        if (controller) {
+          timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+        }
+        const res = await fetch(path, {
+          headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+          ...options,
+          signal: controller ? controller.signal : undefined
+        });
+        if (timer) clearTimeout(timer);
+        const body = await res.json().catch(function () { return {}; });
+        if (!res.ok) {
+          throw new Error(body.message || body.error || ('HTTP ' + res.status));
+        }
+        return body;
+      } catch (e) {
+        if (timer) clearTimeout(timer);
+        lastErr = e;
+        const aborted = e && (e.name === 'AbortError' || String(e.message || '').indexOf('abort') >= 0);
+        if (attempt < retries) {
+          await new Promise(function (r) { setTimeout(r, 1200 * (attempt + 1)); });
+          continue;
+        }
+        if (aborted) {
+          throw new Error('Máy chủ phản hồi chậm — thử bấm Làm mới hoặc đợi thêm vài giây.');
+        }
+        throw lastErr;
+      }
     }
-    return body;
+    throw lastErr || new Error('Không kết nối được máy chủ');
   }
 
   async function getDoc(collection, docId) {

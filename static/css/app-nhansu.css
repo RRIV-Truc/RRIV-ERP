@@ -132,6 +132,14 @@ html, body {
   animation: spin 0.7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+.tree-loading-msg, .state-detail {
+  font-size: 13px;
+  text-align: center;
+  max-width: 360px;
+  line-height: 1.45;
+}
+.state-error .ico { font-size: 28px; }
+.state-error .msg { font-weight: 600; color: var(--text, #1e293b); }
 
 /* Tree nodes */
 .tnode {
