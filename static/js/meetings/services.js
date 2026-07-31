@@ -231,7 +231,7 @@
     if (!btn) return;
     var panel = getDocViewerPanel();
     var on = panel && document.fullscreenElement === panel;
-    btn.textContent = on ? 'Thu nhỏ' : 'Toàn màn hình';
+    btn.textContent = on ? '⛶ Thu nhỏ' : '⛶ Toàn màn hình';
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
 
@@ -248,21 +248,14 @@
 
   function ensureDocViewerModal() {
     var el = document.getElementById('phDocViewerModal');
-    if (el) {
-      if (!el.querySelector('#phDocViewerFullscreen')) {
-        var head = el.querySelector('.ph-doc-viewer-head');
-        var downloadBtn = el.querySelector('#phDocViewerDownload');
-        if (head && downloadBtn) {
-          var fsBtn = document.createElement('button');
-          fsBtn.type = 'button';
-          fsBtn.className = 'ph-btn';
-          fsBtn.id = 'phDocViewerFullscreen';
-          fsBtn.title = 'Toàn màn hình';
-          fsBtn.textContent = 'Toàn màn hình';
-          fsBtn.addEventListener('click', toggleDocViewerFullscreen);
-          head.insertBefore(fsBtn, downloadBtn);
-        }
+    if (el && !el.querySelector('#phDocViewerFullscreen')) {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(function () { /* ignore */ });
       }
+      el.remove();
+      el = null;
+    }
+    if (el) {
       if (!ensureDocViewerModal._fsBound) {
         ensureDocViewerModal._fsBound = true;
         document.addEventListener('fullscreenchange', updateDocViewerFullscreenBtn);
@@ -278,7 +271,7 @@
       '<div class="ph-doc-viewer-panel">' +
         '<div class="ph-doc-viewer-head">' +
           '<strong id="phDocViewerTitle">Tài liệu</strong>' +
-          '<button type="button" class="ph-btn" id="phDocViewerFullscreen" title="Toàn màn hình">Toàn màn hình</button>' +
+          '<button type="button" class="ph-btn ph-btn-primary" id="phDocViewerFullscreen" title="Toàn màn hình (F)">⛶ Toàn màn hình</button>' +
           '<button type="button" class="ph-btn" id="phDocViewerDownload">Tải về / Mở app</button>' +
           '<button type="button" class="ph-btn" id="phDocViewerClose">Đóng</button>' +
         '</div>' +
@@ -292,9 +285,27 @@
       closeDocViewer();
     });
     el.querySelector('#phDocViewerFullscreen').addEventListener('click', toggleDocViewerFullscreen);
+    var frame = el.querySelector('#phDocViewerFrame');
+    if (frame) {
+      frame.addEventListener('dblclick', toggleDocViewerFullscreen);
+    }
     if (!ensureDocViewerModal._fsBound) {
       ensureDocViewerModal._fsBound = true;
       document.addEventListener('fullscreenchange', updateDocViewerFullscreenBtn);
+    }
+    if (!ensureDocViewerModal._keyBound) {
+      ensureDocViewerModal._keyBound = true;
+      document.addEventListener('keydown', function (e) {
+        var modal = document.getElementById('phDocViewerModal');
+        if (!modal || modal.hidden) return;
+        if (e.key === 'f' || e.key === 'F') {
+          e.preventDefault();
+          toggleDocViewerFullscreen();
+        }
+        if (e.key === 'Escape' && document.fullscreenElement) {
+          document.exitFullscreen().catch(function () { /* ignore */ });
+        }
+      });
     }
     return el;
   }

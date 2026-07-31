@@ -252,6 +252,11 @@ def post_chat(
         payload['toDisplayName'] = _display_name_for_username(
             supabase, meeting.get('id'), to_user
         )
+        to_emp = _participant_employee_id_for_username(
+            supabase, meeting.get('id'), to_user
+        )
+        if to_emp:
+            payload['toEmployeeId'] = to_emp
     _rtdb_ref(f'meetings/{room_id}/chat/{msg_id}').set(payload)
     _rtdb_ref(f'meetings/{room_id}/meta').update({'lastActivity': now})
     return payload
@@ -266,6 +271,24 @@ def _normalize_chat_channel(channel: str) -> str:
     if c in ('private', 'dm', 'direct', 'personal'):
         return 'private'
     return 'all'
+
+
+def _participant_employee_id_for_username(
+    supabase, meeting_id: Optional[str], username: str
+) -> Optional[str]:
+    username = (username or '').strip().lower()
+    if not username or not meeting_id:
+        return None
+    try:
+        pr = supabase.table('meeting_participants').select(
+            'employee_id, username'
+        ).eq('meeting_id', meeting_id).execute()
+        for p in pr.data or []:
+            if (p.get('username') or '').strip().lower() == username and p.get('employee_id'):
+                return str(p['employee_id'])
+    except Exception:
+        pass
+    return None
 
 
 def _display_name_for_username(supabase, meeting_id: Optional[str], username: str) -> str:
@@ -306,7 +329,14 @@ def _can_view_chat_message(msg: dict, ctx: UserContext, roles: dict) -> bool:
     if channel == 'private':
         from_user = (msg.get('username') or '').strip().lower()
         to_user = (msg.get('toUsername') or '').strip().lower()
-        return my_user in (from_user, to_user)
+        if my_user in (from_user, to_user):
+            return True
+        my_emp = str(ctx.employee_id or '').strip()
+        if not my_emp:
+            return False
+        to_emp = str(msg.get('toEmployeeId') or msg.get('to_employee_id') or '').strip()
+        from_emp = str(msg.get('employeeId') or msg.get('employee_id') or '').strip()
+        return my_emp in (to_emp, from_emp)
     return True
 
 

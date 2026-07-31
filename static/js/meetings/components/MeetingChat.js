@@ -49,11 +49,16 @@
     }
     if (target.indexOf('user:') === 0) {
       var peer = target.slice(5).toLowerCase();
+      var myEmp = myEmployeeId();
       return list.filter(function (m) {
         if ((m.channel || '').toLowerCase() !== 'private') return false;
         var from = (m.username || '').trim().toLowerCase();
         var to = (m.toUsername || '').trim().toLowerCase();
-        return (from === uname && to === peer) || (from === peer && to === uname);
+        if ((from === uname && to === peer) || (from === peer && to === uname)) return true;
+        if (!myEmp) return false;
+        var toEmp = String(m.toEmployeeId || m.to_employee_id || '');
+        var fromEmp = String(m.employeeId || m.employee_id || '');
+        return (from === peer && toEmp === myEmp) || (to === peer && fromEmp === myEmp);
       });
     }
     return list;
@@ -71,25 +76,80 @@
     }
   }
 
-  /** Phát hiện tin riêng mới gửi tới mình; trả về username người gửi để tự chuyển tab. */
-  function processNewMessages(chat) {
+  function myEmployeeId() {
+    var u = window.PhonghopState && window.PhonghopState.state.currentUser;
+    if (u && u.employee_id) return String(u.employee_id);
+    if (u && u.employeeId) return String(u.employeeId);
+    try {
+      var c = JSON.parse(localStorage.getItem('currentUser') || 'null');
+      if (c && (c.employee_id || c.employeeId)) return String(c.employee_id || c.employeeId);
+    } catch (_) { /* ignore */ }
+    return '';
+  }
+
+  function isPrivateMessageForMe(m) {
+    if ((m.channel || '').toLowerCase() !== 'private') return false;
     var uname = myUsername();
+    var myEmp = myEmployeeId();
+    var from = (m.username || '').trim().toLowerCase();
+    var to = (m.toUsername || '').trim().toLowerCase();
+    if (from === uname) return false;
+    if (to === uname) return true;
+    if (myEmp) {
+      var toEmp = String(m.toEmployeeId || m.to_employee_id || '');
+      if (toEmp && toEmp === myEmp) return true;
+    }
+    return false;
+  }
+
+  function incomingPrivatePeer(m) {
+    return (m.username || '').trim().toLowerCase();
+  }
+
+  /** Lần đầu mở chat: vẫn chuyển sang hộp thoại riêng nếu đã có tin gửi tới mình. */
+  function seedInitialChat(chat) {
     var switchPeer = null;
     (chat || []).forEach(function (m) {
       var key = msgKey(m);
-      if (_seenMsgIds[key]) return;
       _seenMsgIds[key] = true;
-      if (!_chatSeeded) return;
-      if ((m.channel || '').toLowerCase() !== 'private') return;
-      var from = (m.username || '').trim().toLowerCase();
-      var to = (m.toUsername || '').trim().toLowerCase();
-      if (to !== uname || from === uname) return;
+      if (!isPrivateMessageForMe(m)) return;
+      var from = incomingPrivatePeer(m);
+      if (!from) return;
       if (_chatTarget !== 'user:' + from) {
         _unreadPrivate[from] = (_unreadPrivate[from] || 0) + 1;
       }
       switchPeer = from;
     });
     return switchPeer;
+  }
+
+  /** Phát hiện tin riêng mới gửi tới mình; trả về username người gửi để tự chuyển tab. */
+  function processNewMessages(chat) {
+    var switchPeer = null;
+    (chat || []).forEach(function (m) {
+      var key = msgKey(m);
+      if (_seenMsgIds[key]) return;
+      _seenMsgIds[key] = true;
+      if (!isPrivateMessageForMe(m)) return;
+      var from = incomingPrivatePeer(m);
+      if (!from) return;
+      if (_chatTarget !== 'user:' + from) {
+        _unreadPrivate[from] = (_unreadPrivate[from] || 0) + 1;
+      }
+      switchPeer = from;
+    });
+    return switchPeer;
+  }
+
+  function peerLabelFromChat(chat, peer) {
+    var label = peer;
+    (chat || []).forEach(function (m) {
+      var from = (m.username || '').trim().toLowerCase();
+      var to = (m.toUsername || '').trim().toLowerCase();
+      if (from === peer && m.displayName) label = m.displayName;
+      if (to === peer && m.toDisplayName) label = m.toDisplayName;
+    });
+    return label;
   }
 
   function buildUnreadBanner() {
@@ -110,15 +170,35 @@
     }
     var attendees = room.attendees || [];
     var privAdded = {};
-    attendees.forEach(function (a) {
-      var u = (a.username || '').trim().toLowerCase();
+    function addPrivateOption(u, displayName, online) {
       if (!u || u === uname || privAdded[u]) return;
       privAdded[u] = true;
-      var name = a.displayName || u;
-      var online = a.online ? '' : ' (offline)';
+      var name = displayName || u;
+      var onlineTxt = online === false ? ' (offline)' : (online === true ? '' : '');
       var unread = _unreadPrivate[u] || 0;
       var badge = unread ? ' • ' + unread + ' mới' : '';
-      opts.push({ value: 'user:' + u, label: '💬 Riêng: ' + name + online + badge });
+      opts.push({ value: 'user:' + u, label: '💬 Riêng: ' + name + onlineTxt + badge });
+    }
+    attendees.forEach(function (a) {
+      addPrivateOption(
+        (a.username || '').trim().toLowerCase(),
+        a.displayName,
+        a.online
+      );
+    });
+    (_lastRoom && _lastRoom.chat || []).forEach(function (m) {
+      if ((m.channel || '').toLowerCase() !== 'private') return;
+      var from = (m.username || '').trim().toLowerCase();
+      var to = (m.toUsername || '').trim().toLowerCase();
+      if (from && from !== uname) {
+        addPrivateOption(from, m.displayName || from, undefined);
+      }
+      if (to && to !== uname) {
+        addPrivateOption(to, m.toDisplayName || to, undefined);
+      }
+    });
+    Object.keys(_unreadPrivate).forEach(function (peer) {
+      addPrivateOption(peer, peerLabelFromChat(_lastRoom && _lastRoom.chat, peer), undefined);
     });
     return opts;
   }
@@ -169,6 +249,14 @@
     }).join('');
     sel.innerHTML = html;
     var valid = opts.some(function (o) { return o.value === prev; });
+    if (!valid && prev.indexOf('user:') === 0) {
+      var peer = prev.slice(5);
+      opts.push({
+        value: prev,
+        label: '💬 Riêng: ' + peerLabelFromChat(_lastRoom && _lastRoom.chat, peer)
+      });
+      valid = true;
+    }
     _chatTarget = valid ? prev : 'all';
     sel.value = _chatTarget;
     updatePlaceholder();
@@ -298,7 +386,8 @@
       if (!_host) return;
       ensureShell();
 
-      var switchPeer = processNewMessages((room || {}).chat || []);
+      var chat = (room || {}).chat || [];
+      var switchPeer = _chatSeeded ? processNewMessages(chat) : seedInitialChat(chat);
       _chatSeeded = true;
       if (switchPeer) {
         var peerTarget = 'user:' + switchPeer;
