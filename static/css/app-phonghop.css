@@ -782,6 +782,21 @@ body {
   padding: 6px 8px;
 }
 
+.ph-chat-unread-banner {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(14, 165, 233, 0.15);
+  border: 1px solid rgba(14, 165, 233, 0.35);
+  color: #7dd3fc;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: center;
+}
+.ph-chat-unread-banner:hover {
+  background: rgba(14, 165, 233, 0.25);
+}
+
 .ph-room-msg-channel {
   color: var(--ph-accent);
   font-size: 10px;
@@ -1075,6 +1090,21 @@ body.ph-in-session .ph-context { display: flex; }
   border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+.ph-doc-viewer-panel:fullscreen,
+.ph-doc-viewer-panel:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border-radius: 0;
+  border: none;
+}
+.ph-doc-viewer-panel:fullscreen .ph-doc-viewer-frame,
+.ph-doc-viewer-panel:-webkit-full-screen .ph-doc-viewer-frame {
+  flex: 1;
+  min-height: 0;
 }
 .ph-doc-viewer-head {
   display: flex;

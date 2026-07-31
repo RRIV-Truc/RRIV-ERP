@@ -29,7 +29,7 @@
       '/static/js/meetings/pptx-slides.js?v=1',
       '/static/js/meetings/components/MeetingPresenter.js?v=8',
       '/static/js/meetings/components/MeetingScreenShare.js?v=16',
-      '/static/js/meetings/components/MeetingChat.js?v=1',
+      '/static/js/meetings/components/MeetingChat.js?v=2',
       '/static/js/meetings/components/MeetingRoom.js?v=75'
     ]
   };

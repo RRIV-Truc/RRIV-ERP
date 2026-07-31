@@ -221,9 +221,54 @@
     return data;
   }
 
+  function getDocViewerPanel() {
+    var el = document.getElementById('phDocViewerModal');
+    return el ? el.querySelector('.ph-doc-viewer-panel') : null;
+  }
+
+  function updateDocViewerFullscreenBtn() {
+    var btn = document.getElementById('phDocViewerFullscreen');
+    if (!btn) return;
+    var panel = getDocViewerPanel();
+    var on = panel && document.fullscreenElement === panel;
+    btn.textContent = on ? 'Thu nhỏ' : 'Toàn màn hình';
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+
+  function toggleDocViewerFullscreen() {
+    var panel = getDocViewerPanel();
+    if (!panel) return;
+    if (document.fullscreenElement === panel) {
+      document.exitFullscreen().catch(function () { /* ignore */ });
+      return;
+    }
+    var req = panel.requestFullscreen();
+    if (req && req.catch) req.catch(function () { /* ignore */ });
+  }
+
   function ensureDocViewerModal() {
     var el = document.getElementById('phDocViewerModal');
-    if (el) return el;
+    if (el) {
+      if (!el.querySelector('#phDocViewerFullscreen')) {
+        var head = el.querySelector('.ph-doc-viewer-head');
+        var downloadBtn = el.querySelector('#phDocViewerDownload');
+        if (head && downloadBtn) {
+          var fsBtn = document.createElement('button');
+          fsBtn.type = 'button';
+          fsBtn.className = 'ph-btn';
+          fsBtn.id = 'phDocViewerFullscreen';
+          fsBtn.title = 'Toàn màn hình';
+          fsBtn.textContent = 'Toàn màn hình';
+          fsBtn.addEventListener('click', toggleDocViewerFullscreen);
+          head.insertBefore(fsBtn, downloadBtn);
+        }
+      }
+      if (!ensureDocViewerModal._fsBound) {
+        ensureDocViewerModal._fsBound = true;
+        document.addEventListener('fullscreenchange', updateDocViewerFullscreenBtn);
+      }
+      return el;
+    }
     el = document.createElement('div');
     el.id = 'phDocViewerModal';
     el.className = 'ph-doc-viewer-modal';
@@ -233,6 +278,7 @@
       '<div class="ph-doc-viewer-panel">' +
         '<div class="ph-doc-viewer-head">' +
           '<strong id="phDocViewerTitle">Tài liệu</strong>' +
+          '<button type="button" class="ph-btn" id="phDocViewerFullscreen" title="Toàn màn hình">Toàn màn hình</button>' +
           '<button type="button" class="ph-btn" id="phDocViewerDownload">Tải về / Mở app</button>' +
           '<button type="button" class="ph-btn" id="phDocViewerClose">Đóng</button>' +
         '</div>' +
@@ -245,6 +291,11 @@
     el.querySelector('#phDocViewerClose').addEventListener('click', function () {
       closeDocViewer();
     });
+    el.querySelector('#phDocViewerFullscreen').addEventListener('click', toggleDocViewerFullscreen);
+    if (!ensureDocViewerModal._fsBound) {
+      ensureDocViewerModal._fsBound = true;
+      document.addEventListener('fullscreenchange', updateDocViewerFullscreenBtn);
+    }
     return el;
   }
 
@@ -254,6 +305,9 @@
   function closeDocViewer() {
     var el = document.getElementById('phDocViewerModal');
     if (!el) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(function () { /* ignore */ });
+    }
     el.hidden = true;
     var frame = el.querySelector('#phDocViewerFrame');
     if (frame) frame.removeAttribute('src');
@@ -583,6 +637,7 @@
         openExternalDownload(presetUrl, name);
       };
       modal.hidden = false;
+      updateDocViewerFullscreenBtn();
       return;
     }
     closeDocViewer();

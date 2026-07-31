@@ -8,6 +8,9 @@
   var _meetingId = null;
   var _lastRoom = null;
   var _chatTarget = 'all';
+  var _chatSeeded = false;
+  var _seenMsgIds = {};
+  var _unreadPrivate = {};
 
   function esc(s) {
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -56,6 +59,47 @@
     return list;
   }
 
+  function msgKey(m) {
+    if (m && m.id) return String(m.id);
+    return String(m && m.at || '') + '|' + String(m && m.username || '') + '|' +
+      String(m && m.text || '').slice(0, 48);
+  }
+
+  function clearUnreadForTarget(target) {
+    if (target && target.indexOf('user:') === 0) {
+      delete _unreadPrivate[target.slice(5).toLowerCase()];
+    }
+  }
+
+  /** Phát hiện tin riêng mới gửi tới mình; trả về username người gửi để tự chuyển tab. */
+  function processNewMessages(chat) {
+    var uname = myUsername();
+    var switchPeer = null;
+    (chat || []).forEach(function (m) {
+      var key = msgKey(m);
+      if (_seenMsgIds[key]) return;
+      _seenMsgIds[key] = true;
+      if (!_chatSeeded) return;
+      if ((m.channel || '').toLowerCase() !== 'private') return;
+      var from = (m.username || '').trim().toLowerCase();
+      var to = (m.toUsername || '').trim().toLowerCase();
+      if (to !== uname || from === uname) return;
+      if (_chatTarget !== 'user:' + from) {
+        _unreadPrivate[from] = (_unreadPrivate[from] || 0) + 1;
+      }
+      switchPeer = from;
+    });
+    return switchPeer;
+  }
+
+  function buildUnreadBanner() {
+    var peers = Object.keys(_unreadPrivate);
+    if (!peers.length || _chatTarget !== 'all') return '';
+    var total = peers.reduce(function (n, p) { return n + (_unreadPrivate[p] || 0); }, 0);
+    return '<div class="ph-chat-unread-banner" data-peer="' + esc(peers[0]) + '">' +
+      '💬 Bạn có ' + total + ' tin nhắn riêng — bấm để xem</div>';
+  }
+
   function buildTargetOptions(room) {
     var uname = myUsername();
     var opts = [
@@ -72,7 +116,9 @@
       privAdded[u] = true;
       var name = a.displayName || u;
       var online = a.online ? '' : ' (offline)';
-      opts.push({ value: 'user:' + u, label: '💬 Riêng: ' + name + online });
+      var unread = _unreadPrivate[u] || 0;
+      var badge = unread ? ' • ' + unread + ' mới' : '';
+      opts.push({ value: 'user:' + u, label: '💬 Riêng: ' + name + online + badge });
     });
     return opts;
   }
@@ -80,8 +126,9 @@
   function buildChatHtml(messages, target) {
     var filtered = filterMessages(messages, target);
     if (!filtered.length) {
+      var emptyBanner = buildUnreadBanner();
       if (target === 'all') {
-        return '<div class="ph-room-empty">Chưa có tin công khai. Chào mọi người!</div>';
+        return emptyBanner + '<div class="ph-room-empty">Chưa có tin công khai. Chào mọi người!</div>';
       }
       if (target === 'hosts') {
         return '<div class="ph-room-empty">Chưa có tin gửi Chủ trì & Thư ký.</div>';
@@ -89,7 +136,8 @@
       return '<div class="ph-room-empty">Chưa có tin nhắn riêng trong cuộc trò chuyện này.</div>';
     }
     var uname = myUsername();
-    return filtered.map(function (m) {
+    var banner = buildUnreadBanner();
+    var body = filtered.map(function (m) {
       var mine = (m.username || '').trim().toLowerCase() === uname;
       var ch = (m.channel || 'all').toLowerCase();
       var meta = '';
@@ -108,6 +156,7 @@
         '<div class="ph-room-msg-text">' + esc(m.text) + '</div>' +
       '</div>';
     }).join('');
+    return banner + body;
   }
 
   function updateTargetSelect(room) {
@@ -181,6 +230,22 @@
     if (sel) {
       sel.addEventListener('change', function () {
         _chatTarget = sel.value || 'all';
+        clearUnreadForTarget(_chatTarget);
+        updatePlaceholder();
+        if (_lastRoom) renderMessages(_lastRoom);
+      });
+    }
+
+    if (_host) {
+      _host.addEventListener('click', function (e) {
+        var banner = e.target && e.target.closest ? e.target.closest('.ph-chat-unread-banner') : null;
+        if (!banner) return;
+        var peer = banner.getAttribute('data-peer');
+        if (!peer) return;
+        _chatTarget = 'user:' + peer.toLowerCase();
+        clearUnreadForTarget(_chatTarget);
+        var selEl = _host.querySelector('#phChatTargetSelect');
+        if (selEl) selEl.value = _chatTarget;
         updatePlaceholder();
         if (_lastRoom) renderMessages(_lastRoom);
       });
@@ -222,6 +287,9 @@
       _host = hostEl;
       _meetingId = meetingId;
       _chatTarget = 'all';
+      _chatSeeded = false;
+      _seenMsgIds = {};
+      _unreadPrivate = {};
       ensureShell();
     },
 
@@ -229,7 +297,21 @@
       _lastRoom = room;
       if (!_host) return;
       ensureShell();
+
+      var switchPeer = processNewMessages((room || {}).chat || []);
+      _chatSeeded = true;
+      if (switchPeer) {
+        var peerTarget = 'user:' + switchPeer;
+        if (_chatTarget === 'all' || _chatTarget === 'hosts' || _chatTarget !== peerTarget) {
+          _chatTarget = peerTarget;
+          clearUnreadForTarget(_chatTarget);
+        }
+      }
+
       updateTargetSelect(room || {});
+      var selEl = _host.querySelector('#phChatTargetSelect');
+      if (selEl) selEl.value = _chatTarget;
+      updatePlaceholder();
       renderMessages(room || {});
     },
 
@@ -242,6 +324,9 @@
       _meetingId = null;
       _lastRoom = null;
       _chatTarget = 'all';
+      _chatSeeded = false;
+      _seenMsgIds = {};
+      _unreadPrivate = {};
     }
   };
 })();
