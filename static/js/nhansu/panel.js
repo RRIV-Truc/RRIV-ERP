@@ -10,6 +10,14 @@
           deptName, posName, teamName, filterPersonnel, ROLE_LABELS, TEAM_TYPES, ROOT_LABEL,
           personInDept } = NS;
 
+  function ensureModules(bundle) {
+    var Lazy = window.NhansuLazy;
+    if (!Lazy || !Lazy.ensure) {
+      return Promise.reject(new Error('Trình tải module chưa sẵn sàng.'));
+    }
+    return Lazy.ensure(bundle);
+  }
+
   let viewMode = 'list'; // 'list' | 'stats'
 
   function render() {
