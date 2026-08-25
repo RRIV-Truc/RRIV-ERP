@@ -1771,6 +1771,66 @@ body.ph-in-session .ph-context { display: flex; }
   display: flex; flex-wrap: wrap; gap: 8px;
 }
 
+/* Ghi âm biên bản — Thư ký / Chủ trì */
+.ph-meeting-recorder-host { margin-bottom: 16px; }
+.ph-recorder-bar {
+  padding: 14px 16px; border-radius: 12px;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  background: rgba(14, 116, 144, 0.12);
+}
+.ph-recorder-title { margin: 0 0 6px; font-size: 15px; }
+.ph-recorder-lead { margin: 0 0 12px; font-size: 12px; line-height: 1.45; }
+.ph-recorder-actions,
+.ph-recorder-active {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+}
+.ph-recorder-active {
+  padding: 10px 12px; border-radius: 8px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+.ph-recorder-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #ef4444;
+  animation: ph-rec-pulse 1.2s ease-in-out infinite;
+}
+@keyframes ph-rec-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.ph-recorder-speech-preview,
+.ph-recorder-transcript {
+  margin: 10px 0 0; padding: 10px 12px; border-radius: 8px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid var(--ph-border);
+  font-size: 13px; line-height: 1.5; white-space: pre-wrap;
+  max-height: 160px; overflow: auto;
+}
+.ph-recorder-status {
+  margin: 10px 0 0; font-size: 12px; color: #7dd3fc;
+}
+.ph-recorder-status.ph-recorder-status-err { color: #fbbf24; }
+.ph-recorder-history { margin-top: 14px; }
+.ph-recorder-history-title {
+  margin: 0 0 8px; font-size: 12px; font-weight: 600;
+  color: var(--ph-muted); text-transform: uppercase; letter-spacing: 0.04em;
+}
+.ph-recorder-list {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.ph-recorder-item {
+  padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--ph-border);
+  background: rgba(15, 23, 42, 0.35);
+}
+.ph-recorder-item-head {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline;
+  margin-bottom: 8px;
+}
+.ph-recorder-item-actions { margin-bottom: 6px; }
+.ph-recorder-empty { margin: 0; font-size: 12px; }
+
 /* Vai trò phiên + danh sách tham dự online/offline */
 .ph-meeting-roles {
   margin-top: 12px; padding: 12px; border-radius: 10px;

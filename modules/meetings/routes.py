@@ -26,6 +26,7 @@ from modules.meetings import presentation_service as pres_svc
 from modules.meetings import hand_service as hand_svc
 from modules.meetings import screen_share_service as share_svc
 from modules.meetings import slide_service as slide_svc
+from modules.meetings import recording_service as rec_svc
 from modules.meetings.warm_service import warm_meeting_documents
 
 meetings_bp = Blueprint('meetings', __name__)
@@ -53,6 +54,19 @@ def api_list_meetings():
                 'supabase/migrations/20260630_meeting_secretary_role.sql trên Supabase rồi thử lại.'
             )
         return jsonify({'success': False, 'message': msg}), 500
+
+
+@meetings_bp.route('/api/meetings/webrtc-ice', methods=['GET'])
+@require_auth
+def api_webrtc_ice():
+    """STUN/TURN cho WebRTC — client lấy trước khi tạo peer connection."""
+    from modules.meetings.webrtc_ice import get_webrtc_ice_config
+
+    try:
+        return jsonify({'success': True, **get_webrtc_ice_config()})
+    except Exception as exc:
+        print(f'api_webrtc_ice: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
 
 
 @meetings_bp.route('/api/meetings', methods=['POST'])
@@ -590,6 +604,94 @@ def api_screen_share_signals(meeting_id):
         return jsonify({'success': False, 'message': str(exc)}), 404
     except Exception as exc:
         print(f'api_screen_share_signals: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/room/recordings', methods=['GET'])
+@require_meeting_participant('meeting_id')
+def api_list_recordings(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    supabase = _supabase()
+    try:
+        meeting = assert_can_access(supabase, meeting_id, ctx)
+        items = rec_svc.list_recordings(meeting, ctx, supabase)
+        return jsonify({'success': True, 'recordings': items})
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except Exception as exc:
+        print(f'api_list_recordings: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/room/recordings', methods=['POST'])
+@require_meeting_participant('meeting_id')
+def api_upload_recording(meeting_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    supabase = _supabase()
+    try:
+        meeting = assert_can_access(supabase, meeting_id, ctx)
+        upload = request.files.get('file')
+        if not upload:
+            return jsonify({'success': False, 'message': 'Thiếu file ghi âm'}), 400
+        data = upload.read()
+        rtype = (request.form.get('type') or 'session').strip().lower()
+        duration_raw = request.form.get('duration_sec') or ''
+        duration_sec = float(duration_raw) if duration_raw else None
+        transcript = (request.form.get('transcript') or '').strip() or None
+        label = (request.form.get('label') or '').strip() or None
+        mime = upload.mimetype or request.form.get('mime_type') or 'audio/webm'
+
+        if rtype == 'conclusion' and not transcript:
+            try:
+                transcript = rec_svc.transcribe_conclusion_audio(data, mime)
+            except ValueError as stt_exc:
+                # Vẫn lưu file — Thư ký nghe lại hoặc dùng text từ trình duyệt
+                print(f'api_upload_recording transcribe: {stt_exc}')
+
+        payload = rec_svc.save_recording(
+            supabase,
+            meeting,
+            ctx,
+            data=data,
+            recording_type=rtype,
+            mime_type=mime,
+            duration_sec=duration_sec,
+            transcript=transcript,
+            label=label,
+        )
+        return jsonify({'success': True, 'recording': payload})
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except Exception as exc:
+        print(f'api_upload_recording: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@meetings_bp.route('/api/meetings/<meeting_id>/room/recordings/<recording_id>/download', methods=['GET'])
+@require_meeting_participant('meeting_id')
+def api_download_recording(meeting_id, recording_id):
+    ctx = request.meetings_user  # type: ignore[attr-defined]
+    supabase = _supabase()
+    try:
+        meeting = assert_can_access(supabase, meeting_id, ctx)
+        result = rec_svc.get_recording_download_url(
+            supabase, meeting, ctx, recording_id,
+        )
+        return jsonify({'success': True, **result})
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except FileNotFoundError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except Exception as exc:
+        print(f'api_download_recording: {exc}')
         return jsonify({'success': False, 'message': str(exc)}), 500
 
 

@@ -521,6 +521,7 @@ def get_room_state(supabase, meeting: dict, ctx: UserContext) -> dict:
         parse_screen_share_for_client,
         parse_screen_share_requests_for_client,
     )
+    from modules.meetings.recording_service import parse_recordings_for_client
 
     roles = resolve_session_roles(supabase, meeting_id, ctx)
     chat_raw = _parse_chat(snap.get('chat'))
@@ -536,6 +537,12 @@ def get_room_state(supabase, meeting: dict, ctx: UserContext) -> dict:
         snap.get('raisedHands'),
         ctx,
         can_moderate=roles.get('can_moderate', False),
+    )
+    can_record = bool(
+        roles.get('is_host') or roles.get('is_secretary') or roles.get('can_moderate')
+    )
+    recordings = parse_recordings_for_client(
+        snap.get('recordings'), ctx, can_view=can_record,
     )
 
     return {
@@ -554,10 +561,12 @@ def get_room_state(supabase, meeting: dict, ctx: UserContext) -> dict:
         'is_secretary': roles.get('is_secretary', False),
         'can_moderate': roles.get('can_moderate', False),
         'can_approve_share': roles.get('can_approve_share', False),
+        'can_record': can_record,
         'participant_role': roles.get('participant_role'),
         'presentation': presentation,
         'screen_share': screen_share,
         'screen_share_requests': screen_share_requests,
+        'recordings': recordings,
         'raised_hands': raised_hands,
     }
 

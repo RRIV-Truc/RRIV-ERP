@@ -1199,6 +1199,46 @@
     return data.signals || [];
   }
 
+  async function fetchWebRtcIce() {
+    var url = API + '/webrtc-ice?username=' + encodeURIComponent(username());
+    var res = await fetch(url, { headers: headers() });
+    var data = await parseMeetingApiResponse(res, 'Không lấy được cấu hình WebRTC');
+    return {
+      iceServers: data.iceServers || [],
+      iceCandidatePoolSize: data.iceCandidatePoolSize || 8
+    };
+  }
+
+  async function uploadMeetingRecording(meetingId, blob, opts) {
+    opts = opts || {};
+    var fd = new FormData();
+    fd.append('file', blob, opts.type === 'conclusion' ? 'conclusion.webm' : 'session.webm');
+    fd.append('type', opts.type || 'session');
+    if (opts.durationSec != null) fd.append('duration_sec', String(opts.durationSec));
+    if (opts.transcript) fd.append('transcript', opts.transcript);
+    if (opts.label) fd.append('label', opts.label);
+    if (opts.mimeType) fd.append('mime_type', opts.mimeType);
+
+    var res = await fetch(
+      API + '/' + encodeURIComponent(meetingId) + '/room/recordings',
+      { method: 'POST', headers: uploadHeaders(), body: fd }
+    );
+    var data = await parseMeetingApiResponse(res, 'Không lưu được ghi âm');
+    return data.recording;
+  }
+
+  async function downloadMeetingRecording(meetingId, recordingId) {
+    var url = API + '/' + encodeURIComponent(meetingId) + '/room/recordings/' +
+      encodeURIComponent(recordingId) + '/download?username=' + encodeURIComponent(username());
+    var res = await fetch(url, { headers: headers() });
+    var data = await parseMeetingApiResponse(res, 'Không tải được ghi âm');
+    if (data.url) {
+      window.open(data.url, '_blank', 'noopener');
+      return data;
+    }
+    throw new Error('Không có link tải');
+  }
+
   window.PhonghopServices = {
     listMeetings: listMeetings,
     listRooms: listRooms,
@@ -1251,6 +1291,9 @@
     stopScreenShare: stopScreenShare,
     postScreenShareSignal: postScreenShareSignal,
     fetchScreenShareSignals: fetchScreenShareSignals,
+    fetchWebRtcIce: fetchWebRtcIce,
+    uploadMeetingRecording: uploadMeetingRecording,
+    downloadMeetingRecording: downloadMeetingRecording,
     warmMeetingDocuments: warmMeetingDocuments,
     endMeeting: endMeeting,
     fetchDownloadLink: fetchDownloadLink

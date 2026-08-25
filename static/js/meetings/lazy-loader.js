@@ -28,9 +28,10 @@
     session: [
       '/static/js/meetings/pptx-slides.js?v=1',
       '/static/js/meetings/components/MeetingPresenter.js?v=8',
-      '/static/js/meetings/components/MeetingScreenShare.js?v=16',
+      '/static/js/meetings/components/MeetingScreenShare.js?v=17',
+      '/static/js/meetings/components/MeetingRecorder.js?v=1',
       '/static/js/meetings/components/MeetingChat.js?v=3',
-      '/static/js/meetings/components/MeetingRoom.js?v=75'
+      '/static/js/meetings/components/MeetingRoom.js?v=76'
     ]
   };
 

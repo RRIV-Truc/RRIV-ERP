@@ -4,22 +4,63 @@
 (function () {
   'use strict';
 
-  var ICE_SERVERS = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      {
-        urls: [
-          'turn:openrelay.metered.ca:80',
-          'turn:openrelay.metered.ca:443',
-          'turn:openrelay.metered.ca:443?transport=tcp'
-        ],
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      }
-    ],
-    iceCandidatePoolSize: 4
-  };
+  var ICE_CONFIG = null;
+  var ICE_CONFIG_PROMISE = null;
+
+  function defaultIceConfig() {
+    return {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        {
+          urls: [
+            'turn:openrelay.metered.ca:80',
+            'turn:openrelay.metered.ca:443',
+            'turn:openrelay.metered.ca:443?transport=tcp'
+          ],
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        }
+      ],
+      iceCandidatePoolSize: 8
+    };
+  }
+
+  function rtcPeerConfig() {
+    return ICE_CONFIG || defaultIceConfig();
+  }
+
+  function ensureIceConfig() {
+    if (ICE_CONFIG) return Promise.resolve(ICE_CONFIG);
+    if (ICE_CONFIG_PROMISE) return ICE_CONFIG_PROMISE;
+    if (!window.PhonghopServices || !window.PhonghopServices.fetchWebRtcIce) {
+      ICE_CONFIG = defaultIceConfig();
+      return Promise.resolve(ICE_CONFIG);
+    }
+    ICE_CONFIG_PROMISE = window.PhonghopServices.fetchWebRtcIce()
+      .then(function (cfg) {
+        if (cfg && cfg.iceServers && cfg.iceServers.length) {
+          ICE_CONFIG = {
+            iceServers: cfg.iceServers,
+            iceCandidatePoolSize: cfg.iceCandidatePoolSize || 8
+          };
+        } else {
+          ICE_CONFIG = defaultIceConfig();
+        }
+        return ICE_CONFIG;
+      })
+      .catch(function (e) {
+        console.warn('[MeetingScreenShare] ensureIceConfig', e.message || e);
+        ICE_CONFIG = defaultIceConfig();
+        return ICE_CONFIG;
+      });
+    return ICE_CONFIG_PROMISE;
+  }
+
+  function warmIceConfig() {
+    ensureIceConfig().catch(function () { /* ignore */ });
+  }
 
   var _meetingId = null;
   var _localStream = null;
@@ -251,7 +292,7 @@
         resetViewerPeer(_sharerUsername);
         ensurePeer(_sharerUsername, true);
       }
-      sendViewerJoin();
+      sendViewerJoin(_viewerRetryCount % 3 === 0);
     }, 2500);
   }
 
@@ -714,7 +755,7 @@
     var key = peerKey(remoteUsername);
     if (_peers[key]) return _peers[key];
 
-    var pc = new RTCPeerConnection(ICE_SERVERS);
+    var pc = new RTCPeerConnection(rtcPeerConfig());
     _peers[key] = pc;
 
     if (_localStream && !asViewer) {
@@ -757,10 +798,13 @@
       if (st === 'connected') {
         setViewerStatus('');
       } else if (st === 'failed') {
-        setViewerStatus('Mất kết nối video — đang thử lại…', true);
+        setViewerStatus(
+          'Mất kết nối video — mạng công ty/VPN có thể chặn WebRTC. Thử cùng WiFi hoặc tắt VPN…',
+          true
+        );
         _viewerJoinSent = false;
         if (_viewerMode && _sharerUsername) {
-          setTimeout(function () { sendViewerJoin(); }, 1200);
+          setTimeout(function () { sendViewerJoin(true); }, 1200);
         }
       } else if (st === 'closed') {
         delete _peers[key];
@@ -770,19 +814,21 @@
     return pc;
   }
 
-  async function createOfferForViewer(viewerUsername) {
+  async function createOfferForViewer(viewerUsername, iceRestart) {
     if (!_sharing || !_localStream) return;
+    await ensureIceConfig();
     var key = peerKey(viewerUsername);
     var existing = _peers[key];
     if (existing) {
-      if (existing.connectionState === 'connected') return;
+      if (existing.connectionState === 'connected' && !iceRestart) return;
       try { existing.close(); } catch (_) { /* ignore */ }
       delete _peers[key];
       delete _pendingIce[key];
     }
     var pc = ensurePeer(viewerUsername, false);
     try {
-      var offer = await pc.createOffer();
+      var offerOpts = iceRestart ? { iceRestart: true } : undefined;
+      var offer = await pc.createOffer(offerOpts);
       await pc.setLocalDescription(offer);
       await apiSignal('offer', { sdp: offer.sdp, type: offer.type }, viewerUsername);
     } catch (e) {
@@ -798,7 +844,7 @@
     if (type === 'join' && _sharing) {
       var viewerUser = (payload && payload.viewer) ? payload.viewer : fromUser;
       if (viewerUser && !sameUser(viewerUser, username())) {
-        await createOfferForViewer(viewerUser);
+        await createOfferForViewer(viewerUser, !!(payload && payload.iceRestart));
       }
       return;
     }
@@ -986,9 +1032,10 @@
     if (someoneElse) {
       var waitSec = _viewerConnectSince ? Math.floor((Date.now() - _viewerConnectSince) / 1000) : 0;
       if (!_remoteStream && waitSec > 12) {
-        ph.textContent = 'Chưa nhận được video — yêu cầu ' +
+        ph.textContent = 'Chưa nhận được video — mạng công ty/VPN có thể chặn WebRTC. ' +
+          'Thử cùng WiFi, tắt VPN, hoặc nhờ ' +
           (activeShare.sharer_name || activeShare.sharer_username) +
-          ' bấm «Tiếp tục chia sẻ» hoặc chia sẻ lại.';
+          ' bấm «Tiếp tục chia sẻ».';
       } else {
         ph.textContent = 'Đang kết nối video từ ' +
           (activeShare.sharer_name || activeShare.sharer_username) + '…';
@@ -1190,6 +1237,7 @@
       sameUser(_activeShareRemote.sharer_username, username());
 
     try {
+      await ensureIceConfig();
       var stream = await navigator.mediaDevices.getDisplayMedia({
         video: { frameRate: 15 },
         audio: false
@@ -1299,12 +1347,14 @@
     setViewerStatus('');
   }
 
-  async function sendViewerJoin() {
+  async function sendViewerJoin(iceRestart) {
     if (!_viewerMode || !_sharerUsername || _sharing) return;
     try {
+      await ensureIceConfig();
       await apiSignal('join', {
         viewer: viewerIdentity(),
-        sharer: _sharerUsername
+        sharer: _sharerUsername,
+        iceRestart: !!iceRestart
       }, null);
       _viewerJoinSent = true;
       var label = _sharerUsername;
@@ -1348,6 +1398,7 @@
 
     if (!_remoteStream) {
       resetViewerPeer(share.sharer_username);
+      await ensureIceConfig();
       ensurePeer(share.sharer_username, true);
       await sendViewerJoin();
       startViewerRetry();
@@ -1427,6 +1478,7 @@
 
     mountToolbar: function (meetingId, opts) {
       if (meetingId) _meetingId = meetingId;
+      warmIceConfig();
       opts = opts || {};
       applySessionRoles(opts.isHost, opts);
       _lastRolesKey = rolesSyncKey();
@@ -1572,6 +1624,7 @@
 
     initProjector: function (meetingId) {
       if (!meetingId || !window.PhonghopServices) return;
+      warmIceConfig();
       _projectorMode = true;
       _meetingId = meetingId;
       _isHost = false;

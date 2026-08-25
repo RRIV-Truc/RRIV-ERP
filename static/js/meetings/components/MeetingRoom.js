@@ -85,6 +85,9 @@
     if (window.MeetingScreenShare) {
       window.MeetingScreenShare.cleanup();
     }
+    if (window.MeetingRecorder) {
+      window.MeetingRecorder.cleanup();
+    }
     if (window.MeetingChat) {
       window.MeetingChat.cleanup();
     }
@@ -274,6 +277,7 @@
       '<div class="ph-content-phase">' +
         '<h3>Nội dung</h3>' +
         '<p class="ph-detail-muted">Chia sẻ màn hình (cửa sổ, tab trình duyệt, Word, Excel, PowerPoint, PDF…) — mọi người xem đồng bộ trong phiên họp.</p>' +
+        '<div id="phMeetingRecorderHost" class="ph-meeting-recorder-host"></div>' +
         '<div id="phScreenShareHost" class="ph-screen-share-host ph-screen-share-host-prominent">' +
           '<div class="ph-screen-share-bar ph-screen-share-bar-loading">' +
             '<p class="ph-detail-muted">Đang tải điều khiển chia sẻ màn hình…</p>' +
@@ -282,6 +286,23 @@
         '<div class="ph-session-doc-list" id="phSessionDocList"><p class="ph-detail-muted">Đang tải tài liệu…</p></div>' +
       '</div>'
     );
+  }
+
+  function ensureRecorderUi(room) {
+    if (!_meetingId || !_host || !window.MeetingRecorder) return;
+    var step = parseInt(_host.dataset.agendaStep, 10);
+    if (step !== 1) return;
+    if (!_host.querySelector('#phMeetingRecorderHost')) return;
+    var r = room || _lastRoom || {};
+    if (!r.can_record) {
+      var h = _host.querySelector('#phMeetingRecorderHost');
+      if (h) h.innerHTML = '';
+      return;
+    }
+    window.MeetingRecorder.mount(_meetingId, {
+      canRecord: r.can_record,
+      recordings: r.recordings || []
+    });
   }
 
   function ensureScreenShareUi(room) {
@@ -510,6 +531,7 @@
     var pane = _host.querySelector('#phSessionMainPane');
     if (pane) pane.innerHTML = buildPhasePaneHtml(idx, room || _lastRoom || {});
     if (idx === 1 && _meetingId) {
+      ensureRecorderUi(room || _lastRoom || {});
       ensureScreenShareUi(room || _lastRoom || {});
       loadSessionDocs(_meetingId);
     }
@@ -639,6 +661,15 @@
         window.MeetingChat.mount(_chatHost, _meetingId);
       }
       window.MeetingChat.syncFromRoom(room);
+    }
+
+    if (window.MeetingRecorder && _meetingId) {
+      ensureRecorderUi(room);
+      window.MeetingRecorder.syncFromRoom(
+        _meetingId,
+        room.recordings,
+        room.can_record
+      );
     }
 
     if (window.MeetingScreenShare && _meetingId) {
