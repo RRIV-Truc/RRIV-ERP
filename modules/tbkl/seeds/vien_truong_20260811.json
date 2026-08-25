@@ -1,0 +1,230 @@
+{
+  "id": "vien_truong_20260811",
+  "label": "TB kết luận Viện trưởng 11/08/2026",
+  "cycle": {
+    "meeting_seq": 1,
+    "title": "Họp Ban Giám đốc Viện mở rộng — Kết luận Viện trưởng",
+    "meeting_date": "2026-08-11",
+    "source_ref": "Thông báo kết luận Viện trưởng Trần Đình Minh — /TB-VCS, ngày 11/08/2026",
+    "conclusion_summary": "Cuộc họp BGD Viện mở rộng ngày 11/08/2026 về hoạt động Trung tâm NCPTGCS sau sáp nhập. Trọng tâm: sản lượng mủ 744 tấn, tổ chức–quy chế Trung tâm Giống, KH SXKD, quản lý đất, vườn 750 cây/ha, lao động–lương."
+  },
+  "directives": [
+    {
+      "title": "Thực hiện kế hoạch sản lượng mủ cao su 744 tấn năm 2026",
+      "content": "Nhiệm vụ sản xuất cấp bách, ưu tiên điều hành đến hết 2026. Giữ mục tiêu 744 tấn; chưa điều chỉnh chỉ tiêu khi chưa có phương án khả thi. Giao Giám đốc Trung tâm chịu trách nhiệm chung.",
+      "lead_department_name": "Phòng Khoa học Công nghệ",
+      "supervisor_name": "Phó Viện trưởng Nguyễn Đôn Hiệu",
+      "priority": "critical",
+      "deadline": "2026-12-31",
+      "tasks": [
+        {
+          "title": "Xây dựng phương án điều hành sản lượng t8–31/12/2026",
+          "deliverable": "Phương án: sản lượng còn lại; phân bổ Trạm/tuần/tổ; giải pháp bù; kịch bản tối thiểu 744 tấn kèm LĐ, chi phí",
+          "owner_unit_name": "Trung tâm NCPTGCS",
+          "assignee_name": "Giám đốc Trung tâm — Phan Đình Thảo",
+          "coordinator_units": "Phòng KHCN; Phòng QT-TCKT",
+          "priority": "critical",
+          "deadline": "2026-08-31"
+        },
+        {
+          "title": "Thiết lập Dashboard điều hành sản lượng mủ — cập nhật hàng tuần",
+          "deliverable": "Dashboard theo Trạm: KH; TH tuần; lũy kế; % HT; còn lại; cần/tuần; dự báo cuối năm; nguyên nhân; hành động; người CT",
+          "owner_unit_name": "Trung tâm NCPTGCS",
+          "assignee_name": "Giám đốc Trung tâm",
+          "coordinator_units": "Phòng KHCN",
+          "priority": "critical",
+          "deadline": "2026-09-15"
+        },
+        {
+          "title": "Theo dõi, tổng hợp báo cáo sản lượng lên Ban Lãnh đạo Viện",
+          "deliverable": "Báo cáo định kỳ từ dashboard sản lượng",
+          "owner_unit_name": "Phòng Khoa học Công nghệ",
+          "assignee_name": "Trưởng Khoa học — Trần Thị Tuyết Anh",
+          "priority": "high",
+          "deadline": "2026-12-31"
+        },
+        {
+          "title": "Phối hợp lao động, tiền lương và nguồn lực tài chính cho sản lượng mủ",
+          "deliverable": "Giải quyết nội dung LĐ–TL–TC theo phương án sản lượng",
+          "owner_unit_name": "Phòng Quản trị - Tài chính kế toán",
+          "assignee_name": "Phó phòng — Vi Văn Toàn",
+          "priority": "high",
+          "deadline": "2026-12-31"
+        }
+      ]
+    },
+    {
+      "title": "Tổ chức và Quy chế hoạt động Trung tâm Giống sau sáp nhập",
+      "content": "Quản trị tập trung Cơ sở–Trung tâm–Viện. Ổn định nhân sự; hoàn thiện Quy chế TCHĐ: chức năng, cơ cấu, phân cấp, phối hợp Phòng KHCN & QT-TCKT.",
+      "lead_department_name": "Phòng Quản trị - Tài chính kế toán",
+      "supervisor_name": "Phó Viện trưởng Nguyễn Đôn Hiệu",
+      "priority": "high",
+      "deadline": "2026-09-30",
+      "tasks": [
+        {
+          "title": "Ổn định tổ chức nhân sự Trung tâm Giống (trong tuần họp)",
+          "deliverable": "Hoàn tất sắp xếp NS Trung tâm; tuân thủ quy trình, lấy ý kiến email",
+          "owner_unit_name": "Phòng Quản trị - Tài chính kế toán",
+          "assignee_name": "Phó phòng — Vi Văn Toàn",
+          "coordinator_units": "Trung tâm NCPTGCS",
+          "priority": "critical",
+          "deadline": "2026-08-18"
+        },
+        {
+          "title": "Hoàn thiện Quy chế tổ chức và hoạt động Trung tâm sau sáp nhập",
+          "deliverable": "Dự thảo Quy chế: CN–NV; cơ cấu; trách nhiệm GĐ, PGĐ, bộ phận, Trạm; phân cấp; chỉ tiêu KH; phối hợp Phòng KHCN & QT-TCKT",
+          "owner_unit_name": "Trung tâm NCPTGCS",
+          "assignee_name": "Giám đốc Trung tâm",
+          "coordinator_units": "Phòng KHCN; Phòng QT-TCKT",
+          "priority": "high",
+          "deadline": "2026-09-30"
+        }
+      ]
+    },
+    {
+      "title": "Rà soát kế hoạch sản xuất kinh doanh năm 2026",
+      "content": "Rà soát KH ba đơn vị trước sáp nhập và KQ sau hợp nhất. Chỉ xem xét điều chỉnh khi có số liệu đầy đủ, không ảnh hưởng bất hợp lý KH chung Viện.",
+      "lead_department_name": "Phòng Khoa học Công nghệ",
+      "supervisor_name": "Phó Viện trưởng Nguyễn Đôn Hiệu",
+      "priority": "high",
+      "deadline": "2026-10-31",
+      "tasks": [
+        {
+          "title": "Rà soát toàn bộ KH SXKD 3 đơn vị trước sáp nhập và thực hiện sau hợp nhất",
+          "deliverable": "Báo cáo rà soát KH + đề xuất điều chỉnh (nếu có) kèm số liệu",
+          "owner_unit_name": "Trung tâm NCPTGCS",
+          "assignee_name": "Giám đốc Trung tâm",
+          "coordinator_units": "Phòng KHCN",
+          "priority": "high",
+          "deadline": "2026-10-31"
+        }
+      ]
+    },
+    {
+      "title": "Quản lý và sử dụng đất",
+      "content": "Rà soát quỹ đất Lai Khê, An Lộc, Tây Nguyên và các Trạm. Xác định hiện trạng, đất NC, SXKD, đất chưa dùng. Phương án sử dụng; chú ý 35,91 ha keo Suối Kiết và 3,8 ha ven suối ngập.",
+      "lead_department_name": "Phòng Khoa học Công nghệ",
+      "supervisor_name": "Trưởng Khoa học — Trần Thị Tuyết Anh",
+      "priority": "high",
+      "deadline": "2026-11-30",
+      "tasks": [
+        {
+          "title": "Rà soát quỹ đất đang quản lý tại Lai Khê, An Lộc, Tây Nguyên và các Trạm",
+          "deliverable": "Báo cáo hiện trạng: đất NC, SXKD, chưa sử dụng",
+          "owner_unit_name": "Trung tâm NCPTGCS",
+          "assignee_name": "Giám đốc Trung tâm",
+          "coordinator_units": "Phòng KHCN",
+          "priority": "high",
+          "deadline": "2026-10-31"
+        },
+        {
+          "title": "Khảo sát 35,91 ha keo Suối Kiết và 3,8 ha ven suối ngập úng",
+          "deliverable": "Báo cáo đánh giá tính khả thi; phương án sử dụng đất",
+          "owner_unit_name": "Trung tâm NCPTGCS",
+          "assignee_name": "Phụ trách Trạm Suối Kiết — Hà Văn Duy",
+          "coordinator_units": "Phòng KHCN",
+          "priority": "normal",
+          "deadline": "2026-11-30"
+        }
+      ]
+    },
+    {
+      "title": "Vườn cây mật độ 750 cây/ha",
+      "content": "Không bổ sung kinh phí riêng lẻ từng năm. Báo cáo chuyên đề: diện tích, mật độ, tỷ lệ sống, sinh trưởng, phân bón, chi phí. Phòng KHCN + QT-TCKT thẩm định; đề xuất Tập đoàn nếu vượt thẩm quyền.",
+      "lead_department_name": "Phòng Khoa học Công nghệ",
+      "supervisor_name": "Trưởng Khoa học — Trần Thị Tuyết Anh",
+      "priority": "high",
+      "deadline": "2026-11-30",
+      "tasks": [
+        {
+          "title": "Báo cáo chuyên đề vườn cây mật độ 750 cây/ha",
+          "deliverable": "BC chuyên đề: diện tích, mật độ, sinh trưởng, chi phí; làm rõ nguyên nhân cây chết/kém sinh trưởng",
+          "owner_unit_name": "Trung tâm NCPTGCS",
+          "assignee_name": "Giám đốc Trung tâm",
+          "priority": "high",
+          "deadline": "2026-10-31"
+        },
+        {
+          "title": "Thẩm định BC chuyên đề và tham mưu Ban Lãnh đạo Viện",
+          "deliverable": "Biên bản thẩm định; đề xuất Tập đoàn (nếu vượt thẩm quyền)",
+          "owner_unit_name": "Phòng Khoa học Công nghệ",
+          "assignee_name": "Trưởng Khoa học",
+          "coordinator_units": "Phòng QT-TCKT",
+          "priority": "normal",
+          "deadline": "2026-11-30"
+        }
+      ]
+    },
+    {
+      "title": "Lao động, khoán và tiền lương",
+      "content": "Thanh quyết toán SX giống; quy trình hồ sơ tập trung; mẫu hồ sơ thống nhất; chuyển hồ sơ lương về Viện trước ngày 8 hàng tháng.",
+      "lead_department_name": "Phòng Quản trị - Tài chính kế toán",
+      "supervisor_name": "Phó phòng — Vi Văn Toàn",
+      "priority": "high",
+      "deadline": "2026-12-31",
+      "tasks": [
+        {
+          "title": "Xây dựng phương thức sử dụng LĐ sản xuất cây giống cơ sở An Lộc",
+          "deliverable": "Phương thức LĐ + quy trình thanh quyết toán SX giống",
+          "owner_unit_name": "Bộ môn Giống",
+          "assignee_name": "Trưởng Bộ môn — Huỳnh Đức Định",
+          "coordinator_units": "Trung tâm NCPTGCS",
+          "priority": "high",
+          "deadline": "2026-09-30"
+        },
+        {
+          "title": "Xây dựng mẫu hồ sơ thống nhất (KH, SXKD, TQT, LĐ–TL…)",
+          "deliverable": "Bộ mẫu hồ sơ áp dụng toàn Trung tâm",
+          "owner_unit_name": "Trung tâm NCPTGCS",
+          "assignee_name": "Giám đốc Trung tâm",
+          "coordinator_units": "Phòng QT-TCKT",
+          "priority": "high",
+          "deadline": "2026-09-30"
+        },
+        {
+          "title": "Chuyển hồ sơ thanh toán lương về Viện trước ngày 8 hàng tháng",
+          "deliverable": "Quy trình nộp hồ sơ qua e-office đúng hạn; GĐ TT chịu trách nhiệm nếu chậm",
+          "owner_unit_name": "Trung tâm NCPTGCS",
+          "assignee_name": "Giám đốc Trung tâm",
+          "coordinator_units": "Phòng QT-TCKT",
+          "priority": "critical",
+          "deadline": "2026-09-08"
+        }
+      ]
+    },
+    {
+      "title": "Tổ chức thực hiện — trách nhiệm chung",
+      "content": "PVT Hiệu theo dõi chỉ đạo. GĐ TT báo cáo tuần sản lượng; lập bảng KH: nội dung–SP–người CT–đơn vị PH–thời hạn–khó khăn. Phòng KHCN & QT-TCKT chủ trì theo chức năng.",
+      "lead_department_name": "Phòng Khoa học Công nghệ",
+      "supervisor_name": "Phó Viện trưởng Nguyễn Đôn Hiệu",
+      "priority": "normal",
+      "deadline": "2026-12-31",
+      "tasks": [
+        {
+          "title": "PVT Hiệu tiếp tục theo dõi, chỉ đạo triển khai các kết luận",
+          "deliverable": "Báo cáo tiến độ định kỳ lên Viện trưởng",
+          "owner_unit_name": "Văn phòng Viện",
+          "assignee_name": "Phó Viện trưởng Nguyễn Đôn Hiệu",
+          "priority": "high",
+          "deadline": "2026-12-31"
+        },
+        {
+          "title": "Lập bảng kế hoạch thực hiện sau cuộc họp (rõ việc–SP–người–hạn–PH)",
+          "deliverable": "Bảng KH thực hiện toàn bộ nhiệm vụ Trung tâm",
+          "owner_unit_name": "Trung tâm NCPTGCS",
+          "assignee_name": "Giám đốc Trung tâm",
+          "priority": "critical",
+          "deadline": "2026-08-25"
+        },
+        {
+          "title": "Phòng QT-TCKT: thông báo kết luận trong 3 ngày sau làm việc với đơn vị",
+          "deliverable": "TB kết luận kịp thời sau mỗi buổi làm việc LĐV với đơn vị",
+          "owner_unit_name": "Phòng Quản trị - Tài chính kế toán",
+          "assignee_name": "Lãnh đạo Phòng QT-TCKT",
+          "priority": "normal",
+          "deadline": "2026-12-31"
+        }
+      ]
+    }
+  ]
+}

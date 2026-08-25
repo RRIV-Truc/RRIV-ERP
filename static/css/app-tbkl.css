@@ -87,6 +87,15 @@
 
 .tbkl-main { flex: 1; padding: 16px; max-width: 1600px; margin: 0 auto; width: 100%; }
 
+.tbkl-source-banner {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start;
+  gap: 12px; margin-bottom: 16px; padding: 14px 16px;
+  background: #ecfdf5; border: 1px solid var(--tbkl-border); border-radius: var(--tbkl-radius);
+}
+.tbkl-source-banner[hidden] { display: none !important; }
+.tbkl-source-text p { margin: 4px 0 0; font-size: 0.85rem; color: var(--tbkl-muted); }
+.tbkl-source-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
 .tbkl-summary {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

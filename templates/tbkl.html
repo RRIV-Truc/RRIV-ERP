@@ -7,7 +7,7 @@
 <title>Theo dõi Kết luận Họp</title>
 <meta name="theme-color" content="#065f46">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-<link rel="stylesheet" href="/static/css/app-tbkl.css?v=1">
+<link rel="stylesheet" href="/static/css/app-tbkl.css?v=2">
 </head>
 <body class="tbkl-body">
 
@@ -40,6 +40,18 @@
   </header>
 
   <main class="tbkl-main">
+
+    <section class="tbkl-source-banner" id="sourceBanner" hidden>
+      <div class="tbkl-source-text">
+        <strong id="sourceTitle">Nguồn văn bản</strong>
+        <p id="sourceDetail"></p>
+      </div>
+      <div class="tbkl-source-actions" id="seedActions" hidden>
+        <button type="button" class="tbkl-btn tbkl-btn-outline" id="btnImportSeed">
+          Nạp TB Viện trưởng 11/08/2026
+        </button>
+      </div>
+    </section>
 
     <section class="tbkl-summary" id="summaryCards">
       <article class="tbkl-stat tbkl-stat-green" data-filter="green">
@@ -86,7 +98,7 @@
             <th>RAG</th>
             <th>Mã</th>
             <th>Kết luận / Đầu việc</th>
-            <th>Phòng CT</th>
+            <th>Phòng chủ trì</th>
             <th>Đơn vị TH</th>
             <th>Hạn</th>
             <th>%</th>
@@ -237,8 +249,8 @@
 
 <div class="tbkl-toast" id="tbklToast" hidden></div>
 
-<script src="/static/js/tbkl/permissions.js?v=1"></script>
-<script src="/static/js/tbkl/services.js?v=1"></script>
-<script src="/static/js/tbkl/main.js?v=1"></script>
+<script src="/static/js/tbkl/permissions.js?v=2"></script>
+<script src="/static/js/tbkl/services.js?v=2"></script>
+<script src="/static/js/tbkl/main.js?v=2"></script>
 </body>
 </html>

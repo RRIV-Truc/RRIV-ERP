@@ -82,6 +82,13 @@
     lockCycle: function (cycleId) {
       return apiFetch('/cycles/' + encodeURIComponent(cycleId) + '/lock', { method: 'POST', body: '{}' });
     },
+    listSeeds: function () { return apiFetch('/seeds'); },
+    importSeed: function (seedId, replace) {
+      return apiFetch('/seeds/' + encodeURIComponent(seedId) + '/import', {
+        method: 'POST',
+        body: JSON.stringify({ replace: !!replace })
+      });
+    },
     loadDepartments: loadDepartments
   };
 })();

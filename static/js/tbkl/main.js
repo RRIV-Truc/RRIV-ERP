@@ -183,9 +183,54 @@
   function updateToolbar(perms, cycle) {
     var manage = $('manageActions');
     var lockBtn = $('btnLockCycle');
+    var seedActions = $('seedActions');
     if (manage) manage.hidden = !perms.can_manage;
     if (lockBtn) {
       lockBtn.hidden = !(perms.can_lock && cycle && cycle.status !== 'locked');
+    }
+    if (seedActions) {
+      seedActions.hidden = !perms.can_manage;
+    }
+  }
+
+  function updateSourceBanner(cycle) {
+    var banner = $('sourceBanner');
+    var detail = $('sourceDetail');
+    var importBtn = $('btnImportSeed');
+    if (!banner) return;
+    if (cycle && (cycle.source_ref || cycle.conclusion_summary)) {
+      banner.hidden = false;
+      var parts = [];
+      if (cycle.title) parts.push(cycle.title);
+      if (cycle.meeting_date) parts.push('Ngày ' + fmtDate(cycle.meeting_date));
+      if (cycle.source_ref) parts.push(cycle.source_ref);
+      if (cycle.conclusion_summary) parts.push(cycle.conclusion_summary);
+      if (detail) detail.textContent = parts.join(' · ');
+      if (importBtn) importBtn.hidden = true;
+    } else if (state.permissions.can_manage) {
+      banner.hidden = false;
+      if (detail) {
+        detail.textContent = 'Chưa có cuộc họp — nạp dữ liệu từ Thông báo kết luận Viện trưởng ngày 11/08/2026 (PDF).';
+      }
+      if (importBtn) importBtn.hidden = false;
+    } else {
+      banner.hidden = true;
+    }
+  }
+
+  async function importDefaultSeed(replace) {
+    try {
+      var res = await TbklServices.importSeed('vien_truong_20260811', replace);
+      showToast('Đã nạp H' + res.meeting_seq + ': ' + res.directive_count + ' kết luận, ' + res.task_count + ' đầu việc');
+      await refreshCycles(res.cycle_id);
+    } catch (err) {
+      if (!replace && err.message && err.message.indexOf('đã tồn tại') >= 0) {
+        if (confirm(err.message + '\n\nGhi đè dữ liệu cuộc họp H1?')) {
+          return importDefaultSeed(true);
+        }
+        return;
+      }
+      showToast(err.message, true);
     }
   }
 
@@ -211,6 +256,7 @@
       renderDirectives(data.directives || []);
       fillDirectiveSelect(data.directives || []);
       updateToolbar(state.permissions, data.cycle);
+      updateSourceBanner(data.cycle);
     } catch (err) {
       showToast(err.message || 'Lỗi tải dashboard', true);
       $('taskTableBody').innerHTML = '<tr><td colspan="10" class="tbkl-empty">' +
@@ -227,6 +273,9 @@
       state.currentCycleId = id;
       $('cycleSelect').value = id;
       await loadDashboard(id);
+    } else {
+      updateSourceBanner(null);
+      $('taskTableBody').innerHTML = '<tr><td colspan="10" class="tbkl-empty">Chưa có cuộc họp — bấm <strong>Nạp TB Viện trưởng 11/08/2026</strong> để bắt đầu.</td></tr>';
     }
   }
 
@@ -300,6 +349,14 @@
         await refreshCycles(state.currentCycleId);
       } catch (err) { showToast(err.message, true); }
     });
+
+    var btnImport = $('btnImportSeed');
+    if (btnImport) {
+      btnImport.addEventListener('click', function () {
+        if (!confirm('Nạp 7 kết luận và ~18 đầu việc từ TB Viện trưởng 11/08/2026 vào cuộc họp H1?')) return;
+        importDefaultSeed(false);
+      });
+    }
 
     $('formCycle').addEventListener('submit', async function (e) {
       e.preventDefault();

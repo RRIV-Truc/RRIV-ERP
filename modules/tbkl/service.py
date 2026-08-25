@@ -1,7 +1,9 @@
 """Nghiệp vụ TBKL — chu kỳ họp, kết luận, đầu việc, báo cáo tuần."""
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 from modules.meetings.rbac import UserContext
@@ -397,4 +399,82 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str) -> dict:
             'can_report': can_report(ctx, supabase),
             'can_lock': can_lock(ctx, supabase),
         },
+    }
+
+
+_SEEDS_DIR = Path(__file__).resolve().parent / 'seeds'
+
+
+def list_seed_bundles() -> list[dict]:
+    out: list[dict] = []
+    if not _SEEDS_DIR.is_dir():
+        return out
+    for path in sorted(_SEEDS_DIR.glob('*.json')):
+        try:
+            data = json.loads(path.read_text(encoding='utf-8'))
+            out.append({
+                'id': data.get('id') or path.stem,
+                'label': data.get('label') or path.stem,
+                'meeting_seq': (data.get('cycle') or {}).get('meeting_seq'),
+                'source_ref': (data.get('cycle') or {}).get('source_ref'),
+            })
+        except (json.JSONDecodeError, OSError):
+            continue
+    return out
+
+
+def load_seed_bundle(seed_id: str) -> dict:
+    safe_id = ''.join(c for c in seed_id if c.isalnum() or c in ('_', '-'))
+    path = _SEEDS_DIR / f'{safe_id}.json'
+    if not path.is_file():
+        raise LookupError(f'Không tìm thấy gói dữ liệu mẫu: {seed_id}')
+    return json.loads(path.read_text(encoding='utf-8'))
+
+
+def import_seed_bundle(
+    supabase,
+    ctx: UserContext,
+    seed_id: str,
+    *,
+    replace: bool = False,
+) -> dict:
+    if not can_manage(ctx, supabase):
+        raise PermissionError('Chỉ quản trị / Phòng NV mới nạp dữ liệu mẫu')
+
+    bundle = load_seed_bundle(seed_id)
+    cycle_payload = dict(bundle.get('cycle') or {})
+    meeting_seq = cycle_payload.get('meeting_seq')
+    if meeting_seq is not None:
+        existing = supabase.table('tbkl_cycles').select('id, meeting_seq').eq(
+            'meeting_seq', int(meeting_seq)
+        ).limit(1).execute()
+        if existing.data:
+            if not replace:
+                raise ValueError(
+                    f'Cuộc họp H{meeting_seq} đã tồn tại — chọn "Ghi đè" hoặc xóa trước khi nạp lại'
+                )
+            cycle_id = existing.data[0]['id']
+            supabase.table('tbkl_cycles').delete().eq('id', cycle_id).execute()
+
+    cycle = create_cycle(supabase, ctx, cycle_payload)
+    cycle_id = cycle['id']
+    directive_count = 0
+    task_count = 0
+
+    for item in bundle.get('directives') or []:
+        tasks = item.get('tasks') or []
+        directive_payload = {k: v for k, v in item.items() if k != 'tasks'}
+        directive = create_directive(supabase, ctx, cycle_id, directive_payload)
+        directive_count += 1
+        for task_payload in tasks:
+            create_task(supabase, ctx, directive['id'], task_payload)
+            task_count += 1
+
+    dashboard = build_dashboard(supabase, ctx, cycle_id)
+    return {
+        'cycle_id': cycle_id,
+        'meeting_seq': cycle.get('meeting_seq'),
+        'directive_count': directive_count,
+        'task_count': task_count,
+        'dashboard': dashboard,
     }

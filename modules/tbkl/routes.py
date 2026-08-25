@@ -131,3 +131,31 @@ def api_lock_cycle(cycle_id):
     except Exception as exc:
         print(f'api_lock_cycle: {exc}')
         return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@tbkl_bp.route('/api/tbkl/seeds', methods=['GET'])
+@require_tbkl_auth
+def api_list_seeds():
+    try:
+        return jsonify({'success': True, 'seeds': svc.list_seed_bundles()})
+    except Exception as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@tbkl_bp.route('/api/tbkl/seeds/<seed_id>/import', methods=['POST'])
+@require_tbkl_manage
+def api_import_seed(seed_id):
+    payload = request.json or {}
+    replace = bool(payload.get('replace'))
+    try:
+        result = svc.import_seed_bundle(_supabase(), _ctx(), seed_id, replace=replace)
+        return jsonify({'success': True, **result})
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except Exception as exc:
+        print(f'api_import_seed: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
