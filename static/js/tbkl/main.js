@@ -139,6 +139,21 @@
       : 'Các đơn vị được giao việc tự nhập % tiến độ, khó khăn và giải pháp hàng tuần.';
   }
 
+  function sortDirectives(list) {
+    return (list || []).slice().sort(function (a, b) {
+      return (a.seq_no || 999) - (b.seq_no || 999);
+    });
+  }
+
+  function sortRows(list) {
+    return (list || []).slice().sort(function (a, b) {
+      var da = a.directive_seq_no || 999;
+      var db = b.directive_seq_no || 999;
+      if (da !== db) return da - db;
+      return (a.task_seq_no || 999) - (b.task_seq_no || 999);
+    });
+  }
+
   function applyFilters(rows) {
     var q = (state.search || '').toLowerCase();
     var rag = state.filterRag;
@@ -151,6 +166,7 @@
       ].join(' ').toLowerCase();
       return blob.indexOf(q) >= 0;
     });
+    return sortRows(filtered);
   }
 
   function renderSummary(summary) {
@@ -161,11 +177,44 @@
     $('statGray').textContent = summary.gray || 0;
   }
 
+  function renderDirectiveOverview(cycle, directives) {
+    var panel = $('directiveOverview');
+    var grid = $('directiveOverviewGrid');
+    if (!panel || !grid) return;
+    var sorted = sortDirectives(directives);
+    if (!sorted.length) {
+      panel.hidden = true;
+      return;
+    }
+    panel.hidden = false;
+    var codeEl = $('overviewMeetingCode');
+    if (codeEl && cycle) codeEl.textContent = 'H' + (cycle.meeting_seq || '');
+    grid.innerHTML = sorted.map(function (d) {
+      var title = (d.title || d.content || '').slice(0, 72);
+      if ((d.title || d.content || '').length > 72) title += '…';
+      return '<button type="button" class="tbkl-overview-card" data-directive-id="' + d.id + '">' +
+        '<div class="tbkl-overview-card-top">' +
+        '<span class="tbkl-code">' + escapeHtml(d.code || '') + '</span>' +
+        '<span class="' + ragClass(d.rag) + '"></span></div>' +
+        '<div class="tbkl-overview-card-title">' + escapeHtml(title) + '</div>' +
+        '<div class="tbkl-overview-card-meta">' +
+        (d.task_count || 0) + ' đầu việc · TB ' + Math.round(d.avg_progress || 0) + '%</div></button>';
+    }).join('');
+
+    grid.querySelectorAll('[data-directive-id]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.getAttribute('data-directive-id');
+        var target = document.getElementById('dir-group-' + id);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+  }
+
   function renderTable(rows) {
     var tbody = $('taskTableBody');
     if (!tbody) return;
-    var filtered = applyFilters(rows || []);
     var unitMode = isUnitView();
+    var filtered = applyFilters(rows || []);
 
     if (!filtered.length) {
       tbody.innerHTML = '<tr><td colspan="10" class="tbkl-empty">' +
@@ -183,7 +232,7 @@
     filtered.forEach(function (r) {
       if (r.directive_id !== lastDir) {
         lastDir = r.directive_id;
-        html += '<tr class="tbkl-group-row"><td colspan="10">' +
+        html += '<tr class="tbkl-group-row" id="dir-group-' + r.directive_id + '"><td colspan="10">' +
           '<span class="tbkl-group-code">' + escapeHtml(r.directive_code || '') + '</span>' +
           escapeHtml(r.directive_title || '') + '</td></tr>';
       }
@@ -222,31 +271,11 @@
     });
   }
 
-  function renderDirectives(directives) {
-    var panel = $('directivesPanel');
-    var list = $('directivesList');
-    if (!panel || !list) return;
-    if (!directives || !directives.length) {
-      panel.hidden = true;
-      return;
-    }
-    panel.hidden = false;
-    list.innerHTML = directives.map(function (d) {
-      return '<article class="tbkl-dir-card">' +
-        '<div class="tbkl-dir-card-head">' +
-        '<span class="' + ragClass(d.rag) + '"></span>' +
-        '<span class="tbkl-code">' + escapeHtml(d.code || '') + '</span></div>' +
-        '<div class="tbkl-dir-card-title">' + escapeHtml(d.title || d.content || '') + '</div>' +
-        '<div class="tbkl-note">' + (d.task_count || 0) + ' đầu việc · TB ' +
-        Math.round(d.avg_progress || 0) + '%</div></article>';
-    }).join('');
-  }
-
   function fillDirectiveSelect(directives) {
     var sel = $('taskDirectiveSelect');
     if (!sel) return;
     sel.innerHTML = '';
-    (directives || []).forEach(function (d) {
+    sortDirectives(directives).forEach(function (d) {
       var opt = document.createElement('option');
       opt.value = d.id;
       opt.textContent = (d.code || '') + ' — ' + (d.title || '').slice(0, 60);
@@ -324,8 +353,8 @@
       $('weekBadge').textContent = 'Tuần ' + (data.week_label || '—');
       renderMeetingHead(data.cycle, data);
       renderSummary(data.summary);
+      renderDirectiveOverview(data.cycle, data.directives || []);
       renderTable(data.rows || []);
-      renderDirectives(data.directives || []);
       fillDirectiveSelect(data.directives || []);
       updateToolbar(state.permissions, data.cycle);
       updateSourceBanner(data.cycle);
@@ -394,9 +423,9 @@
       if (state.dashboard) renderTable(state.dashboard.rows);
     });
 
-    document.querySelectorAll('.tbkl-stat[data-filter]').forEach(function (card) {
-      card.addEventListener('click', function () {
-        var f = card.getAttribute('data-filter');
+    document.querySelectorAll('.tbkl-rag-total[data-filter]').forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        var f = chip.getAttribute('data-filter');
         state.filterRag = state.filterRag === f ? '' : f;
         $('ragFilter').value = state.filterRag;
         if (state.dashboard) renderTable(state.dashboard.rows);

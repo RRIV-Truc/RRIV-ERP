@@ -79,6 +79,21 @@ def compute_rag(
     return 'yellow'
 
 
+def _sort_directives(directives: list[dict]) -> list[dict]:
+    return sorted(directives, key=lambda d: int(d.get('seq_no') or 999))
+
+
+def _sort_tasks(directives: list[dict], tasks: list[dict]) -> list[dict]:
+    dir_seq = {d['id']: int(d.get('seq_no') or 999) for d in directives}
+    return sorted(
+        tasks,
+        key=lambda t: (
+            dir_seq.get(t.get('directive_id'), 999),
+            int(t.get('seq_no') or 999),
+        ),
+    )
+
+
 def _directive_code(meeting_seq: int, seq_no: int) -> str:
     return f'H{meeting_seq}-{seq_no:02d}'
 
@@ -353,14 +368,14 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str, *, unit_only: boo
     dirs = supabase.table('tbkl_directives').select('*').eq(
         'cycle_id', cycle_id
     ).order('seq_no').execute()
-    directives = dirs.data or []
+    directives = _sort_directives(dirs.data or [])
     dir_ids = [d['id'] for d in directives]
     tasks: list[dict] = []
     if dir_ids:
         tres = supabase.table('tbkl_tasks').select('*').in_(
             'directive_id', dir_ids
-        ).order('seq_no').execute()
-        tasks = tres.data or []
+        ).execute()
+        tasks = _sort_tasks(directives, tres.data or [])
 
     task_ids = [t['id'] for t in tasks]
     reports = _latest_reports_map(supabase, task_ids)
@@ -388,6 +403,8 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str, *, unit_only: boo
         row = {
             'task_id': task['id'],
             'directive_id': task['directive_id'],
+            'directive_seq_no': int(directive.get('seq_no') or 0),
+            'task_seq_no': int(task.get('seq_no') or 0),
             'directive_code': directive.get('code'),
             'directive_title': directive.get('title'),
             'directive_content': directive.get('content'),
@@ -434,6 +451,8 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str, *, unit_only: boo
                 sum(r['progress_pct'] for r in child) / len(child), 1
             ) if child else 0,
         })
+
+    directive_summaries = _sort_directives(directive_summaries)
 
     summary = {'green': 0, 'yellow': 0, 'red': 0, 'gray': 0, 'total': 0}
     for r in rows:

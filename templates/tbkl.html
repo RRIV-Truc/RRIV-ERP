@@ -7,7 +7,7 @@
 <title>Theo dõi Kết luận Họp</title>
 <meta name="theme-color" content="#065f46">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-<link rel="stylesheet" href="/static/css/app-tbkl.css?v=3">
+<link rel="stylesheet" href="/static/css/app-tbkl.css?v=4">
 </head>
 <body class="tbkl-body">
 
@@ -79,23 +79,18 @@
       </div>
     </section>
 
-    <section class="tbkl-summary" id="summaryCards">
-      <article class="tbkl-stat tbkl-stat-green" data-filter="green">
-        <span class="tbkl-stat-num" id="statGreen">0</span>
-        <span class="tbkl-stat-label">Đúng tiến độ</span>
-      </article>
-      <article class="tbkl-stat tbkl-stat-yellow" data-filter="yellow">
-        <span class="tbkl-stat-num" id="statYellow">0</span>
-        <span class="tbkl-stat-label">Cần theo dõi</span>
-      </article>
-      <article class="tbkl-stat tbkl-stat-red" data-filter="red">
-        <span class="tbkl-stat-num" id="statRed">0</span>
-        <span class="tbkl-stat-label">Trễ / rủi ro</span>
-      </article>
-      <article class="tbkl-stat tbkl-stat-gray" data-filter="gray">
-        <span class="tbkl-stat-num" id="statGray">0</span>
-        <span class="tbkl-stat-label">Chưa báo cáo</span>
-      </article>
+    <section class="tbkl-directive-overview" id="directiveOverview" hidden>
+      <div class="tbkl-overview-head">
+        <h2>Kết luận cuộc họp <span id="overviewMeetingCode">H1</span></h2>
+        <div class="tbkl-rag-totals" id="ragTotals">
+          <span class="tbkl-rag-total tbkl-rag-total-green" data-filter="green"><span id="statGreen">0</span> xanh</span>
+          <span class="tbkl-rag-total tbkl-rag-total-yellow" data-filter="yellow"><span id="statYellow">0</span> vàng</span>
+          <span class="tbkl-rag-total tbkl-rag-total-red" data-filter="red"><span id="statRed">0</span> đỏ</span>
+          <span class="tbkl-rag-total tbkl-rag-total-gray" data-filter="gray"><span id="statGray">0</span> xám</span>
+        </div>
+      </div>
+      <p class="tbkl-overview-hint">Theo đúng thứ tự văn bản — bấm mã kết luận để nhảy xuống chi tiết đầu việc.</p>
+      <div class="tbkl-overview-grid" id="directiveOverviewGrid"></div>
     </section>
 
     <section class="tbkl-toolbar">
@@ -137,11 +132,6 @@
           <tr><td colspan="10" class="tbkl-empty">Chọn cuộc họp bên trái để xem kết luận.</td></tr>
         </tbody>
       </table>
-    </section>
-
-    <section class="tbkl-directives" id="directivesPanel" hidden>
-      <h3>Kết luận thuộc cuộc họp này</h3>
-      <div id="directivesList" class="tbkl-directive-cards"></div>
     </section>
 
   </main>
@@ -279,6 +269,6 @@
 
 <script src="/static/js/tbkl/permissions.js?v=3"></script>
 <script src="/static/js/tbkl/services.js?v=3"></script>
-<script src="/static/js/tbkl/main.js?v=3"></script>
+<script src="/static/js/tbkl/main.js?v=4"></script>
 </body>
 </html>
