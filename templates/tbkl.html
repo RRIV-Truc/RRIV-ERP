@@ -7,7 +7,7 @@
 <title>Theo dõi Kết luận Họp</title>
 <meta name="theme-color" content="#065f46">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-<link rel="stylesheet" href="/static/css/app-tbkl.css?v=4">
+<link rel="stylesheet" href="/static/css/app-tbkl.css?v=5">
 </head>
 <body class="tbkl-body">
 
@@ -67,34 +67,54 @@
       <p id="unitBannerText">Các đơn vị được giao việc tự nhập % tiến độ, khó khăn và giải pháp hàng tuần.</p>
     </section>
 
-    <section class="tbkl-source-banner" id="sourceBanner" hidden>
-      <div class="tbkl-source-text">
-        <strong id="sourceTitle">Nguồn văn bản</strong>
-        <p id="sourceDetail"></p>
-      </div>
-      <div class="tbkl-source-actions" id="seedActions" hidden>
-        <button type="button" class="tbkl-btn tbkl-btn-outline" id="btnImportSeed">
-          Nạp TB Viện trưởng 11/08/2026
-        </button>
-      </div>
-    </section>
-
-    <section class="tbkl-directive-overview" id="directiveOverview" hidden>
-      <div class="tbkl-overview-head">
-        <h2>Kết luận cuộc họp <span id="overviewMeetingCode">H1</span></h2>
+    <section class="tbkl-zone tbkl-zone-conclusions" id="zoneConclusions" hidden>
+      <header class="tbkl-zone-head">
+        <div>
+          <p class="tbkl-zone-kicker">Tầng 1 — Ban lãnh đạo xem trước</p>
+          <h2 class="tbkl-zone-title">Kết luận Viện trưởng · <span id="overviewMeetingCode">H1</span></h2>
+        </div>
         <div class="tbkl-rag-totals" id="ragTotals">
           <span class="tbkl-rag-total tbkl-rag-total-green" data-filter="green"><span id="statGreen">0</span> xanh</span>
           <span class="tbkl-rag-total tbkl-rag-total-yellow" data-filter="yellow"><span id="statYellow">0</span> vàng</span>
           <span class="tbkl-rag-total tbkl-rag-total-red" data-filter="red"><span id="statRed">0</span> đỏ</span>
           <span class="tbkl-rag-total tbkl-rag-total-gray" data-filter="gray"><span id="statGray">0</span> xám</span>
         </div>
-      </div>
-      <p class="tbkl-overview-hint">Theo đúng thứ tự văn bản — bấm mã kết luận để nhảy xuống chi tiết đầu việc.</p>
-      <div class="tbkl-overview-grid" id="directiveOverviewGrid"></div>
+      </header>
+
+      <section class="tbkl-source-banner tbkl-source-in-zone" id="sourceBanner" hidden>
+        <div class="tbkl-source-text">
+          <strong>Văn bản nguồn</strong>
+          <p id="sourceDetail"></p>
+        </div>
+        <div class="tbkl-source-actions" id="seedActions" hidden>
+          <button type="button" class="tbkl-btn tbkl-btn-outline" id="btnImportSeed">
+            Nạp TB Viện trưởng 11/08/2026
+          </button>
+        </div>
+      </section>
+
+      <div class="tbkl-conclusion-list" id="conclusionList"></div>
     </section>
+
+    <section class="tbkl-zone tbkl-zone-details" id="zoneDetails" hidden>
+      <header class="tbkl-zone-head">
+        <div>
+          <p class="tbkl-zone-kicker">Tầng 2 — Chi tiết triển khai</p>
+          <h2 class="tbkl-zone-title">Theo dõi đầu việc &amp; báo cáo tuần</h2>
+        </div>
+      </header>
 
     <section class="tbkl-toolbar">
       <div class="tbkl-toolbar-left">
+        <label class="tbkl-field-inline">
+          <span>Nhóm theo</span>
+          <select id="groupBySelect" class="tbkl-filter-select" aria-label="Nhóm chi tiết">
+            <option value="directive">Theo kết luận (H1-01…)</option>
+            <option value="lead_dept">Theo phòng chủ trì</option>
+            <option value="owner_unit">Theo đơn vị / trung tâm TH</option>
+            <option value="task">Theo từng đầu việc</option>
+          </select>
+        </label>
         <input type="search" id="searchInput" class="tbkl-search" placeholder="Tìm mã H1-01, nội dung…">
         <select id="ragFilter" class="tbkl-filter-select" aria-label="Lọc RAG">
           <option value="">Tất cả RAG</option>
@@ -133,6 +153,8 @@
         </tbody>
       </table>
     </section>
+
+    </section><!-- /zoneDetails -->
 
   </main>
     </div>
@@ -269,6 +291,6 @@
 
 <script src="/static/js/tbkl/permissions.js?v=3"></script>
 <script src="/static/js/tbkl/services.js?v=3"></script>
-<script src="/static/js/tbkl/main.js?v=4"></script>
+<script src="/static/js/tbkl/main.js?v=5"></script>
 </body>
 </html>

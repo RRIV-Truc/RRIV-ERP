@@ -12,6 +12,7 @@
     permissions: {},
     user: {},
     viewMode: 'all',
+    groupBy: 'directive',
     filterRag: '',
     search: ''
   };
@@ -157,7 +158,7 @@
   function applyFilters(rows) {
     var q = (state.search || '').toLowerCase();
     var rag = state.filterRag;
-    return rows.filter(function (r) {
+    return (rows || []).filter(function (r) {
       if (rag && r.rag !== rag) return false;
       if (!q) return true;
       var blob = [
@@ -166,7 +167,58 @@
       ].join(' ').toLowerCase();
       return blob.indexOf(q) >= 0;
     });
-    return sortRows(filtered);
+  }
+
+  function compareTaskCode(a, b) {
+    return String(a || '').localeCompare(String(b || ''), 'vi', { numeric: true });
+  }
+
+  function sortRowsForDisplay(rows) {
+    var list = applyFilters(rows);
+    if (state.groupBy === 'task') {
+      return list.slice().sort(function (a, b) { return compareTaskCode(a.task_code, b.task_code); });
+    }
+    if (state.groupBy === 'lead_dept') {
+      return list.slice().sort(function (a, b) {
+        var la = (a.lead_department_name || 'zzz').toLocaleLowerCase('vi');
+        var lb = (b.lead_department_name || 'zzz').toLocaleLowerCase('vi');
+        if (la !== lb) return la.localeCompare(lb, 'vi');
+        var da = (a.directive_seq_no || 999) - (b.directive_seq_no || 999);
+        if (da) return da;
+        return (a.task_seq_no || 999) - (b.task_seq_no || 999);
+      });
+    }
+    if (state.groupBy === 'owner_unit') {
+      return list.slice().sort(function (a, b) {
+        var la = (a.owner_unit_name || 'zzz').toLocaleLowerCase('vi');
+        var lb = (b.owner_unit_name || 'zzz').toLocaleLowerCase('vi');
+        if (la !== lb) return la.localeCompare(lb, 'vi');
+        var da = a.directive_seq_no - b.directive_seq_no;
+        if (da) return da;
+        return (a.task_seq_no || 0) - (b.task_seq_no || 0);
+      });
+    }
+    return sortRows(list);
+  }
+
+  function groupLabel(r) {
+    if (state.groupBy === 'lead_dept') {
+      return r.lead_department_name || '— Chưa gán phòng chủ trì —';
+    }
+    if (state.groupBy === 'owner_unit') {
+      return r.owner_unit_name || '— Chưa gán đơn vị TH —';
+    }
+    if (state.groupBy === 'directive') {
+      return (r.directive_code || '') + ' — ' + (r.directive_title || '');
+    }
+    return null;
+  }
+
+  function groupKey(r) {
+    if (state.groupBy === 'task') return null;
+    if (state.groupBy === 'lead_dept') return r.lead_department_name || '__none_lead__';
+    if (state.groupBy === 'owner_unit') return r.owner_unit_name || '__none_owner__';
+    return r.directive_id;
   }
 
   function renderSummary(summary) {
@@ -177,35 +229,51 @@
     $('statGray').textContent = summary.gray || 0;
   }
 
-  function renderDirectiveOverview(cycle, directives) {
-    var panel = $('directiveOverview');
-    var grid = $('directiveOverviewGrid');
-    if (!panel || !grid) return;
+  function renderConclusionList(cycle, directives) {
+    var zone = $('zoneConclusions');
+    var list = $('conclusionList');
+    if (!zone || !list) return;
     var sorted = sortDirectives(directives);
     if (!sorted.length) {
-      panel.hidden = true;
+      zone.hidden = true;
       return;
     }
-    panel.hidden = false;
+    zone.hidden = false;
     var codeEl = $('overviewMeetingCode');
     if (codeEl && cycle) codeEl.textContent = 'H' + (cycle.meeting_seq || '');
-    grid.innerHTML = sorted.map(function (d) {
-      var title = (d.title || d.content || '').slice(0, 72);
-      if ((d.title || d.content || '').length > 72) title += '…';
-      return '<button type="button" class="tbkl-overview-card" data-directive-id="' + d.id + '">' +
-        '<div class="tbkl-overview-card-top">' +
-        '<span class="tbkl-code">' + escapeHtml(d.code || '') + '</span>' +
-        '<span class="' + ragClass(d.rag) + '"></span></div>' +
-        '<div class="tbkl-overview-card-title">' + escapeHtml(title) + '</div>' +
-        '<div class="tbkl-overview-card-meta">' +
-        (d.task_count || 0) + ' đầu việc · TB ' + Math.round(d.avg_progress || 0) + '%</div></button>';
+
+    list.innerHTML = sorted.map(function (d) {
+      var excerpt = (d.content || d.title || '').slice(0, 220);
+      if ((d.content || d.title || '').length > 220) excerpt += '…';
+      var meta = [];
+      if (d.lead_department_name) meta.push('Phòng CT: ' + d.lead_department_name);
+      if (d.supervisor_name) meta.push('GS: ' + d.supervisor_name);
+      if (d.deadline) meta.push('Hạn: ' + fmtDate(d.deadline));
+      return '<button type="button" class="tbkl-conclusion-item" data-directive-id="' + d.id + '">' +
+        '<div class="tbkl-conclusion-code-col">' +
+        '<div class="tbkl-conclusion-code">' + escapeHtml(d.code || '') + '</div>' +
+        '<span class="' + ragClass(d.rag) + '" style="margin-top:8px;display:inline-block"></span></div>' +
+        '<div class="tbkl-conclusion-body">' +
+        '<h3>' + escapeHtml(d.title || '') + '</h3>' +
+        '<p>' + escapeHtml(excerpt) + '</p>' +
+        '<div class="tbkl-conclusion-meta">' + escapeHtml(meta.join(' · ')) + '</div></div>' +
+        '<div class="tbkl-conclusion-side">' +
+        '<div class="tbkl-conclusion-progress">' + Math.round(d.avg_progress || 0) + '%</div>' +
+        '<div class="tbkl-conclusion-count">' + (d.task_count || 0) + ' đầu việc</div></div></button>';
     }).join('');
 
-    grid.querySelectorAll('[data-directive-id]').forEach(function (btn) {
+    list.querySelectorAll('[data-directive-id]').forEach(function (btn) {
       btn.addEventListener('click', function () {
+        state.groupBy = 'directive';
+        var sel = $('groupBySelect');
+        if (sel) sel.value = 'directive';
         var id = btn.getAttribute('data-directive-id');
-        var target = document.getElementById('dir-group-' + id);
-        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        var details = $('zoneDetails');
+        if (details) details.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setTimeout(function () {
+          var target = document.getElementById('dir-group-' + id);
+          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 350);
       });
     });
   }
@@ -214,7 +282,9 @@
     var tbody = $('taskTableBody');
     if (!tbody) return;
     var unitMode = isUnitView();
-    var filtered = applyFilters(rows || []);
+    var filtered = sortRowsForDisplay(rows || []);
+    var detailsZone = $('zoneDetails');
+    if (detailsZone) detailsZone.hidden = !(rows && rows.length);
 
     if (!filtered.length) {
       tbody.innerHTML = '<tr><td colspan="10" class="tbkl-empty">' +
@@ -228,13 +298,19 @@
     }
 
     var html = '';
-    var lastDir = null;
+    var lastGroup = null;
     filtered.forEach(function (r) {
-      if (r.directive_id !== lastDir) {
-        lastDir = r.directive_id;
-        html += '<tr class="tbkl-group-row" id="dir-group-' + r.directive_id + '"><td colspan="10">' +
-          '<span class="tbkl-group-code">' + escapeHtml(r.directive_code || '') + '</span>' +
-          escapeHtml(r.directive_title || '') + '</td></tr>';
+      var gk = groupKey(r);
+      if (gk !== null && gk !== lastGroup) {
+        lastGroup = gk;
+        var rowClass = state.groupBy === 'owner_unit' || state.groupBy === 'lead_dept'
+          ? 'tbkl-group-row tbkl-group-row-unit' : 'tbkl-group-row';
+        var anchor = state.groupBy === 'directive' ? (' id="dir-group-' + r.directive_id + '"') : '';
+        var prefix = state.groupBy === 'directive'
+          ? ('<span class="tbkl-group-code">' + escapeHtml(r.directive_code || '') + '</span>')
+          : '';
+        html += '<tr class="' + rowClass + '"' + anchor + '><td colspan="10">' +
+          prefix + escapeHtml(groupLabel(r) || '') + '</td></tr>';
       }
       var note = [r.difficulties, r.solution].filter(Boolean).join(' → ');
       var reportBtn = '';
@@ -248,8 +324,14 @@
       }
       html += '<tr data-rag="' + r.rag + '">' +
         '<td><span class="' + ragClass(r.rag) + '"></span></td>' +
-        '<td><span class="tbkl-code">' + escapeHtml(r.task_code || '') + '</span></td>' +
+        '<td><span class="tbkl-code">' + escapeHtml(r.task_code || '') + '</span>' +
+          (state.groupBy !== 'directive'
+            ? ('<div class="tbkl-dir-ref">' + escapeHtml(r.directive_code || '') + '</div>') : '') +
+        '</td>' +
         '<td><div class="tbkl-task-title">' + escapeHtml(r.task_title || '') + '</div>' +
+          (state.groupBy === 'task'
+            ? ('<div class="tbkl-dir-ref">' + escapeHtml(r.directive_code || '') + ' — ' +
+              escapeHtml((r.directive_title || '').slice(0, 80)) + '</div>') : '') +
           (r.deliverable ? '<div class="tbkl-dir-ref">SP: ' + escapeHtml(r.deliverable) + '</div>' : '') +
         '</td>' +
         '<td>' + escapeHtml(r.lead_department_name || '—') + '</td>' +
@@ -353,7 +435,7 @@
       $('weekBadge').textContent = 'Tuần ' + (data.week_label || '—');
       renderMeetingHead(data.cycle, data);
       renderSummary(data.summary);
-      renderDirectiveOverview(data.cycle, data.directives || []);
+      renderConclusionList(data.cycle, data.directives || []);
       renderTable(data.rows || []);
       fillDirectiveSelect(data.directives || []);
       updateToolbar(state.permissions, data.cycle);
@@ -420,6 +502,11 @@
 
     $('ragFilter').addEventListener('change', function () {
       state.filterRag = this.value;
+      if (state.dashboard) renderTable(state.dashboard.rows);
+    });
+
+    $('groupBySelect').addEventListener('change', function () {
+      state.groupBy = this.value || 'directive';
       if (state.dashboard) renderTable(state.dashboard.rows);
     });
 
