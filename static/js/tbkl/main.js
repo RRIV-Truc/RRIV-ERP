@@ -2,12 +2,16 @@
 (function () {
   'use strict';
 
+  var STORAGE_KEY = 'tbkl_selected_cycle';
+
   var state = {
     cycles: [],
     currentCycleId: null,
     dashboard: null,
     departments: [],
     permissions: {},
+    user: {},
+    viewMode: 'all',
     filterRag: '',
     search: ''
   };
@@ -39,6 +43,11 @@
     } catch (_) { return d; }
   }
 
+  function isUnitView() {
+    if (state.permissions.is_unit_only) return true;
+    return state.viewMode === 'unit';
+  }
+
   function renderUserChip() {
     var user = TbklPermissions.getUser();
     var chip = $('userChip');
@@ -49,8 +58,7 @@
   }
 
   function fillDeptSelects() {
-    var selects = ['directiveDeptSelect', 'taskOwnerSelect'];
-    selects.forEach(function (sid) {
+    ['directiveDeptSelect', 'taskOwnerSelect'].forEach(function (sid) {
       var sel = $(sid);
       if (!sel) return;
       var first = sel.options[0];
@@ -66,26 +74,69 @@
     });
   }
 
-  function renderCycleSelect() {
-    var sel = $('cycleSelect');
-    if (!sel) return;
-    sel.innerHTML = '';
+  function renderMeetingList() {
+    var list = $('meetingList');
+    if (!list) return;
     if (!state.cycles.length) {
-      var o = document.createElement('option');
-      o.value = '';
-      o.textContent = '— Chưa có cuộc họp —';
-      sel.appendChild(o);
+      list.innerHTML = '<p class="tbkl-empty-list">Chưa có cuộc họp nào.</p>';
       return;
     }
-    state.cycles.forEach(function (c) {
-      var opt = document.createElement('option');
-      opt.value = c.id;
-      var label = 'H' + c.meeting_seq + ' — ' + (c.title || 'Cuộc họp');
-      if (c.status === 'locked') label += ' 🔒';
-      opt.textContent = label;
-      sel.appendChild(opt);
+    list.innerHTML = state.cycles.map(function (c) {
+      var active = c.id === state.currentCycleId ? ' is-active' : '';
+      var status = c.status === 'locked' ? '🔒 Đã chốt' : 'Đang theo dõi';
+      return '<button type="button" class="tbkl-meeting-card' + active + '" data-cycle-id="' + c.id + '">' +
+        '<div class="tbkl-meeting-card-top">' +
+        '<span class="tbkl-meeting-badge">H' + c.meeting_seq + '</span>' +
+        '<span class="tbkl-meeting-status">' + status + '</span></div>' +
+        '<div class="tbkl-meeting-card-title">' + escapeHtml(c.title || 'Cuộc họp') + '</div>' +
+        '<div class="tbkl-meeting-card-meta">' +
+        (c.meeting_date ? ('📅 ' + fmtDate(c.meeting_date) + ' · ') : '') +
+        (c.directive_count || 0) + ' KL · ' + (c.task_count || 0) + ' đầu việc</div></button>';
+    }).join('');
+
+    list.querySelectorAll('[data-cycle-id]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        selectCycle(btn.getAttribute('data-cycle-id'));
+      });
     });
-    if (state.currentCycleId) sel.value = state.currentCycleId;
+  }
+
+  function renderMeetingHead(cycle, data) {
+    var head = $('meetingHead');
+    if (!head || !cycle) { if (head) head.hidden = true; return; }
+    head.hidden = false;
+    $('meetingTitle').textContent = 'H' + cycle.meeting_seq + ' — ' + (cycle.title || 'Cuộc họp');
+    var meta = [];
+    if (cycle.meeting_date) meta.push('Ngày họp: ' + fmtDate(cycle.meeting_date));
+    if (cycle.source_ref) meta.push(cycle.source_ref);
+    meta.push((data.directives || []).length + ' kết luận · ' + (data.rows || []).length + ' dòng theo dõi');
+    $('meetingMeta').textContent = meta.join(' · ');
+
+    var tabs = $('viewTabs');
+    if (tabs) {
+      if (state.permissions.is_unit_only) {
+        tabs.hidden = true;
+      } else {
+        tabs.hidden = false;
+        tabs.querySelectorAll('.tbkl-tab').forEach(function (tab) {
+          tab.classList.toggle('is-active', tab.getAttribute('data-view') === state.viewMode);
+        });
+      }
+    }
+  }
+
+  function updateUnitBanner(data) {
+    var banner = $('unitBanner');
+    if (!banner) return;
+    var show = isUnitView() && state.permissions.can_report;
+    banner.hidden = !show;
+    if (!show) return;
+    var dept = (data && data.department_name) || state.user.department_name || 'đơn vị của bạn';
+    var pending = (data && data.pending_report_count) || 0;
+    $('unitBannerTitle').textContent = 'Báo cáo tuần — ' + dept + ' nhập liệu';
+    $('unitBannerText').textContent = pending
+      ? ('Còn ' + pending + ' đầu việc cần báo cáo tuần này. Bấm 「Nhập BC」 để cập nhật % tiến độ, khó khăn và giải pháp.')
+      : 'Các đơn vị được giao việc tự nhập % tiến độ, khó khăn và giải pháp hàng tuần.';
   }
 
   function applyFilters(rows) {
@@ -114,23 +165,44 @@
     var tbody = $('taskTableBody');
     if (!tbody) return;
     var filtered = applyFilters(rows || []);
+    var unitMode = isUnitView();
+
     if (!filtered.length) {
       tbody.innerHTML = '<tr><td colspan="10" class="tbkl-empty">' +
-        (rows && rows.length ? 'Không có dòng phù hợp bộ lọc' : 'Chưa có đầu việc — Phòng NV thêm kết luận và giao việc') +
+        (rows && rows.length
+          ? 'Không có dòng phù hợp bộ lọc'
+          : (unitMode
+            ? 'Không có đầu việc được giao cho đơn vị bạn trong cuộc họp này'
+            : 'Chưa có đầu việc — Phòng NV thêm kết luận và giao việc cho đơn vị')) +
         '</td></tr>';
       return;
     }
-    tbody.innerHTML = filtered.map(function (r) {
+
+    var html = '';
+    var lastDir = null;
+    filtered.forEach(function (r) {
+      if (r.directive_id !== lastDir) {
+        lastDir = r.directive_id;
+        html += '<tr class="tbkl-group-row"><td colspan="10">' +
+          '<span class="tbkl-group-code">' + escapeHtml(r.directive_code || '') + '</span>' +
+          escapeHtml(r.directive_title || '') + '</td></tr>';
+      }
       var note = [r.difficulties, r.solution].filter(Boolean).join(' → ');
-      var reportBtn = r.can_report && !r.report_locked
-        ? '<button type="button" class="tbkl-btn tbkl-btn-sm tbkl-btn-primary" data-report="' + r.task_id + '">Báo cáo</button>'
-        : (r.report_locked ? '<span class="tbkl-note">Đã chốt</span>' : '');
-      return '<tr data-rag="' + r.rag + '">' +
-        '<td><span class="' + ragClass(r.rag) + '" title="' + r.rag + '"></span></td>' +
-        '<td><span class="tbkl-code">' + escapeHtml(r.task_code || '') + '</span>' +
-          '<div class="tbkl-dir-ref">' + escapeHtml(r.directive_code || '') + '</div></td>' +
+      var reportBtn = '';
+      if (r.can_report && !r.report_locked) {
+        reportBtn = '<button type="button" class="tbkl-btn tbkl-btn-sm tbkl-btn-primary" data-report="' +
+          r.task_id + '">' + (unitMode ? 'Nhập BC' : 'Báo cáo') + '</button>';
+      } else if (r.report_locked) {
+        reportBtn = '<span class="tbkl-note">Đã chốt</span>';
+      } else if (unitMode) {
+        reportBtn = '<span class="tbkl-note">Chỉ đơn vị TH</span>';
+      }
+      html += '<tr data-rag="' + r.rag + '">' +
+        '<td><span class="' + ragClass(r.rag) + '"></span></td>' +
+        '<td><span class="tbkl-code">' + escapeHtml(r.task_code || '') + '</span></td>' +
         '<td><div class="tbkl-task-title">' + escapeHtml(r.task_title || '') + '</div>' +
-          '<div class="tbkl-dir-ref">' + escapeHtml(r.directive_title || '') + '</div></td>' +
+          (r.deliverable ? '<div class="tbkl-dir-ref">SP: ' + escapeHtml(r.deliverable) + '</div>' : '') +
+        '</td>' +
         '<td>' + escapeHtml(r.lead_department_name || '—') + '</td>' +
         '<td>' + escapeHtml(r.owner_unit_name || '—') + '</td>' +
         '<td>' + fmtDate(r.deadline) + '</td>' +
@@ -140,7 +212,8 @@
         '<td>' + escapeHtml(r.status_label || '—') + '</td>' +
         '<td class="tbkl-note">' + escapeHtml(note || '—') + '</td>' +
         '<td>' + reportBtn + '</td></tr>';
-    }).join('');
+    });
+    tbody.innerHTML = html;
 
     tbody.querySelectorAll('[data-report]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -152,8 +225,9 @@
   function renderDirectives(directives) {
     var panel = $('directivesPanel');
     var list = $('directivesList');
-    if (!panel || !list || !directives || !directives.length) {
-      if (panel) panel.hidden = true;
+    if (!panel || !list) return;
+    if (!directives || !directives.length) {
+      panel.hidden = true;
       return;
     }
     panel.hidden = false;
@@ -184,13 +258,11 @@
     var manage = $('manageActions');
     var lockBtn = $('btnLockCycle');
     var seedActions = $('seedActions');
+    var btnSide = $('btnNewCycleSide');
     if (manage) manage.hidden = !perms.can_manage;
-    if (lockBtn) {
-      lockBtn.hidden = !(perms.can_lock && cycle && cycle.status !== 'locked');
-    }
-    if (seedActions) {
-      seedActions.hidden = !perms.can_manage;
-    }
+    if (btnSide) btnSide.hidden = !perms.can_manage;
+    if (lockBtn) lockBtn.hidden = !(perms.can_lock && cycle && cycle.status !== 'locked');
+    if (seedActions) seedActions.hidden = !perms.can_manage;
   }
 
   function updateSourceBanner(cycle) {
@@ -201,17 +273,13 @@
     if (cycle && (cycle.source_ref || cycle.conclusion_summary)) {
       banner.hidden = false;
       var parts = [];
-      if (cycle.title) parts.push(cycle.title);
-      if (cycle.meeting_date) parts.push('Ngày ' + fmtDate(cycle.meeting_date));
-      if (cycle.source_ref) parts.push(cycle.source_ref);
       if (cycle.conclusion_summary) parts.push(cycle.conclusion_summary);
+      if (cycle.source_ref) parts.push(cycle.source_ref);
       if (detail) detail.textContent = parts.join(' · ');
       if (importBtn) importBtn.hidden = true;
-    } else if (state.permissions.can_manage) {
+    } else if (state.permissions.can_manage && !state.cycles.length) {
       banner.hidden = false;
-      if (detail) {
-        detail.textContent = 'Chưa có cuộc họp — nạp dữ liệu từ Thông báo kết luận Viện trưởng ngày 11/08/2026 (PDF).';
-      }
+      if (detail) detail.textContent = 'Chưa có cuộc họp — nạp TB Viện trưởng 11/08/2026 hoặc tạo cuộc họp mới.';
       if (importBtn) importBtn.hidden = false;
     } else {
       banner.hidden = true;
@@ -225,9 +293,7 @@
       await refreshCycles(res.cycle_id);
     } catch (err) {
       if (!replace && err.message && err.message.indexOf('đã tồn tại') >= 0) {
-        if (confirm(err.message + '\n\nGhi đè dữ liệu cuộc họp H1?')) {
-          return importDefaultSeed(true);
-        }
+        if (confirm(err.message + '\n\nGhi đè dữ liệu cuộc họp H1?')) return importDefaultSeed(true);
         return;
       }
       showToast(err.message, true);
@@ -236,46 +302,58 @@
 
   function escapeHtml(s) {
     return String(s || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function selectCycle(cycleId) {
+    if (!cycleId) return;
+    state.currentCycleId = cycleId;
+    try { localStorage.setItem(STORAGE_KEY, cycleId); } catch (_) {}
+    renderMeetingList();
+    loadDashboard(cycleId);
   }
 
   async function loadDashboard(cycleId) {
     if (!cycleId) return;
-    state.currentCycleId = cycleId;
     $('taskTableBody').innerHTML = '<tr><td colspan="10" class="tbkl-empty">Đang tải…</td></tr>';
     try {
-      var data = await TbklServices.getDashboard(cycleId);
+      var data = await TbklServices.getDashboard(cycleId, isUnitView());
       state.dashboard = data;
-      state.permissions = data.permissions || {};
+      state.permissions = data.permissions || state.permissions;
       $('weekBadge').textContent = 'Tuần ' + (data.week_label || '—');
+      renderMeetingHead(data.cycle, data);
       renderSummary(data.summary);
       renderTable(data.rows || []);
       renderDirectives(data.directives || []);
       fillDirectiveSelect(data.directives || []);
       updateToolbar(state.permissions, data.cycle);
       updateSourceBanner(data.cycle);
+      updateUnitBanner(data);
     } catch (err) {
       showToast(err.message || 'Lỗi tải dashboard', true);
-      $('taskTableBody').innerHTML = '<tr><td colspan="10" class="tbkl-empty">' +
-        escapeHtml(err.message) + '</td></tr>';
+      $('taskTableBody').innerHTML = '<tr><td colspan="10" class="tbkl-empty">' + escapeHtml(err.message) + '</td></tr>';
     }
   }
 
   async function refreshCycles(selectId) {
     var res = await TbklServices.listCycles();
     state.cycles = res.cycles || [];
-    renderCycleSelect();
-    var id = selectId || state.currentCycleId || (state.cycles[0] && state.cycles[0].id);
-    if (id) {
-      state.currentCycleId = id;
-      $('cycleSelect').value = id;
-      await loadDashboard(id);
+    renderMeetingList();
+
+    var stored = null;
+    try { stored = localStorage.getItem(STORAGE_KEY); } catch (_) {}
+    var id = selectId || state.currentCycleId || stored || (state.cycles[0] && state.cycles[0].id);
+
+    if (id && state.cycles.some(function (c) { return c.id === id; })) {
+      selectCycle(id);
+    } else if (state.cycles.length) {
+      selectCycle(state.cycles[0].id);
     } else {
+      state.currentCycleId = null;
+      $('meetingHead').hidden = true;
       updateSourceBanner(null);
-      $('taskTableBody').innerHTML = '<tr><td colspan="10" class="tbkl-empty">Chưa có cuộc họp — bấm <strong>Nạp TB Viện trưởng 11/08/2026</strong> để bắt đầu.</td></tr>';
+      $('taskTableBody').innerHTML = '<tr><td colspan="10" class="tbkl-empty">Chưa có cuộc họp — Phòng NV tạo mới hoặc nạp TB mẫu.</td></tr>';
     }
   }
 
@@ -285,8 +363,8 @@
     });
     if (!row) return;
     $('reportTaskId').value = taskId;
-    $('reportMeta').textContent = row.task_code + ' — ' + row.task_title;
-    $('reportModalTitle').textContent = 'Báo cáo tuần ' + (state.dashboard.week_label || '');
+    $('reportMeta').textContent = (state.dashboard.meeting_label || '') + ' · ' + row.task_code + ' — ' + row.task_title;
+    $('reportModalTitle').textContent = 'Đơn vị nhập báo cáo tuần ' + (state.dashboard.week_label || '');
     var form = $('formReport');
     form.progress_pct.value = row.progress_pct || 0;
     form.status.value = row.status || 'in_progress';
@@ -299,8 +377,11 @@
   function bindEvents() {
     $('btnHome').addEventListener('click', function () { window.location.href = '/'; });
 
-    $('cycleSelect').addEventListener('change', function () {
-      loadDashboard(this.value);
+    $('viewTabs').addEventListener('click', function (e) {
+      var tab = e.target.closest('[data-view]');
+      if (!tab || state.permissions.is_unit_only) return;
+      state.viewMode = tab.getAttribute('data-view');
+      if (state.currentCycleId) loadDashboard(state.currentCycleId);
     });
 
     $('searchInput').addEventListener('input', function () {
@@ -323,14 +404,15 @@
     });
 
     document.querySelectorAll('[data-close]').forEach(function (el) {
-      el.addEventListener('click', function () {
-        closeModal(el.getAttribute('data-close'));
-      });
+      el.addEventListener('click', function () { closeModal(el.getAttribute('data-close')); });
     });
 
-    $('btnNewCycle').addEventListener('click', function () { openModal('modalCycle'); });
+    function openCycleModal() { openModal('modalCycle'); }
+    $('btnNewCycle').addEventListener('click', openCycleModal);
+    $('btnNewCycleSide').addEventListener('click', openCycleModal);
+
     $('btnAddDirective').addEventListener('click', function () {
-      if (!state.currentCycleId) { showToast('Chọn hoặc tạo cuộc họp trước', true); return; }
+      if (!state.currentCycleId) { showToast('Chọn cuộc họp bên trái trước', true); return; }
       openModal('modalDirective');
     });
     $('btnAddTask').addEventListener('click', function () {
@@ -350,13 +432,10 @@
       } catch (err) { showToast(err.message, true); }
     });
 
-    var btnImport = $('btnImportSeed');
-    if (btnImport) {
-      btnImport.addEventListener('click', function () {
-        if (!confirm('Nạp 7 kết luận và ~18 đầu việc từ TB Viện trưởng 11/08/2026 vào cuộc họp H1?')) return;
-        importDefaultSeed(false);
-      });
-    }
+    $('btnImportSeed').addEventListener('click', function () {
+      if (!confirm('Nạp 7 kết luận và ~18 đầu việc từ TB Viện trưởng 11/08/2026 vào cuộc họp H1?')) return;
+      importDefaultSeed(false);
+    });
 
     $('formCycle').addEventListener('submit', async function (e) {
       e.preventDefault();
@@ -383,21 +462,20 @@
       var fd = new FormData(e.target);
       var deptSel = $('directiveDeptSelect');
       var deptOpt = deptSel.options[deptSel.selectedIndex];
-      var payload = {
-        title: fd.get('title'),
-        content: fd.get('content'),
-        lead_department_id: fd.get('lead_department_id') || null,
-        lead_department_name: deptOpt && deptOpt.dataset.name ? deptOpt.dataset.name : deptOpt.textContent,
-        supervisor_name: fd.get('supervisor_name'),
-        priority: fd.get('priority'),
-        deadline: fd.get('deadline') || null
-      };
       try {
-        await TbklServices.createDirective(state.currentCycleId, payload);
+        await TbklServices.createDirective(state.currentCycleId, {
+          title: fd.get('title'),
+          content: fd.get('content'),
+          lead_department_id: fd.get('lead_department_id') || null,
+          lead_department_name: deptOpt && deptOpt.dataset.name ? deptOpt.dataset.name : deptOpt.textContent,
+          supervisor_name: fd.get('supervisor_name'),
+          priority: fd.get('priority'),
+          deadline: fd.get('deadline') || null
+        });
         closeModal('modalDirective');
         e.target.reset();
-        showToast('Đã thêm kết luận');
-        await loadDashboard(state.currentCycleId);
+        showToast('Đã thêm kết luận vào ' + (state.dashboard && state.dashboard.meeting_label || 'cuộc họp'));
+        await refreshCycles(state.currentCycleId);
       } catch (err) { showToast(err.message, true); }
     });
 
@@ -406,41 +484,37 @@
       var fd = new FormData(e.target);
       var ownerSel = $('taskOwnerSelect');
       var ownerOpt = ownerSel.options[ownerSel.selectedIndex];
-      var payload = {
-        title: fd.get('title'),
-        deliverable: fd.get('deliverable'),
-        owner_unit_id: fd.get('owner_unit_id') || null,
-        owner_unit_name: ownerOpt && ownerOpt.dataset.name ? ownerOpt.dataset.name : ownerOpt.textContent,
-        coordinator_units: fd.get('coordinator_units'),
-        assignee_name: fd.get('assignee_name'),
-        deadline: fd.get('deadline') || null,
-        priority: fd.get('priority')
-      };
-      var dirId = fd.get('directive_id');
       try {
-        await TbklServices.createTask(dirId, payload);
+        await TbklServices.createTask(fd.get('directive_id'), {
+          title: fd.get('title'),
+          deliverable: fd.get('deliverable'),
+          owner_unit_id: fd.get('owner_unit_id') || null,
+          owner_unit_name: ownerOpt && ownerOpt.dataset.name ? ownerOpt.dataset.name : ownerOpt.textContent,
+          coordinator_units: fd.get('coordinator_units'),
+          assignee_name: fd.get('assignee_name'),
+          deadline: fd.get('deadline') || null,
+          priority: fd.get('priority')
+        });
         closeModal('modalTask');
         e.target.reset();
-        showToast('Đã thêm đầu việc');
-        await loadDashboard(state.currentCycleId);
+        showToast('Đã giao đầu việc cho đơn vị');
+        await refreshCycles(state.currentCycleId);
       } catch (err) { showToast(err.message, true); }
     });
 
     $('formReport').addEventListener('submit', async function (e) {
       e.preventDefault();
       var fd = new FormData(e.target);
-      var taskId = fd.get('task_id');
-      var payload = {
-        progress_pct: parseFloat(fd.get('progress_pct') || 0),
-        status: fd.get('status'),
-        difficulties: fd.get('difficulties'),
-        solution: fd.get('solution'),
-        recommendation: fd.get('recommendation')
-      };
       try {
-        await TbklServices.submitReport(taskId, payload);
+        await TbklServices.submitReport(fd.get('task_id'), {
+          progress_pct: parseFloat(fd.get('progress_pct') || 0),
+          status: fd.get('status'),
+          difficulties: fd.get('difficulties'),
+          solution: fd.get('solution'),
+          recommendation: fd.get('recommendation')
+        });
         closeModal('modalReport');
-        showToast('Đã gửi báo cáo tuần');
+        showToast('Đã gửi báo cáo tuần của đơn vị');
         await loadDashboard(state.currentCycleId);
       } catch (err) { showToast(err.message, true); }
     });
@@ -463,12 +537,14 @@
       fillDeptSelects();
       var ctx = await TbklServices.getContext();
       state.permissions = ctx.permissions || {};
+      state.user = ctx.user || {};
+      if (state.permissions.is_unit_only) state.viewMode = 'unit';
       updateToolbar(state.permissions, null);
       await refreshCycles();
     } catch (err) {
       showToast(err.message || 'Không khởi tạo được TBKL', true);
       $('taskTableBody').innerHTML = '<tr><td colspan="10" class="tbkl-empty">' +
-        escapeHtml(err.message) + '<br><small>Chạy schema-tbkl.sql trên Supabase nếu chưa có bảng.</small></td></tr>';
+        escapeHtml(err.message) + '</td></tr>';
     }
   }
 

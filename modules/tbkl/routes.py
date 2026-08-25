@@ -5,7 +5,7 @@ from flask import Blueprint, jsonify, request
 
 from modules.tbkl.decorators import require_tbkl_auth, require_tbkl_manage, require_tbkl_report
 from modules.tbkl import service as svc
-from modules.tbkl.rbac import can_assign, can_lock, can_manage, can_report
+from modules.tbkl.rbac import can_assign, can_lock, can_manage, can_report, is_unit_reporter_only, user_department_name
 
 tbkl_bp = Blueprint('tbkl', __name__)
 
@@ -26,12 +26,17 @@ def api_tbkl_context():
     sb = _supabase()
     return jsonify({
         'success': True,
-        'user': {'username': ctx.username, 'department_id': ctx.department_id},
+        'user': {
+            'username': ctx.username,
+            'department_id': ctx.department_id,
+            'department_name': user_department_name(ctx, sb),
+        },
         'permissions': {
             'can_manage': can_manage(ctx, sb),
             'can_assign': can_assign(ctx, sb),
             'can_report': can_report(ctx, sb),
             'can_lock': can_lock(ctx, sb),
+            'is_unit_only': is_unit_reporter_only(ctx, sb),
         },
     })
 
@@ -40,7 +45,7 @@ def api_tbkl_context():
 @require_tbkl_auth
 def api_list_cycles():
     try:
-        items = svc.list_cycles(_supabase())
+        items = svc.list_cycles_enriched(_supabase())
         return jsonify({'success': True, 'cycles': items})
     except Exception as exc:
         print(f'api_list_cycles: {exc}')
@@ -61,8 +66,9 @@ def api_create_cycle():
 @tbkl_bp.route('/api/tbkl/cycles/<cycle_id>/dashboard', methods=['GET'])
 @require_tbkl_auth
 def api_dashboard(cycle_id):
+    unit_only = request.args.get('unit_only', '').lower() in ('1', 'true', 'yes')
     try:
-        data = svc.build_dashboard(_supabase(), _ctx(), cycle_id)
+        data = svc.build_dashboard(_supabase(), _ctx(), cycle_id, unit_only=unit_only)
         return jsonify({'success': True, **data})
     except LookupError as exc:
         return jsonify({'success': False, 'message': str(exc)}), 404

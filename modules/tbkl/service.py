@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from modules.meetings.rbac import UserContext
-from modules.tbkl.rbac import can_lock, can_manage, can_report, unit_can_edit_task
+from modules.tbkl.rbac import can_lock, can_manage, can_report, is_unit_reporter_only, unit_can_edit_task, user_department_name
 
 
 def _now_iso() -> str:
@@ -90,6 +90,47 @@ def _task_code(meeting_seq: int, dir_seq: int, task_seq: int) -> str:
 def list_cycles(supabase) -> list[dict]:
     res = supabase.table('tbkl_cycles').select('*').order('meeting_seq', desc=True).execute()
     return res.data or []
+
+
+def list_cycles_enriched(supabase) -> list[dict]:
+    cycles = list_cycles(supabase)
+    if not cycles:
+        return []
+
+    cycle_ids = [c['id'] for c in cycles]
+    dirs_res = supabase.table('tbkl_directives').select('id, cycle_id').in_(
+        'cycle_id', cycle_ids
+    ).execute()
+    directives = dirs_res.data or []
+    dir_counts: dict[str, int] = {}
+    dir_ids: list[str] = []
+    dirs_by_cycle: dict[str, list[str]] = {}
+    for d in directives:
+        cid = d['cycle_id']
+        dir_counts[cid] = dir_counts.get(cid, 0) + 1
+        dir_ids.append(d['id'])
+        dirs_by_cycle.setdefault(cid, []).append(d['id'])
+
+    task_counts: dict[str, int] = {cid: 0 for cid in cycle_ids}
+    if dir_ids:
+        tasks_res = supabase.table('tbkl_tasks').select('id, directive_id').in_(
+            'directive_id', dir_ids
+        ).execute()
+        dir_to_cycle = {d['id']: d['cycle_id'] for d in directives}
+        for t in tasks_res.data or []:
+            cid = dir_to_cycle.get(t['directive_id'])
+            if cid:
+                task_counts[cid] = task_counts.get(cid, 0) + 1
+
+    out: list[dict] = []
+    for c in cycles:
+        cid = c['id']
+        out.append({
+            **c,
+            'directive_count': dir_counts.get(cid, 0),
+            'task_count': task_counts.get(cid, 0),
+        })
+    return out
 
 
 def get_cycle(supabase, cycle_id: str) -> Optional[dict]:
@@ -216,8 +257,8 @@ def submit_report(
         raise LookupError('Không tìm thấy đầu việc')
     task = task_res.data[0]
 
-    if not unit_can_edit_task(ctx, task) and not can_manage(ctx, supabase):
-        raise PermissionError('Bạn không được báo cáo đầu việc này')
+    if not unit_can_edit_task(ctx, task, supabase) and not can_manage(ctx, supabase):
+        raise PermissionError('Bạn không được báo cáo đầu việc này — chỉ đơn vị được giao mới nhập')
 
     week_label = (payload.get('week_label') or '').strip() or _week_label()
 
@@ -304,7 +345,7 @@ def _latest_reports_map(supabase, task_ids: list[str]) -> dict[str, dict]:
     return out
 
 
-def build_dashboard(supabase, ctx: UserContext, cycle_id: str) -> dict:
+def build_dashboard(supabase, ctx: UserContext, cycle_id: str, *, unit_only: bool = False) -> dict:
     cycle = get_cycle(supabase, cycle_id)
     if not cycle:
         raise LookupError('Không tìm thấy cuộc họp')
@@ -324,6 +365,8 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str) -> dict:
     task_ids = [t['id'] for t in tasks]
     reports = _latest_reports_map(supabase, task_ids)
     cycle_locked = cycle.get('status') == 'locked'
+    unit_view = unit_only or is_unit_reporter_only(ctx, supabase)
+    dept_name = user_department_name(ctx, supabase)
 
     dir_by_id = {d['id']: d for d in directives}
     rows: list[dict] = []
@@ -341,10 +384,8 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str) -> dict:
             cycle_locked=cycle_locked,
             has_report=bool(rep),
         )
-        summary[rag] = summary.get(rag, 0) + 1
-        summary['total'] += 1
 
-        rows.append({
+        row = {
             'task_id': task['id'],
             'directive_id': task['directive_id'],
             'directive_code': directive.get('code'),
@@ -370,11 +411,17 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str) -> dict:
             'rag': rag,
             'week_label': rep.get('week_label') if rep else _week_label(),
             'report_locked': bool(rep.get('locked')) if rep else False,
-            'can_report': unit_can_edit_task(ctx, task) or can_manage(ctx, supabase),
-        })
+            'can_report': unit_can_edit_task(ctx, task, supabase) or can_manage(ctx, supabase),
+        }
+        if unit_view and not row['can_report']:
+            continue
+        rows.append(row)
 
     directive_summaries = []
+    visible_dir_ids = {r['directive_id'] for r in rows}
     for d in directives:
+        if unit_view and d['id'] not in visible_dir_ids:
+            continue
         child = [r for r in rows if r['directive_id'] == d['id']]
         rags = [r['rag'] for r in child] if child else ['gray']
         d_rag = 'red' if 'red' in rags else ('yellow' if 'yellow' in rags else ('green' if child and all(x == 'green' for x in rags) else 'gray'))
@@ -388,16 +435,29 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str) -> dict:
             ) if child else 0,
         })
 
+    summary = {'green': 0, 'yellow': 0, 'red': 0, 'gray': 0, 'total': 0}
+    for r in rows:
+        rag = r.get('rag') or 'gray'
+        summary[rag] = summary.get(rag, 0) + 1
+        summary['total'] += 1
+
+    pending_report = sum(1 for r in rows if r.get('can_report') and not r.get('report_locked'))
+
     return {
         'cycle': cycle,
+        'meeting_label': f"H{int(cycle.get('meeting_seq') or 0)} — {cycle.get('title') or 'Cuộc họp'}",
         'directives': directive_summaries,
         'rows': rows,
         'summary': summary,
         'week_label': _week_label(),
+        'unit_view': unit_view,
+        'department_name': dept_name,
+        'pending_report_count': pending_report,
         'permissions': {
             'can_manage': can_manage(ctx, supabase),
             'can_report': can_report(ctx, supabase),
             'can_lock': can_lock(ctx, supabase),
+            'is_unit_only': is_unit_reporter_only(ctx, supabase),
         },
     }
 

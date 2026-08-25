@@ -61,8 +61,10 @@
     createCycle: function (payload) {
       return apiFetch('/cycles', { method: 'POST', body: JSON.stringify(payload || {}) });
     },
-    getDashboard: function (cycleId) {
-      return apiFetch('/cycles/' + encodeURIComponent(cycleId) + '/dashboard');
+    getDashboard: function (cycleId, unitOnly) {
+      var path = '/cycles/' + encodeURIComponent(cycleId) + '/dashboard';
+      if (unitOnly) path += '?unit_only=1';
+      return apiFetch(path);
     },
     createDirective: function (cycleId, payload) {
       return apiFetch('/cycles/' + encodeURIComponent(cycleId) + '/directives', {

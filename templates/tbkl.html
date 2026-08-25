@@ -7,7 +7,7 @@
 <title>Theo dõi Kết luận Họp</title>
 <meta name="theme-color" content="#065f46">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-<link rel="stylesheet" href="/static/css/app-tbkl.css?v=2">
+<link rel="stylesheet" href="/static/css/app-tbkl.css?v=3">
 </head>
 <body class="tbkl-body">
 
@@ -24,12 +24,6 @@
         </div>
       </div>
     </div>
-    <div class="tbkl-topbar-center">
-      <label class="tbkl-select-wrap">
-        <span>Cuộc họp</span>
-        <select id="cycleSelect" aria-label="Chọn cuộc họp"></select>
-      </label>
-    </div>
     <div class="tbkl-topbar-right">
       <span class="tbkl-week-badge" id="weekBadge">Tuần —</span>
       <div class="tbkl-user-chip" id="userChip">
@@ -39,7 +33,39 @@
     </div>
   </header>
 
+  <div class="tbkl-body-row">
+
+    <aside class="tbkl-sidebar" id="tbklSidebar">
+      <div class="tbkl-sidebar-head">
+        <h2>Danh sách cuộc họp</h2>
+        <button type="button" class="tbkl-btn tbkl-btn-sm tbkl-btn-primary" id="btnNewCycleSide" hidden>+ Mới</button>
+      </div>
+      <p class="tbkl-sidebar-hint">Chọn cuộc họp để xem kết luận và tiến độ thực hiện.</p>
+      <div class="tbkl-meeting-list" id="meetingList">
+        <p class="tbkl-empty-list">Đang tải…</p>
+      </div>
+    </aside>
+
+    <div class="tbkl-content">
+
   <main class="tbkl-main">
+
+    <section class="tbkl-meeting-head" id="meetingHead" hidden>
+      <div>
+        <p class="tbkl-meeting-kicker">Cuộc họp đang xem</p>
+        <h1 class="tbkl-meeting-title" id="meetingTitle">—</h1>
+        <p class="tbkl-meeting-meta" id="meetingMeta"></p>
+      </div>
+      <div class="tbkl-view-tabs" id="viewTabs">
+        <button type="button" class="tbkl-tab is-active" data-view="all">Tổng hợp Viện</button>
+        <button type="button" class="tbkl-tab" data-view="unit">Báo cáo đơn vị</button>
+      </div>
+    </section>
+
+    <section class="tbkl-unit-banner" id="unitBanner" hidden>
+      <strong id="unitBannerTitle">Báo cáo tuần — đơn vị thực hiện nhập liệu</strong>
+      <p id="unitBannerText">Các đơn vị được giao việc tự nhập % tiến độ, khó khăn và giải pháp hàng tuần.</p>
+    </section>
 
     <section class="tbkl-source-banner" id="sourceBanner" hidden>
       <div class="tbkl-source-text">
@@ -108,17 +134,19 @@
           </tr>
         </thead>
         <tbody id="taskTableBody">
-          <tr><td colspan="10" class="tbkl-empty">Đang tải dữ liệu…</td></tr>
+          <tr><td colspan="10" class="tbkl-empty">Chọn cuộc họp bên trái để xem kết luận.</td></tr>
         </tbody>
       </table>
     </section>
 
     <section class="tbkl-directives" id="directivesPanel" hidden>
-      <h3>Kết luận theo cuộc họp</h3>
+      <h3>Kết luận thuộc cuộc họp này</h3>
       <div id="directivesList" class="tbkl-directive-cards"></div>
     </section>
 
   </main>
+    </div>
+  </div>
 </div>
 
 <!-- Modal: Cuộc họp mới -->
@@ -216,7 +244,7 @@
   <div class="tbkl-modal-backdrop" data-close="modalReport"></div>
   <div class="tbkl-modal-box tbkl-modal-wide">
     <header class="tbkl-modal-head">
-      <h2 id="reportModalTitle">Báo cáo tiến độ tuần</h2>
+      <h2 id="reportModalTitle">Đơn vị nhập báo cáo tuần</h2>
       <button type="button" class="tbkl-btn-icon" data-close="modalReport">✕</button>
     </header>
     <form id="formReport" class="tbkl-form">
@@ -249,8 +277,8 @@
 
 <div class="tbkl-toast" id="tbklToast" hidden></div>
 
-<script src="/static/js/tbkl/permissions.js?v=2"></script>
-<script src="/static/js/tbkl/services.js?v=2"></script>
-<script src="/static/js/tbkl/main.js?v=2"></script>
+<script src="/static/js/tbkl/permissions.js?v=3"></script>
+<script src="/static/js/tbkl/services.js?v=3"></script>
+<script src="/static/js/tbkl/main.js?v=3"></script>
 </body>
 </html>

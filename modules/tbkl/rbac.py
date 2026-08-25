@@ -55,13 +55,51 @@ def user_department_id(ctx: UserContext) -> str | None:
     return ctx.department_id
 
 
-def unit_can_edit_task(ctx: UserContext, task: dict) -> bool:
-    if can_manage(ctx):
+def _norm_unit_label(value: str) -> str:
+    return ''.join(c for c in str(value or '').lower() if c.isalnum())
+
+
+def user_department_name(ctx: UserContext, supabase=None) -> str | None:
+    cached = getattr(ctx, '_department_name', None)
+    if cached:
+        return cached
+    dept_id = user_department_id(ctx)
+    if not dept_id or supabase is None:
+        return None
+    try:
+        res = supabase.table('category_departments').select('name').eq(
+            'id', dept_id
+        ).limit(1).execute()
+        if res.data:
+            name = (res.data[0].get('name') or '').strip() or None
+            ctx._department_name = name  # type: ignore[attr-defined]
+            return name
+    except Exception as exc:
+        print(f'[tbkl.rbac] user_department_name: {exc}')
+    return None
+
+
+def unit_can_edit_task(ctx: UserContext, task: dict, supabase=None) -> bool:
+    if can_manage(ctx, supabase):
         return True
-    if not can_report(ctx):
+    if not can_report(ctx, supabase):
         return False
-    dept = user_department_id(ctx)
-    if not dept:
+    dept_id = user_department_id(ctx)
+    owner_id = task.get('owner_unit_id') or ''
+    if dept_id and owner_id and str(owner_id) == str(dept_id):
+        return True
+    dept_name = user_department_name(ctx, supabase)
+    owner_name = (task.get('owner_unit_name') or '').strip()
+    if dept_name and owner_name:
+        nd = _norm_unit_label(dept_name)
+        no = _norm_unit_label(owner_name)
+        if nd and no and (nd in no or no in nd or nd == no):
+            return True
+    return False
+
+
+def is_unit_reporter_only(ctx: UserContext, supabase=None) -> bool:
+    """Đơn vị TH — được báo cáo, không quản lý toàn Viện."""
+    if ctx.is_global_admin:
         return False
-    owner = task.get('owner_unit_id') or ''
-    return str(owner) == str(dept)
+    return can_report(ctx, supabase) and not can_manage(ctx, supabase)
