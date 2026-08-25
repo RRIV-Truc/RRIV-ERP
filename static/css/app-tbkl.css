@@ -100,9 +100,42 @@
 }
 .tbkl-group-code { font-family: ui-monospace, monospace; color: #047857; margin-right: 8px; }
 
-@media (max-width: 900px) {
+@media (max-width: 900px) and (orientation: portrait) {
   .tbkl-body-row { flex-direction: column; }
-  .tbkl-sidebar { width: 100%; max-height: 220px; border-right: none; border-bottom: 1px solid var(--tbkl-border); }
+  .tbkl-sidebar {
+    width: 100%; max-height: 220px;
+    border-right: none; border-bottom: 1px solid var(--tbkl-border);
+  }
+}
+
+/* Điện thoại xoay ngang — sidebar gọn bên trái, bảng rộng + cuộn ngang */
+@media (max-width: 900px) and (orientation: landscape), (max-height: 500px) and (orientation: landscape) {
+  .tbkl-body-row { flex-direction: row; }
+  .tbkl-sidebar {
+    width: 168px; min-width: 168px; max-height: none;
+    border-right: 1px solid var(--tbkl-border); border-bottom: none;
+    padding: 8px 6px;
+  }
+  .tbkl-sidebar-hint { display: none; }
+  .tbkl-meeting-card-title { font-size: 0.78rem; }
+  .tbkl-meeting-card-meta { display: none; }
+  .tbkl-main { padding: 8px 10px; }
+  .tbkl-zone { padding: 10px 12px; margin-bottom: 10px; }
+  .tbkl-zone-conclusions { display: none; }
+  .tbkl-meeting-head { margin-bottom: 8px; padding-bottom: 8px; }
+  .tbkl-meeting-title { font-size: 0.95rem; }
+  .tbkl-topbar { padding: 6px 10px; }
+  .tbkl-brand span { display: none; }
+  .tbkl-table-wrap {
+    overflow-x: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x pan-y;
+    max-height: calc(100dvh - 88px);
+  }
+  .tbkl-table { min-width: 980px; width: max-content; }
+  .tbkl-scroll-hint { display: block; }
 }
 
 .tbkl-topbar {
@@ -306,9 +339,30 @@
   background: var(--tbkl-surface);
   border-radius: var(--tbkl-radius);
   box-shadow: var(--tbkl-shadow);
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x pan-y;
+  max-width: 100%;
 }
-.tbkl-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.tbkl-scroll-hint {
+  display: none;
+  margin: 0 0 8px; padding: 6px 10px; font-size: 0.75rem;
+  text-align: center; color: var(--tbkl-muted);
+  background: #ecfdf5; border-radius: 6px;
+}
+.tbkl-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+@media (max-width: 900px) {
+  .tbkl-table-wrap { max-height: none; }
+  .tbkl-table { min-width: 920px; width: max-content; }
+  .tbkl-scroll-hint { display: block; }
+}
 .tbkl-table th {
   text-align: left; padding: 10px 12px;
   background: #ecfdf5; border-bottom: 1px solid var(--tbkl-border);
