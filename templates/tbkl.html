@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+{% include 'includes/rriv_core_slim.html' %}
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Theo dõi Kết luận Họp</title>
+<meta name="theme-color" content="#065f46">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="stylesheet" href="/static/css/app-tbkl.css?v=1">
+</head>
+<body class="tbkl-body">
+
+<div class="tbkl-shell" id="tbklShell">
+
+  <header class="tbkl-topbar">
+    <div class="tbkl-topbar-left">
+      <button type="button" class="tbkl-btn-icon" id="btnHome" title="Trang chủ">🏠</button>
+      <div class="tbkl-brand">
+        <span class="tbkl-brand-mark">TB</span>
+        <div>
+          <strong>Theo dõi Kết luận Họp</strong>
+          <span>Viện NC Cao su Việt Nam</span>
+        </div>
+      </div>
+    </div>
+    <div class="tbkl-topbar-center">
+      <label class="tbkl-select-wrap">
+        <span>Cuộc họp</span>
+        <select id="cycleSelect" aria-label="Chọn cuộc họp"></select>
+      </label>
+    </div>
+    <div class="tbkl-topbar-right">
+      <span class="tbkl-week-badge" id="weekBadge">Tuần —</span>
+      <div class="tbkl-user-chip" id="userChip">
+        <div class="tbkl-avatar">?</div>
+        <div class="tbkl-user-name">Đang tải...</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="tbkl-main">
+
+    <section class="tbkl-summary" id="summaryCards">
+      <article class="tbkl-stat tbkl-stat-green" data-filter="green">
+        <span class="tbkl-stat-num" id="statGreen">0</span>
+        <span class="tbkl-stat-label">Đúng tiến độ</span>
+      </article>
+      <article class="tbkl-stat tbkl-stat-yellow" data-filter="yellow">
+        <span class="tbkl-stat-num" id="statYellow">0</span>
+        <span class="tbkl-stat-label">Cần theo dõi</span>
+      </article>
+      <article class="tbkl-stat tbkl-stat-red" data-filter="red">
+        <span class="tbkl-stat-num" id="statRed">0</span>
+        <span class="tbkl-stat-label">Trễ / rủi ro</span>
+      </article>
+      <article class="tbkl-stat tbkl-stat-gray" data-filter="gray">
+        <span class="tbkl-stat-num" id="statGray">0</span>
+        <span class="tbkl-stat-label">Chưa báo cáo</span>
+      </article>
+    </section>
+
+    <section class="tbkl-toolbar">
+      <div class="tbkl-toolbar-left">
+        <input type="search" id="searchInput" class="tbkl-search" placeholder="Tìm mã H1-01, nội dung…">
+        <select id="ragFilter" class="tbkl-filter-select" aria-label="Lọc RAG">
+          <option value="">Tất cả RAG</option>
+          <option value="green">Xanh — đúng tiến độ</option>
+          <option value="yellow">Vàng — cần theo dõi</option>
+          <option value="red">Đỏ — trễ / rủi ro</option>
+          <option value="gray">Xám — chưa báo cáo</option>
+        </select>
+      </div>
+      <div class="tbkl-toolbar-right" id="manageActions" hidden>
+        <button type="button" class="tbkl-btn tbkl-btn-outline" id="btnAddDirective">+ Kết luận</button>
+        <button type="button" class="tbkl-btn tbkl-btn-outline" id="btnAddTask">+ Đầu việc</button>
+        <button type="button" class="tbkl-btn tbkl-btn-primary" id="btnNewCycle">+ Cuộc họp mới</button>
+        <button type="button" class="tbkl-btn tbkl-btn-danger" id="btnLockCycle" hidden>Chốt báo cáo tuần</button>
+      </div>
+    </section>
+
+    <section class="tbkl-table-wrap">
+      <table class="tbkl-table" id="taskTable">
+        <thead>
+          <tr>
+            <th>RAG</th>
+            <th>Mã</th>
+            <th>Kết luận / Đầu việc</th>
+            <th>Phòng CT</th>
+            <th>Đơn vị TH</th>
+            <th>Hạn</th>
+            <th>%</th>
+            <th>Trạng thái</th>
+            <th>Khó khăn / Giải pháp</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="taskTableBody">
+          <tr><td colspan="10" class="tbkl-empty">Đang tải dữ liệu…</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="tbkl-directives" id="directivesPanel" hidden>
+      <h3>Kết luận theo cuộc họp</h3>
+      <div id="directivesList" class="tbkl-directive-cards"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Modal: Cuộc họp mới -->
+<div class="tbkl-modal" id="modalCycle" hidden>
+  <div class="tbkl-modal-backdrop" data-close="modalCycle"></div>
+  <div class="tbkl-modal-box">
+    <header class="tbkl-modal-head">
+      <h2>Tạo cuộc họp mới</h2>
+      <button type="button" class="tbkl-btn-icon" data-close="modalCycle">✕</button>
+    </header>
+    <form id="formCycle" class="tbkl-form">
+      <label>Số cuộc họp <input type="number" name="meeting_seq" min="1" placeholder="Tự động nếu để trống"></label>
+      <label>Tiêu đề <input type="text" name="title" placeholder="Họp giao ban tuần…"></label>
+      <label>Ngày họp <input type="date" name="meeting_date"></label>
+      <label>Số / VB nguồn <input type="text" name="source_ref" placeholder="TB số … / Biên bản …"></label>
+      <label>Tóm tắt kết luận <textarea name="conclusion_summary" rows="3"></textarea></label>
+      <footer class="tbkl-modal-foot">
+        <button type="button" class="tbkl-btn tbkl-btn-outline" data-close="modalCycle">Huỷ</button>
+        <button type="submit" class="tbkl-btn tbkl-btn-primary">Tạo cuộc họp</button>
+      </footer>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Kết luận -->
+<div class="tbkl-modal" id="modalDirective" hidden>
+  <div class="tbkl-modal-backdrop" data-close="modalDirective"></div>
+  <div class="tbkl-modal-box">
+    <header class="tbkl-modal-head">
+      <h2>Thêm kết luận</h2>
+      <button type="button" class="tbkl-btn-icon" data-close="modalDirective">✕</button>
+    </header>
+    <form id="formDirective" class="tbkl-form">
+      <label>Nội dung kết luận <textarea name="content" rows="3" required></textarea></label>
+      <label>Tiêu đề ngắn <input type="text" name="title" placeholder="Tự sinh mã H{n}-01"></label>
+      <label>Phòng chủ trì
+        <select name="lead_department_id" id="directiveDeptSelect"><option value="">— Chọn phòng —</option></select>
+      </label>
+      <label>Người giám sát <input type="text" name="supervisor_name"></label>
+      <label>Ưu tiên
+        <select name="priority">
+          <option value="normal">Bình thường</option>
+          <option value="high">Cao</option>
+          <option value="critical">Rất cao</option>
+          <option value="low">Thấp</option>
+        </select>
+      </label>
+      <label>Hạn chung <input type="date" name="deadline"></label>
+      <footer class="tbkl-modal-foot">
+        <button type="button" class="tbkl-btn tbkl-btn-outline" data-close="modalDirective">Huỷ</button>
+        <button type="submit" class="tbkl-btn tbkl-btn-primary">Thêm kết luận</button>
+      </footer>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Đầu việc -->
+<div class="tbkl-modal" id="modalTask" hidden>
+  <div class="tbkl-modal-backdrop" data-close="modalTask"></div>
+  <div class="tbkl-modal-box">
+    <header class="tbkl-modal-head">
+      <h2>Thêm đầu việc</h2>
+      <button type="button" class="tbkl-btn-icon" data-close="modalTask">✕</button>
+    </header>
+    <form id="formTask" class="tbkl-form">
+      <label>Thuộc kết luận
+        <select name="directive_id" id="taskDirectiveSelect" required></select>
+      </label>
+      <label>Nội dung đầu việc <textarea name="title" rows="2" required></textarea></label>
+      <label>Sản phẩm / kết quả <input type="text" name="deliverable"></label>
+      <label>Đơn vị thực hiện
+        <select name="owner_unit_id" id="taskOwnerSelect"><option value="">— Chọn đơn vị —</option></select>
+      </label>
+      <label>Phối hợp <input type="text" name="coordinator_units" placeholder="Tên đơn vị, cách nhau bởi dấu ;"></label>
+      <label>Người phụ trách <input type="text" name="assignee_name"></label>
+      <label>Hạn <input type="date" name="deadline"></label>
+      <label>Ưu tiên
+        <select name="priority">
+          <option value="normal">Bình thường</option>
+          <option value="high">Cao</option>
+          <option value="critical">Rất cao</option>
+          <option value="low">Thấp</option>
+        </select>
+      </label>
+      <footer class="tbkl-modal-foot">
+        <button type="button" class="tbkl-btn tbkl-btn-outline" data-close="modalTask">Huỷ</button>
+        <button type="submit" class="tbkl-btn tbkl-btn-primary">Thêm đầu việc</button>
+      </footer>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Báo cáo tuần -->
+<div class="tbkl-modal" id="modalReport" hidden>
+  <div class="tbkl-modal-backdrop" data-close="modalReport"></div>
+  <div class="tbkl-modal-box tbkl-modal-wide">
+    <header class="tbkl-modal-head">
+      <h2 id="reportModalTitle">Báo cáo tiến độ tuần</h2>
+      <button type="button" class="tbkl-btn-icon" data-close="modalReport">✕</button>
+    </header>
+    <form id="formReport" class="tbkl-form">
+      <input type="hidden" name="task_id" id="reportTaskId">
+      <p class="tbkl-report-meta" id="reportMeta"></p>
+      <div class="tbkl-form-row">
+        <label>Tiến độ (%)
+          <input type="number" name="progress_pct" min="0" max="100" step="1" value="0" required>
+        </label>
+        <label>Trạng thái
+          <select name="status">
+            <option value="not_started">Chưa thực hiện</option>
+            <option value="in_progress" selected>Đang thực hiện</option>
+            <option value="at_risk">Có nguy cơ trễ</option>
+            <option value="completed">Hoàn thành</option>
+            <option value="blocked">Tạm dừng / vướng</option>
+          </select>
+        </label>
+      </div>
+      <label>Khó khăn / vướng mắc <textarea name="difficulties" rows="2"></textarea></label>
+      <label>Giải pháp / xử lý <textarea name="solution" rows="2"></textarea></label>
+      <label>Đề xuất / kiến nghị <textarea name="recommendation" rows="2"></textarea></label>
+      <footer class="tbkl-modal-foot">
+        <button type="button" class="tbkl-btn tbkl-btn-outline" data-close="modalReport">Huỷ</button>
+        <button type="submit" class="tbkl-btn tbkl-btn-primary">Gửi báo cáo</button>
+      </footer>
+    </form>
+  </div>
+</div>
+
+<div class="tbkl-toast" id="tbklToast" hidden></div>
+
+<script src="/static/js/tbkl/permissions.js?v=1"></script>
+<script src="/static/js/tbkl/services.js?v=1"></script>
+<script src="/static/js/tbkl/main.js?v=1"></script>
+</body>
+</html>

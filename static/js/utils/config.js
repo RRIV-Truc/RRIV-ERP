@@ -65,7 +65,8 @@ const Config = (function () {
     thongbao: '/app/thongbao',
     phanquyen: '/app/phanquyen',
     phonghop: '/app/phonghop',
-    phonghopJoin: '/app/phonghop/join'
+    phonghopJoin: '/app/phonghop/join',
+    tbkl: '/app/tbkl'
   };
 
   /**
@@ -87,7 +88,8 @@ const Config = (function () {
     baocao: false,
     thongbao: false,
     phanquyen: false,
-    phonghop: true
+    phonghop: true,
+    tbkl: true
   };
 
   function isHubAppEnabled(appId) {

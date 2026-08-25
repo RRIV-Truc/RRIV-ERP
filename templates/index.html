@@ -240,6 +240,20 @@
                     <div class="vrg-card-link">Truy cập ngay →</div>
                 </div>
 
+                <div class="vrg-app-card card-emerald" data-app="tbkl" onclick="navigateToApp('tbkl')" style="cursor:pointer;">
+                    <div>
+                        <div class="vrg-card-icon">📋</div>
+                        <div class="vrg-card-title">Theo dõi KL họp</div>
+                        <div class="vrg-card-desc">Theo dõi thực hiện kết luận họp giao ban. Mã H1-01, báo cáo tuần, dashboard RAG cho Ban lãnh đạo.</div>
+                        <div class="vrg-badge-list">
+                            <span class="vrg-mini-badge">H1-01</span>
+                            <span class="vrg-mini-badge">📊 RAG</span>
+                            <span class="vrg-mini-badge">📅 Tuần</span>
+                        </div>
+                    </div>
+                    <div class="vrg-card-link">Truy cập ngay →</div>
+                </div>
+
                 <div class="vrg-app-card card-cyan" data-app="chatluong" onclick="navigateToApp('chatluong')" style="cursor:pointer;">
                     <div>
                         <div class="vrg-card-icon">🔬</div>
@@ -519,6 +533,10 @@ function navigateToApp(appName) {
             '/static/css/app-phonghop.css?v=67',
             '/static/js/meetings/lazy-loader.js?v=2',
             '/static/js/meetings/main.js?v=55'
+        ],
+        tbkl: [
+            '/static/css/app-tbkl.css?v=1',
+            '/static/js/tbkl/main.js?v=1'
         ],
         sanxuat: [
             '/static/css/app-sanxuat.css',
