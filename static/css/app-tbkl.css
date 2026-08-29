@@ -237,6 +237,8 @@
   background: white; cursor: pointer; text-align: left; width: 100%;
   transition: border-color 0.12s, box-shadow 0.12s;
 }
+.tbkl-conclusion-actions { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.tbkl-conclusion-actions .tbkl-btn { cursor: pointer; }
 .tbkl-conclusion-item:hover { border-color: var(--tbkl-primary); box-shadow: var(--tbkl-shadow); }
 .tbkl-conclusion-code-col { min-width: 72px; }
 .tbkl-conclusion-code {
@@ -245,9 +247,25 @@
 .tbkl-conclusion-body h3 { margin: 0 0 6px; font-size: 0.92rem; line-height: 1.35; }
 .tbkl-conclusion-body p { margin: 0; font-size: 0.8rem; color: var(--tbkl-muted); line-height: 1.45; }
 .tbkl-conclusion-meta { font-size: 0.75rem; color: var(--tbkl-muted); margin-top: 8px; }
-.tbkl-conclusion-side { text-align: right; min-width: 88px; }
+.tbkl-conclusion-side { text-align: right; min-width: 148px; }
+.tbkl-conclusion-metrics {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px;
+}
+.tbkl-conclusion-metric { display: flex; flex-direction: column; gap: 2px; min-width: 64px; }
+.tbkl-conclusion-metric-label {
+  font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.02em; color: var(--tbkl-muted);
+}
+.tbkl-conclusion-metric-val { font-size: 1rem; font-weight: 700; color: var(--tbkl-primary-dark); line-height: 1.1; }
+.tbkl-conclusion-metric-empty-val { font-size: 0.72rem; font-weight: 600; color: #94a3b8; }
+.tbkl-conclusion-metric-status {
+  font-size: 0.65rem; color: var(--tbkl-muted); line-height: 1.2;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 72px;
+}
+.tbkl-conclusion-metric .tbkl-progress-bar-sm { height: 4px; margin-top: 1px; }
+.tbkl-progress-bar-sm { height: 4px; }
 .tbkl-conclusion-progress { font-size: 1.1rem; font-weight: 700; color: var(--tbkl-primary-dark); }
-.tbkl-conclusion-count { font-size: 0.72rem; color: var(--tbkl-muted); margin-top: 4px; }
+.tbkl-conclusion-count { font-size: 0.72rem; color: var(--tbkl-muted); margin-top: 6px; }
 
 .tbkl-field-inline {
   display: flex; flex-direction: column; gap: 2px; font-size: 0.72rem; font-weight: 600; color: var(--tbkl-muted);
@@ -261,7 +279,8 @@
 
 @media (max-width: 700px) {
   .tbkl-conclusion-item { grid-template-columns: 1fr; }
-  .tbkl-conclusion-side { text-align: left; display: flex; align-items: center; gap: 10px; }
+  .tbkl-conclusion-side { text-align: left; min-width: 0; }
+  .tbkl-conclusion-metrics { max-width: 280px; }
 }
 
 .tbkl-directive-overview {

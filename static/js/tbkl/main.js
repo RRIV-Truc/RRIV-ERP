@@ -222,6 +222,84 @@
     $('statGray').textContent = summary.gray || 0;
   }
 
+  function conclusionSideHtml(d) {
+    var khcnAssessed = d.is_assessed || (d.progress_pct != null && d.progress_pct > 0);
+    var khcnPct = khcnAssessed ? Math.round(d.progress_pct || 0) : null;
+    var vtPct = d.is_confirmed ? Math.round(d.confirmed_pct || 0) : null;
+
+    function metricBlock(label, pct, statusLabel, emptyLabel, barExtra) {
+      if (pct == null) {
+        return '<div class="tbkl-conclusion-metric tbkl-conclusion-metric-empty">' +
+          '<span class="tbkl-conclusion-metric-label">' + label + '</span>' +
+          '<span class="tbkl-conclusion-metric-empty-val">' + emptyLabel + '</span></div>';
+      }
+      return '<div class="tbkl-conclusion-metric">' +
+        '<span class="tbkl-conclusion-metric-label">' + label + '</span>' +
+        '<span class="tbkl-conclusion-metric-val">' + pct + '%</span>' +
+        '<div class="tbkl-progress-bar tbkl-progress-bar-sm">' +
+        '<div class="tbkl-progress-fill' + (barExtra || '') + '" style="width:' + Math.min(100, pct) + '%"></div></div>' +
+        (statusLabel ? ('<span class="tbkl-conclusion-metric-status">' + escapeHtml(statusLabel) + '</span>') : '') +
+        '</div>';
+    }
+
+    var khcnStatus = khcnAssessed ? (d.status_label || '') : '';
+    var vtStatus = d.is_confirmed ? (d.confirmed_status_label || '') : '';
+
+    return '<div class="tbkl-conclusion-side">' +
+      '<div class="tbkl-conclusion-metrics">' +
+      metricBlock('KHCN ĐG', khcnPct, khcnStatus, 'Chưa ĐG', '') +
+      metricBlock('VT XN', vtPct, vtStatus, 'Chưa XN', ' tbkl-progress-confirmed') +
+      '</div>' +
+      '<div class="tbkl-conclusion-count">' + (d.task_count || 0) + ' đầu việc con</div></div>';
+  }
+
+  function conclusionActionsHtml(d) {
+    if (isUnitView()) return '';
+    var btns = '';
+    if (d.can_assess_directive && !d.report_locked) {
+      btns += '<button type="button" class="tbkl-btn tbkl-btn-sm tbkl-btn-primary" data-assess-directive="' +
+        d.id + '">ĐG KHCN</button>';
+    }
+    if (d.can_confirm_directive && !d.report_locked) {
+      btns += (btns ? ' ' : '') +
+        '<button type="button" class="tbkl-btn tbkl-btn-sm tbkl-btn-outline" data-confirm-directive="' +
+        d.id + '">XN VT</button>';
+    }
+    if (!btns) return '';
+    return '<div class="tbkl-conclusion-actions">' + btns + '</div>';
+  }
+
+  function bindConclusionListEvents(list) {
+    if (!list) return;
+    list.querySelectorAll('.tbkl-conclusion-item').forEach(function (card) {
+      card.addEventListener('click', function (e) {
+        if (e.target.closest('[data-assess-directive], [data-confirm-directive]')) return;
+        state.groupBy = 'directive';
+        var sel = $('groupBySelect');
+        if (sel) sel.value = 'directive';
+        var id = card.getAttribute('data-directive-id');
+        var details = $('zoneDetails');
+        if (details) details.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setTimeout(function () {
+          var target = document.getElementById('dir-group-' + id);
+          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 350);
+      });
+    });
+    list.querySelectorAll('[data-assess-directive]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openAssessDirectiveModal(btn.getAttribute('data-assess-directive'));
+      });
+    });
+    list.querySelectorAll('[data-confirm-directive]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openConfirmDirectiveModal(btn.getAttribute('data-confirm-directive'));
+      });
+    });
+  }
+
   function renderConclusionList(cycle, directives) {
     var zone = $('zoneConclusions');
     var list = $('conclusionList');
@@ -251,89 +329,19 @@
       if (d.lead_department_name) meta.push('TC chung: ' + d.lead_department_name);
       if (d.supervisor_name) meta.push('GS: ' + d.supervisor_name);
       if (d.deadline) meta.push('Hạn: ' + fmtDate(d.deadline));
-      var disp = directiveDisplayPct(d);
-      var pctLabel = disp.tag ? (' · ' + disp.tag) : '';
-      return '<button type="button" class="tbkl-conclusion-item" data-directive-id="' + d.id + '">' +
+      return '<div class="tbkl-conclusion-item" data-directive-id="' + d.id + '">' +
         '<div class="tbkl-conclusion-code-col">' +
         '<div class="tbkl-conclusion-code">' + escapeHtml(d.code || '') + '</div>' +
         '<span class="' + ragClass(d.rag) + '" style="margin-top:8px;display:inline-block"></span></div>' +
         '<div class="tbkl-conclusion-body">' +
         '<h3>' + escapeHtml(d.title || '') + '</h3>' +
         '<p>' + escapeHtml(excerpt) + '</p>' +
-        '<div class="tbkl-conclusion-meta">' + escapeHtml(meta.join(' · ')) + '</div></div>' +
-        '<div class="tbkl-conclusion-side">' +
-        '<div class="tbkl-conclusion-progress">' + Math.round(disp.pct || 0) + '%</div>' +
-        '<div class="tbkl-conclusion-count">' + (d.task_count || 0) + ' đầu việc' + pctLabel + '</div></div></button>';
+        '<div class="tbkl-conclusion-meta">' + escapeHtml(meta.join(' · ')) + '</div>' +
+        conclusionActionsHtml(d) + '</div>' +
+        conclusionSideHtml(d) + '</div>';
     }).join('');
 
-    list.querySelectorAll('[data-directive-id]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        state.groupBy = 'directive';
-        var sel = $('groupBySelect');
-        if (sel) sel.value = 'directive';
-        var id = btn.getAttribute('data-directive-id');
-        var details = $('zoneDetails');
-        if (details) details.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        setTimeout(function () {
-          var target = document.getElementById('dir-group-' + id);
-          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 350);
-      });
-    });
-  }
-
-  function directiveByIdMap() {
-    var map = {};
-    (state.dashboard && state.dashboard.directives || []).forEach(function (d) {
-      map[d.id] = d;
-    });
-    return map;
-  }
-
-  function directiveDisplayPct(d) {
-    if (d.is_confirmed && d.confirmed_pct != null) return { pct: d.confirmed_pct, tag: 'VT' };
-    if (d.is_assessed || (d.progress_pct != null && d.progress_pct > 0)) {
-      return { pct: d.progress_pct || 0, tag: 'KHCN' };
-    }
-    if (d.avg_confirmed_pct != null) return { pct: d.avg_confirmed_pct, tag: 'con' };
-    return { pct: d.avg_progress || 0, tag: '' };
-  }
-
-  function renderDirectiveRow(d, unitMode) {
-    var btns = '';
-    if (d.can_assess_directive && !d.report_locked && !unitMode) {
-      btns += '<button type="button" class="tbkl-btn tbkl-btn-sm tbkl-btn-primary" data-assess-directive="' +
-        d.id + '">ĐG KHCN</button>';
-    } else if (d.report_locked) {
-      btns += '<span class="tbkl-note">Đã chốt</span>';
-    }
-    if (d.can_confirm_directive && !d.report_locked && !unitMode) {
-      btns += (btns ? ' ' : '') +
-        '<button type="button" class="tbkl-btn tbkl-btn-sm tbkl-btn-outline" data-confirm-directive="' +
-        d.id + '">XN VT</button>';
-    }
-    var assessedCell = d.is_assessed || (d.progress_pct != null && d.progress_pct > 0)
-      ? pctCell(d.progress_pct, 'unit')
-      : pctCell(0, 'pkh-empty');
-    if (!(d.is_assessed || (d.progress_pct != null && d.progress_pct > 0))) {
-      assessedCell = '<span class="tbkl-note">Chưa ĐG</span>';
-    }
-    return '<tr class="tbkl-group-row tbkl-directive-progress-row" id="dir-group-' + d.id + '" data-rag="' +
-      escapeHtml(d.rag || 'gray') + '">' +
-      '<td><span class="' + ragClass(d.rag) + '"></span></td>' +
-      '<td><span class="tbkl-code">' + escapeHtml(d.code || '') + '</span></td>' +
-      '<td><div class="tbkl-task-title">' + escapeHtml(d.title || '') + '</div>' +
-      '<div class="tbkl-dir-ref">Mục kết luận lớn · ' + (d.task_count || 0) + ' đầu việc con</div></td>' +
-      '<td>' + escapeHtml(d.lead_department_name || '—') + '</td>' +
-      '<td>—</td>' +
-      '<td>' + fmtDate(d.deadline) + '</td>' +
-      '<td>' + assessedCell + '</td>' +
-      '<td>' + (d.is_confirmed ? pctCell(d.confirmed_pct, 'pkh') : pctCell(0, 'pkh-empty')) + '</td>' +
-      '<td>' + escapeHtml(d.is_confirmed
-        ? (d.confirmed_status_label || d.status_label || '—')
-        : (d.is_assessed ? (d.status_label || '—') : '—')) + '</td>' +
-      '<td class="tbkl-note">' + escapeHtml(d.note || '—') + '</td>' +
-      '<td>' + btns + '</td></tr>';
+    bindConclusionListEvents(list);
   }
 
   function pctCell(pct, mode) {
@@ -370,20 +378,18 @@
 
     var html = '';
     var lastGroup = null;
-    var dirMap = directiveByIdMap();
     filtered.forEach(function (r) {
       var gk = groupKey(r);
       if (gk !== null && gk !== lastGroup) {
         lastGroup = gk;
-        if (state.groupBy === 'directive') {
-          var d = dirMap[r.directive_id];
-          if (d) html += renderDirectiveRow(d, unitMode);
-        } else {
-          var rowClass = state.groupBy === 'owner_unit' || state.groupBy === 'lead_dept'
-            ? 'tbkl-group-row tbkl-group-row-unit' : 'tbkl-group-row';
-          html += '<tr class="' + rowClass + '"><td colspan="11">' +
-            escapeHtml(groupLabel(r) || '') + '</td></tr>';
-        }
+        var rowClass = state.groupBy === 'owner_unit' || state.groupBy === 'lead_dept'
+          ? 'tbkl-group-row tbkl-group-row-unit' : 'tbkl-group-row';
+        var anchor = state.groupBy === 'directive' ? (' id="dir-group-' + r.directive_id + '"') : '';
+        var prefix = state.groupBy === 'directive'
+          ? ('<span class="tbkl-group-code">' + escapeHtml(r.directive_code || '') + '</span>')
+          : '';
+        html += '<tr class="' + rowClass + '"' + anchor + '><td colspan="11">' +
+          prefix + escapeHtml(groupLabel(r) || '') + '</td></tr>';
       }
       var note = [r.difficulties, r.solution].filter(Boolean).join(' → ');
       var reportBtn = '';
@@ -431,16 +437,6 @@
     tbody.querySelectorAll('[data-confirm]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         openConfirmModal(btn.getAttribute('data-confirm'));
-      });
-    });
-    tbody.querySelectorAll('[data-assess-directive]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        openAssessDirectiveModal(btn.getAttribute('data-assess-directive'));
-      });
-    });
-    tbody.querySelectorAll('[data-confirm-directive]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        openConfirmDirectiveModal(btn.getAttribute('data-confirm-directive'));
       });
     });
   }
