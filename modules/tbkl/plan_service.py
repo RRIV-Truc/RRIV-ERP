@@ -14,7 +14,7 @@ _TASK_CODE = re.compile(r'^H(\d+)-(\d{2})-(\d{2})$', re.I)
 
 _PLAN_HEADERS = [
     'Loại', 'Mã', 'Kết luận / Đầu việc', 'SP (sản phẩm)',
-    'Phòng chủ trì', 'Đơn vị TH', 'Hạn (YYYY-MM-DD)',
+    'Trách nhiệm chung', 'Đơn vị TH', 'Hạn (YYYY-MM-DD)',
 ]
 
 
@@ -80,7 +80,7 @@ def _rows_to_plan(rows: list[dict]) -> dict:
             'title': title,
             'content': title if kind == 'directive' else '',
             'deliverable': _field(row, 'sp', 'sản phẩm', 'san pham'),
-            'lead_department_name': _field(row, 'phòng chủ trì', 'phong chu tri'),
+            'lead_department_name': _field(row, 'trách nhiệm chung', 'trach nhiem chung', 'phòng chủ trì', 'phong chu tri'),
             'owner_unit_name': _field(row, 'đơn vị', 'don vi'),
             'deadline': _field(row, 'hạn', 'han') or None,
             'supervisor_name': _field(row, 'giám sát', 'giam sat'),
@@ -91,6 +91,7 @@ def _rows_to_plan(rows: list[dict]) -> dict:
                 'title': payload['title'],
                 'content': payload['content'] or payload['title'],
                 'lead_department_name': payload['lead_department_name'] or None,
+                'executor_unit_name': payload['owner_unit_name'] or None,
                 'supervisor_name': payload['supervisor_name'] or None,
                 'deadline': payload['deadline'],
                 'tasks': [],
@@ -172,11 +173,11 @@ def generate_template_xlsx(meeting_seq: int = 1) -> bytes:
         cell.fill = header_fill
 
     samples = [
-        ('Lớn', f'H{meeting_seq}-01', 'Thực hiện kế hoạch sản lượng mủ cao su 744 tấn năm 2026', '', 'Phòng KHCN', '', '2026-12-31'),
-        ('Chi tiết', f'H{meeting_seq}-01-01', 'Xây dựng phương án điều hành sản lượng', 'Phương án điều hành', 'Phòng KHCN', 'TT Kỹ thuật', '2026-08-31'),
-        ('Chi tiết', f'H{meeting_seq}-01-02', 'Thiết lập Dashboard điều hành sản lượng mủ', 'Dashboard cập nhật tuần', 'Phòng KHCN', 'TT Tin học', '2026-09-15'),
-        ('Lớn', f'H{meeting_seq}-02', 'Tổ chức và Quy chế hoạt động…', '', 'Phòng TCHC', '', '2026-10-31'),
-        ('Chi tiết', f'H{meeting_seq}-02-01', 'Ban hành quy chế phối hợp', 'Quy chế', 'Phòng TCHC', 'Phòng NV', '2026-09-30'),
+        ('Lớn', f'H{meeting_seq}-01', 'Thực hiện kế hoạch sản lượng mủ cao su 744 tấn năm 2026', '', 'Phó Viện trưởng Nguyễn Đôn Hiệu', 'Các đơn vị (phối hợp nhiều đơn vị)', '2026-12-31'),
+        ('Chi tiết', f'H{meeting_seq}-01-01', 'Xây dựng phương án điều hành sản lượng', 'Phương án điều hành', 'Phòng khoa học công nghệ', 'Trung tâm nghiên cứu phát triển sản phẩm mới', '2026-08-31'),
+        ('Chi tiết', f'H{meeting_seq}-01-02', 'Thiết lập Dashboard điều hành sản lượng mủ', 'Dashboard cập nhật tuần', 'Phòng khoa học công nghệ', 'Phòng khoa học công nghệ', '2026-09-15'),
+        ('Lớn', f'H{meeting_seq}-02', 'Tổ chức và Quy chế hoạt động…', '', 'Phó Viện trưởng Trần Ánh Pha', '', '2026-10-31'),
+        ('Chi tiết', f'H{meeting_seq}-02-01', 'Ban hành quy chế phối hợp', 'Quy chế', 'Phòng quản trị - tài chính kế toán', 'Phòng quản trị - tài chính kế toán', '2026-09-30'),
     ]
     for row in samples:
         ws.append(list(row))
@@ -224,12 +225,24 @@ def publish_plan(
     dir_count = 0
     task_count = 0
     for d in directives_in:
+        lead_id = d.get('lead_department_id') or None
+        lead_name = (d.get('lead_department_name') or '').strip() or None
+        supervisor = (d.get('supervisor_name') or '').strip() or None
+        if lead_id and str(lead_id).startswith('pvt-'):
+            supervisor = lead_name or supervisor
+            lead_id = None
+        exec_name = (d.get('executor_unit_name') or '').strip() or None
+        content = (d.get('content') or d.get('title') or '').strip()
+        if exec_name:
+            note = f'ĐV TH: {exec_name}'
+            if note not in content:
+                content = f'{content}\n{note}'.strip() if content else note
         d_payload = {
             'title': (d.get('title') or '').strip() or 'Kết luận',
-            'content': (d.get('content') or d.get('title') or '').strip(),
-            'lead_department_id': d.get('lead_department_id') or None,
-            'lead_department_name': (d.get('lead_department_name') or '').strip() or None,
-            'supervisor_name': (d.get('supervisor_name') or '').strip() or None,
+            'content': content,
+            'lead_department_id': lead_id,
+            'lead_department_name': lead_name,
+            'supervisor_name': supervisor,
             'priority': d.get('priority') or 'normal',
             'deadline': d.get('deadline') or None,
         }

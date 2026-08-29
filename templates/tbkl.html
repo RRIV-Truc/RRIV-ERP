@@ -7,7 +7,7 @@
 <title>Theo dõi Kết luận Họp</title>
 <meta name="theme-color" content="#065f46">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-<link rel="stylesheet" href="/static/css/app-tbkl.css?v=8">
+<link rel="stylesheet" href="/static/css/app-tbkl.css?v=9">
 </head>
 <body class="tbkl-body">
 
@@ -115,7 +115,7 @@
           <span>Nhóm theo</span>
           <select id="groupBySelect" class="tbkl-filter-select" aria-label="Nhóm chi tiết">
             <option value="directive">Theo kết luận (H1-01…)</option>
-            <option value="lead_dept">Theo phòng chủ trì</option>
+            <option value="lead_dept">Theo trách nhiệm chung</option>
             <option value="owner_unit">Theo đơn vị / trung tâm TH</option>
             <option value="task">Theo từng đầu việc</option>
           </select>
@@ -145,7 +145,7 @@
             <th>RAG</th>
             <th>Mã</th>
             <th>Kết luận / Đầu việc</th>
-            <th>Phòng chủ trì</th>
+            <th>Trách nhiệm chung</th>
             <th>Đơn vị TH</th>
             <th>Hạn</th>
             <th>% ĐV báo cáo</th>
@@ -262,10 +262,10 @@
     <form id="formDirective" class="tbkl-form">
       <label>Nội dung kết luận <textarea name="content" rows="3" required></textarea></label>
       <label>Tiêu đề ngắn <input type="text" name="title" placeholder="Tự sinh mã H{n}-01"></label>
-      <label>Phòng chủ trì
-        <select name="lead_department_id" id="directiveDeptSelect"><option value="">— Chọn phòng —</option></select>
+      <label>Trách nhiệm chung
+        <select name="lead_department_id" id="directiveDeptSelect"><option value="">— Trách nhiệm chung —</option></select>
       </label>
-      <label>Người giám sát <input type="text" name="supervisor_name"></label>
+      <label>Người giám sát <input type="text" name="supervisor_name" placeholder="Tự điền nếu cần (PVT chọn ở trên)"></label>
       <label>Ưu tiên
         <select name="priority">
           <option value="normal">Bình thường</option>
@@ -298,7 +298,7 @@
       <label>Nội dung đầu việc <textarea name="title" rows="2" required></textarea></label>
       <label>Sản phẩm / kết quả <input type="text" name="deliverable"></label>
       <label>Đơn vị thực hiện
-        <select name="owner_unit_id" id="taskOwnerSelect"><option value="">— Chọn đơn vị —</option></select>
+        <select name="owner_unit_id" id="taskOwnerSelect"><option value="">— Đơn vị TH —</option></select>
       </label>
       <label>Phối hợp <input type="text" name="coordinator_units" placeholder="Tên đơn vị, cách nhau bởi dấu ;"></label>
       <label>Người phụ trách <input type="text" name="assignee_name"></label>
@@ -414,7 +414,8 @@
 
 <script src="/static/js/tbkl/permissions.js?v=5"></script>
 <script src="/static/js/tbkl/services.js?v=6"></script>
-<script src="/static/js/tbkl/plan-editor.js?v=1"></script>
-<script src="/static/js/tbkl/main.js?v=10"></script>
+<script src="/static/js/tbkl/org-units.js?v=2"></script>
+<script src="/static/js/tbkl/plan-editor.js?v=3"></script>
+<script src="/static/js/tbkl/main.js?v=12"></script>
 </body>
 </html>

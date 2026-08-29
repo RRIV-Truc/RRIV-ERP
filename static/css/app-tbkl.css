@@ -474,6 +474,11 @@
   width: 100%; min-width: 0; padding: 5px 6px; border: 1px solid #e2e8f0;
   border-radius: 6px; font-size: 0.82rem;
 }
+.tbkl-plan-table select.tbkl-plan-select,
+.tbkl-plan-table select {
+  width: 100%; min-width: 0; padding: 5px 6px; border: 1px solid #e2e8f0;
+  border-radius: 6px; font-size: 0.78rem; max-width: 220px;
+}
 .tbkl-plan-row-directive { background: #ecfdf5; }
 .tbkl-plan-row-directive td { font-weight: 600; }
 .tbkl-plan-row-task td:first-child { padding-left: 18px; color: var(--tbkl-muted); }

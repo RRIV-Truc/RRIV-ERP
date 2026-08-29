@@ -62,20 +62,10 @@
   }
 
   function fillDeptSelects() {
-    ['directiveDeptSelect', 'taskOwnerSelect'].forEach(function (sid) {
-      var sel = $(sid);
-      if (!sel) return;
-      var first = sel.options[0];
-      sel.innerHTML = '';
-      if (first) sel.appendChild(first);
-      state.departments.forEach(function (d) {
-        var opt = document.createElement('option');
-        opt.value = d.id;
-        opt.textContent = d.name;
-        opt.dataset.name = d.name;
-        sel.appendChild(opt);
-      });
-    });
+    var ou = window.TbklOrgUnits;
+    if (!ou) return;
+    ou.fillSelect($('directiveDeptSelect'), ou.sharedResponsibility(), '', '— Trách nhiệm chung —');
+    ou.fillSelect($('taskOwnerSelect'), ou.executors(), '', '— Đơn vị TH —');
   }
 
   function renderMeetingList() {
@@ -206,7 +196,7 @@
 
   function groupLabel(r) {
     if (state.groupBy === 'lead_dept') {
-      return r.lead_department_name || '— Chưa gán phòng chủ trì —';
+      return r.lead_department_name || '— Chưa gán trách nhiệm chung —';
     }
     if (state.groupBy === 'owner_unit') {
       return r.owner_unit_name || '— Chưa gán đơn vị TH —';
@@ -258,7 +248,7 @@
       var excerpt = (d.content || d.title || '').slice(0, 220);
       if ((d.content || d.title || '').length > 220) excerpt += '…';
       var meta = [];
-      if (d.lead_department_name) meta.push('Phòng CT: ' + d.lead_department_name);
+      if (d.lead_department_name) meta.push('TC chung: ' + d.lead_department_name);
       if (d.supervisor_name) meta.push('GS: ' + d.supervisor_name);
       if (d.deadline) meta.push('Hạn: ' + fmtDate(d.deadline));
       return '<button type="button" class="tbkl-conclusion-item" data-directive-id="' + d.id + '">' +
@@ -856,13 +846,23 @@
       var fd = new FormData(e.target);
       var deptSel = $('directiveDeptSelect');
       var deptOpt = deptSel.options[deptSel.selectedIndex];
+      var leadId = fd.get('lead_department_id') || '';
+      var leadName = deptOpt && deptOpt.dataset && deptOpt.dataset.name
+        ? deptOpt.dataset.name
+        : (deptOpt ? deptOpt.textContent : '');
+      var supervisor = fd.get('supervisor_name');
+      var leadDeptId = leadId || null;
+      if (leadId && String(leadId).indexOf('pvt-') === 0) {
+        supervisor = leadName;
+        leadDeptId = null;
+      }
       try {
         await TbklServices.createDirective(state.currentCycleId, {
           title: fd.get('title'),
           content: fd.get('content'),
-          lead_department_id: fd.get('lead_department_id') || null,
-          lead_department_name: deptOpt && deptOpt.dataset.name ? deptOpt.dataset.name : deptOpt.textContent,
-          supervisor_name: fd.get('supervisor_name'),
+          lead_department_id: leadDeptId,
+          lead_department_name: leadName || null,
+          supervisor_name: supervisor,
           priority: fd.get('priority'),
           deadline: fd.get('deadline') || null
         });
