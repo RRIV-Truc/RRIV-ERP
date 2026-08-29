@@ -8,6 +8,10 @@ CREATE TABLE IF NOT EXISTS tbkl_cycles (
   meeting_date DATE,
   source_ref TEXT,
   conclusion_summary TEXT,
+  conclusion_pdf_path TEXT,
+  conclusion_pdf_name TEXT,
+  plan_workbook_path TEXT,
+  plan_workbook_name TEXT,
   report_lock_at TIMESTAMPTZ,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('draft', 'active', 'locked', 'archived')),
   created_by_username TEXT,
@@ -69,6 +73,12 @@ CREATE TABLE IF NOT EXISTS tbkl_reports (
   difficulties TEXT,
   solution TEXT,
   recommendation TEXT,
+  confirmed_pct NUMERIC(5,2),
+  confirmed_status TEXT CHECK (confirmed_status IS NULL OR confirmed_status IN (
+    'not_started', 'in_progress', 'at_risk', 'completed', 'blocked'
+  )),
+  confirmed_by_username TEXT,
+  confirmed_at TIMESTAMPTZ,
   rag TEXT CHECK (rag IN ('green', 'yellow', 'red', 'gray')),
   submitted_by_username TEXT,
   submitted_at TIMESTAMPTZ NOT NULL DEFAULT now(),

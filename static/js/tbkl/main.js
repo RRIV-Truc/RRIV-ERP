@@ -14,7 +14,10 @@
     viewMode: 'all',
     groupBy: 'directive',
     filterRag: '',
-    search: ''
+    search: '',
+    cyclePlanEditor: null,
+    editPlanEditor: null,
+    planTab: 'grid'
   };
 
   function $(id) { return document.getElementById(id); }
@@ -234,13 +237,22 @@
     var list = $('conclusionList');
     if (!zone || !list) return;
     var sorted = sortDirectives(directives);
-    if (!sorted.length) {
+    var hasPdf = cycle && (cycle.has_conclusion_pdf || cycle.conclusion_pdf_url);
+    var hasSummary = cycle && (cycle.conclusion_summary || cycle.source_ref);
+
+    if (!sorted.length && !hasPdf && !hasSummary) {
       zone.hidden = true;
       return;
     }
     zone.hidden = false;
     var codeEl = $('overviewMeetingCode');
     if (codeEl && cycle) codeEl.textContent = 'H' + (cycle.meeting_seq || '');
+
+    if (!sorted.length) {
+      list.innerHTML = '<p class="tbkl-empty-list">Chưa có kết luận chi tiết — bấm «Kế hoạch triển khai» để thêm mục H' +
+        (cycle && cycle.meeting_seq || '') + '-01 và các đầu việc con.</p>';
+      return;
+    }
 
     list.innerHTML = sorted.map(function (d) {
       var excerpt = (d.content || d.title || '').slice(0, 220);
@@ -258,8 +270,10 @@
         '<p>' + escapeHtml(excerpt) + '</p>' +
         '<div class="tbkl-conclusion-meta">' + escapeHtml(meta.join(' · ')) + '</div></div>' +
         '<div class="tbkl-conclusion-side">' +
-        '<div class="tbkl-conclusion-progress">' + Math.round(d.avg_progress || 0) + '%</div>' +
-        '<div class="tbkl-conclusion-count">' + (d.task_count || 0) + ' đầu việc</div></div></button>';
+        '<div class="tbkl-conclusion-progress">' +
+        (d.avg_confirmed_pct != null ? Math.round(d.avg_confirmed_pct) : Math.round(d.avg_progress || 0)) + '%</div>' +
+        '<div class="tbkl-conclusion-count">' + (d.task_count || 0) + ' đầu việc' +
+        (d.avg_confirmed_pct != null ? ' · PKH' : '') + '</div></div></button>';
     }).join('');
 
     list.querySelectorAll('[data-directive-id]').forEach(function (btn) {
@@ -278,6 +292,19 @@
     });
   }
 
+  function pctCell(pct, mode) {
+    if (mode === 'pkh-empty') {
+      return '<span class="tbkl-note">Chưa XN</span>';
+    }
+    var v = Math.round(pct || 0);
+    var barClass = mode === 'pkh'
+      ? 'tbkl-progress-fill tbkl-progress-confirmed'
+      : 'tbkl-progress-fill';
+    return '<strong>' + v + '%</strong>' +
+      '<div class="tbkl-progress-bar"><div class="' + barClass + '" style="width:' +
+      Math.min(100, v) + '%"></div></div>';
+  }
+
   function renderTable(rows) {
     var tbody = $('taskTableBody');
     if (!tbody) return;
@@ -287,7 +314,7 @@
     if (detailsZone) detailsZone.hidden = !(rows && rows.length);
 
     if (!filtered.length) {
-      tbody.innerHTML = '<tr><td colspan="10" class="tbkl-empty">' +
+      tbody.innerHTML = '<tr><td colspan="11" class="tbkl-empty">' +
         (rows && rows.length
           ? 'Không có dòng phù hợp bộ lọc'
           : (unitMode
@@ -309,7 +336,7 @@
         var prefix = state.groupBy === 'directive'
           ? ('<span class="tbkl-group-code">' + escapeHtml(r.directive_code || '') + '</span>')
           : '';
-        html += '<tr class="' + rowClass + '"' + anchor + '><td colspan="10">' +
+        html += '<tr class="' + rowClass + '"' + anchor + '><td colspan="11">' +
           prefix + escapeHtml(groupLabel(r) || '') + '</td></tr>';
       }
       var note = [r.difficulties, r.solution].filter(Boolean).join(' → ');
@@ -321,6 +348,11 @@
         reportBtn = '<span class="tbkl-note">Đã chốt</span>';
       } else if (unitMode) {
         reportBtn = '<span class="tbkl-note">Chỉ đơn vị TH</span>';
+      }
+      if (r.can_confirm && !r.report_locked && !unitMode) {
+        reportBtn += (reportBtn ? ' ' : '') +
+          '<button type="button" class="tbkl-btn tbkl-btn-sm tbkl-btn-outline" data-confirm="' +
+          r.task_id + '">XN PKH</button>';
       }
       html += '<tr data-rag="' + r.rag + '">' +
         '<td><span class="' + ragClass(r.rag) + '"></span></td>' +
@@ -337,10 +369,9 @@
         '<td>' + escapeHtml(r.lead_department_name || '—') + '</td>' +
         '<td>' + escapeHtml(r.owner_unit_name || '—') + '</td>' +
         '<td>' + fmtDate(r.deadline) + '</td>' +
-        '<td><strong>' + Math.round(r.progress_pct || 0) + '%</strong>' +
-          '<div class="tbkl-progress-bar"><div class="tbkl-progress-fill" style="width:' +
-          Math.min(100, r.progress_pct || 0) + '%"></div></div></td>' +
-        '<td>' + escapeHtml(r.status_label || '—') + '</td>' +
+        '<td>' + pctCell(r.progress_pct, 'unit') + '</td>' +
+        '<td>' + (r.is_confirmed ? pctCell(r.confirmed_pct, 'pkh') : pctCell(0, 'pkh-empty')) + '</td>' +
+        '<td>' + escapeHtml(r.is_confirmed ? (r.confirmed_status_label || r.status_label || '—') : (r.status_label || '—')) + '</td>' +
         '<td class="tbkl-note">' + escapeHtml(note || '—') + '</td>' +
         '<td>' + reportBtn + '</td></tr>';
     });
@@ -349,6 +380,11 @@
     tbody.querySelectorAll('[data-report]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         openReportModal(btn.getAttribute('data-report'));
+      });
+    });
+    tbody.querySelectorAll('[data-confirm]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openConfirmModal(btn.getAttribute('data-confirm'));
       });
     });
   }
@@ -370,31 +406,123 @@
     var lockBtn = $('btnLockCycle');
     var seedActions = $('seedActions');
     var btnSide = $('btnNewCycleSide');
+    var btnEditPlan = $('btnEditPlan');
     if (manage) manage.hidden = !perms.can_manage;
     if (btnSide) btnSide.hidden = !perms.can_manage;
+    if (btnEditPlan) btnEditPlan.hidden = !(perms.can_manage && cycle);
     if (lockBtn) lockBtn.hidden = !(perms.can_lock && cycle && cycle.status !== 'locked');
-    if (seedActions) seedActions.hidden = !perms.can_manage;
+    if (seedActions) {
+      seedActions.hidden = !(perms.can_manage && !state.cycles.length);
+    }
   }
 
   function updateSourceBanner(cycle) {
     var banner = $('sourceBanner');
     var detail = $('sourceDetail');
     var importBtn = $('btnImportSeed');
+    var pdfBtn = $('btnViewConclusionPdf');
+    var editPlanBtn = $('btnEditPlan');
     if (!banner) return;
-    if (cycle && (cycle.source_ref || cycle.conclusion_summary)) {
+
+    var hasPdf = cycle && (cycle.has_conclusion_pdf || cycle.conclusion_pdf_url);
+    var hasText = cycle && (cycle.source_ref || cycle.conclusion_summary);
+    var showSeed = state.permissions.can_manage && !state.cycles.length;
+
+    if (cycle && (hasPdf || hasText || state.permissions.can_manage)) {
       banner.hidden = false;
       var parts = [];
       if (cycle.conclusion_summary) parts.push(cycle.conclusion_summary);
       if (cycle.source_ref) parts.push(cycle.source_ref);
-      if (detail) detail.textContent = parts.join(' · ');
-      if (importBtn) importBtn.hidden = true;
-    } else if (state.permissions.can_manage && !state.cycles.length) {
+      if (detail) detail.textContent = parts.join(' · ') || 'Cuộc họp H' + cycle.meeting_seq;
+      if (importBtn) importBtn.hidden = !showSeed;
+      if (pdfBtn) {
+        if (hasPdf && cycle.conclusion_pdf_url) {
+          pdfBtn.hidden = false;
+          pdfBtn.href = cycle.conclusion_pdf_url;
+        } else if (hasPdf && cycle.id) {
+          pdfBtn.hidden = false;
+          pdfBtn.href = '#';
+          pdfBtn.onclick = async function (ev) {
+            ev.preventDefault();
+            try {
+              var res = await TbklServices.getConclusionPdfUrl(cycle.id);
+              window.open(res.url, '_blank', 'noopener');
+            } catch (err) { showToast(err.message, true); }
+          };
+        } else {
+          pdfBtn.hidden = true;
+        }
+      }
+      if (editPlanBtn) editPlanBtn.hidden = !state.permissions.can_manage;
+    } else if (showSeed) {
       banner.hidden = false;
       if (detail) detail.textContent = 'Chưa có cuộc họp — nạp TB Viện trưởng 11/08/2026 hoặc tạo cuộc họp mới.';
       if (importBtn) importBtn.hidden = false;
+      if (pdfBtn) pdfBtn.hidden = true;
+      if (editPlanBtn) editPlanBtn.hidden = true;
     } else {
       banner.hidden = true;
     }
+  }
+
+  function guessNextMeetingSeq() {
+    if (!state.cycles.length) return 1;
+    var max = state.cycles.reduce(function (m, c) {
+      return Math.max(m, parseInt(c.meeting_seq, 10) || 0);
+    }, 0);
+    return max + 1;
+  }
+
+  function updatePlanTemplateLink(seq) {
+    var link = $('btnDownloadPlanTemplate');
+    if (link) link.href = TbklServices.planTemplateUrl(seq || guessNextMeetingSeq());
+  }
+
+  function syncCyclePlanSeq() {
+    var seqInput = $('cycleMeetingSeq');
+    var seq = seqInput && seqInput.value ? parseInt(seqInput.value, 10) : guessNextMeetingSeq();
+    if (state.cyclePlanEditor) state.cyclePlanEditor.setMeetingSeq(seq);
+    updatePlanTemplateLink(seq);
+  }
+
+  function openCycleModal() {
+    if (!state.cyclePlanEditor) {
+      state.cyclePlanEditor = TbklPlanEditor.create('cyclePlanEditor', {
+        meetingSeq: guessNextMeetingSeq()
+      });
+    } else {
+      state.cyclePlanEditor.reset();
+      state.cyclePlanEditor.setMeetingSeq(guessNextMeetingSeq());
+    }
+    state.planTab = 'grid';
+    document.querySelectorAll('[data-plan-tab]').forEach(function (tab) {
+      tab.classList.toggle('is-active', tab.getAttribute('data-plan-tab') === 'grid');
+    });
+    $('planTabGrid').hidden = false;
+    $('planTabExcel').hidden = true;
+    updatePlanTemplateLink(guessNextMeetingSeq());
+    openModal('modalCycle');
+  }
+
+  function openPlanModal() {
+    if (!state.currentCycleId || !state.dashboard) {
+      showToast('Chọn cuộc họp trước', true);
+      return;
+    }
+    var cycle = state.dashboard.cycle || {};
+    if (!state.editPlanEditor) {
+      state.editPlanEditor = TbklPlanEditor.create('editPlanEditor', {
+        meetingSeq: cycle.meeting_seq || 1
+      });
+    } else {
+      state.editPlanEditor.setMeetingSeq(cycle.meeting_seq || 1);
+      state.editPlanEditor.reset();
+    }
+    $('planModalTitle').textContent = 'Kế hoạch triển khai — H' + (cycle.meeting_seq || '');
+    var hasExisting = (state.dashboard.directives || []).length > 0;
+    $('planReplaceWrap').hidden = !hasExisting;
+    $('planReplaceCheck').checked = false;
+    openModal('modalPlan');
   }
 
   async function importDefaultSeed(replace) {
@@ -427,7 +555,7 @@
 
   async function loadDashboard(cycleId) {
     if (!cycleId) return;
-    $('taskTableBody').innerHTML = '<tr><td colspan="10" class="tbkl-empty">Đang tải…</td></tr>';
+    $('taskTableBody').innerHTML = '<tr><td colspan="11" class="tbkl-empty">Đang tải…</td></tr>';
     try {
       var data = await TbklServices.getDashboard(cycleId, isUnitView());
       state.dashboard = data;
@@ -443,7 +571,7 @@
       updateUnitBanner(data);
     } catch (err) {
       showToast(err.message || 'Lỗi tải dashboard', true);
-      $('taskTableBody').innerHTML = '<tr><td colspan="10" class="tbkl-empty">' + escapeHtml(err.message) + '</td></tr>';
+      $('taskTableBody').innerHTML = '<tr><td colspan="11" class="tbkl-empty">' + escapeHtml(err.message) + '</td></tr>';
     }
   }
 
@@ -464,8 +592,25 @@
       state.currentCycleId = null;
       $('meetingHead').hidden = true;
       updateSourceBanner(null);
-      $('taskTableBody').innerHTML = '<tr><td colspan="10" class="tbkl-empty">Chưa có cuộc họp — Phòng NV tạo mới hoặc nạp TB mẫu.</td></tr>';
+      $('taskTableBody').innerHTML = '<tr><td colspan="11" class="tbkl-empty">Chưa có cuộc họp — Phòng NV tạo mới hoặc nạp TB mẫu.</td></tr>';
     }
+  }
+
+  function openConfirmModal(taskId) {
+    var row = (state.dashboard && state.dashboard.rows || []).find(function (r) {
+      return r.task_id === taskId;
+    });
+    if (!row) return;
+    $('confirmTaskId').value = taskId;
+    $('confirmMeta').textContent = (state.dashboard.meeting_label || '') + ' · ' + row.task_code + ' — ' + row.task_title;
+    $('confirmUnitHint').textContent = 'Đơn vị báo cáo: ' + Math.round(row.progress_pct || 0) + '% — ' +
+      (row.status_label || '—') + '. RAG trên dashboard tính theo % xác nhận PKH.';
+    var form = $('formConfirm');
+    form.confirmed_pct.value = row.is_confirmed ? (row.confirmed_pct || 0) : (row.progress_pct || 0);
+    form.confirmed_status.value = row.is_confirmed
+      ? (row.confirmed_status || 'in_progress')
+      : (row.status || 'in_progress');
+    openModal('modalConfirm');
   }
 
   function openReportModal(taskId) {
@@ -523,9 +668,71 @@
       el.addEventListener('click', function () { closeModal(el.getAttribute('data-close')); });
     });
 
-    function openCycleModal() { openModal('modalCycle'); }
-    $('btnNewCycle').addEventListener('click', openCycleModal);
-    $('btnNewCycleSide').addEventListener('click', openCycleModal);
+    function openCycleModalFn() { openCycleModal(); }
+    $('btnNewCycle').addEventListener('click', openCycleModalFn);
+    $('btnNewCycleSide').addEventListener('click', openCycleModalFn);
+    $('btnEditPlan').addEventListener('click', openPlanModal);
+
+    var seqInput = $('cycleMeetingSeq');
+    if (seqInput) {
+      seqInput.addEventListener('input', syncCyclePlanSeq);
+      seqInput.addEventListener('change', syncCyclePlanSeq);
+    }
+
+    document.querySelectorAll('[data-plan-tab]').forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        state.planTab = tab.getAttribute('data-plan-tab');
+        document.querySelectorAll('[data-plan-tab]').forEach(function (t) {
+          t.classList.toggle('is-active', t === tab);
+        });
+        $('planTabGrid').hidden = state.planTab !== 'grid';
+        $('planTabExcel').hidden = state.planTab !== 'excel';
+      });
+    });
+
+    var planFileInput = $('cyclePlanFileInput');
+    if (planFileInput) {
+      planFileInput.addEventListener('change', async function () {
+        var file = planFileInput.files && planFileInput.files[0];
+        if (!file) return;
+        try {
+          var res = await TbklServices.parsePlanFile(file);
+          if (state.cyclePlanEditor) state.cyclePlanEditor.loadPlan(res.plan);
+          $('planFileHint').textContent = 'Đã nạp: ' + file.name;
+          showToast('Đã đọc bảng từ Excel');
+        } catch (err) { showToast(err.message, true); }
+      });
+    }
+
+    var editPlanFileInput = $('editPlanFileInput');
+    if (editPlanFileInput) {
+      editPlanFileInput.addEventListener('change', async function () {
+        var file = editPlanFileInput.files && editPlanFileInput.files[0];
+        if (!file) return;
+        try {
+          var res = await TbklServices.parsePlanFile(file);
+          if (state.editPlanEditor) state.editPlanEditor.loadPlan(res.plan);
+          showToast('Đã nạp bảng từ Excel');
+        } catch (err) { showToast(err.message, true); }
+      });
+    }
+
+    $('btnPublishPlan').addEventListener('click', async function () {
+      if (!state.currentCycleId || !state.editPlanEditor) return;
+      var plan = state.editPlanEditor.getPlan();
+      if (!plan.directives.length) {
+        showToast('Thêm ít nhất một mục kết luận lớn', true);
+        return;
+      }
+      var replace = $('planReplaceCheck').checked;
+      if (replace && !confirm('Ghi đè toàn bộ kết luận và đầu việc hiện có?')) return;
+      try {
+        var res = await TbklServices.publishPlan(state.currentCycleId, plan, replace);
+        closeModal('modalPlan');
+        showToast('Đã áp dụng: ' + res.directive_count + ' KL, ' + res.task_count + ' đầu việc');
+        await refreshCycles(state.currentCycleId);
+      } catch (err) { showToast(err.message, true); }
+    });
 
     $('btnAddDirective').addEventListener('click', function () {
       if (!state.currentCycleId) { showToast('Chọn cuộc họp bên trái trước', true); return; }
@@ -555,7 +762,8 @@
 
     $('formCycle').addEventListener('submit', async function (e) {
       e.preventDefault();
-      var fd = new FormData(e.target);
+      var form = e.target;
+      var fd = new FormData(form);
       var payload = {
         title: fd.get('title'),
         meeting_date: fd.get('meeting_date') || null,
@@ -564,11 +772,25 @@
       };
       var seq = fd.get('meeting_seq');
       if (seq) payload.meeting_seq = parseInt(seq, 10);
+
+      var useExcel = state.planTab === 'excel' && fd.get('plan_workbook') && fd.get('plan_workbook').name;
+      if (!useExcel && state.cyclePlanEditor) {
+        var plan = state.cyclePlanEditor.getPlan();
+        if (plan.directives.length) {
+          fd.set('plan_json', JSON.stringify(plan));
+        }
+      }
+      fd.set('data', JSON.stringify(payload));
+      fd.set('publish_plan', '1');
+
       try {
-        var res = await TbklServices.createCycle(payload);
+        var res = await TbklServices.createCycleFull(fd);
         closeModal('modalCycle');
-        e.target.reset();
-        showToast('Đã tạo cuộc họp H' + res.cycle.meeting_seq);
+        form.reset();
+        if (state.cyclePlanEditor) state.cyclePlanEditor.reset();
+        var msg = 'Đã tạo cuộc họp H' + res.cycle.meeting_seq;
+        if (res.directive_count) msg += ' · ' + res.directive_count + ' KL, ' + res.task_count + ' đầu việc';
+        showToast(msg);
         await refreshCycles(res.cycle.id);
       } catch (err) { showToast(err.message, true); }
     });
@@ -634,6 +856,20 @@
         await loadDashboard(state.currentCycleId);
       } catch (err) { showToast(err.message, true); }
     });
+
+    $('formConfirm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var fd = new FormData(e.target);
+      try {
+        await TbklServices.confirmReport(fd.get('task_id'), {
+          confirmed_pct: parseFloat(fd.get('confirmed_pct') || 0),
+          confirmed_status: fd.get('confirmed_status')
+        });
+        closeModal('modalConfirm');
+        showToast('Đã lưu xác nhận PKH — RAG cập nhật theo đánh giá Phòng KH');
+        await loadDashboard(state.currentCycleId);
+      } catch (err) { showToast(err.message, true); }
+    });
   }
 
   async function init() {
@@ -659,7 +895,7 @@
       await refreshCycles();
     } catch (err) {
       showToast(err.message || 'Không khởi tạo được TBKL', true);
-      $('taskTableBody').innerHTML = '<tr><td colspan="10" class="tbkl-empty">' +
+      $('taskTableBody').innerHTML = '<tr><td colspan="11" class="tbkl-empty">' +
         escapeHtml(err.message) + '</td></tr>';
     }
   }

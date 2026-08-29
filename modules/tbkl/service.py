@@ -261,6 +261,96 @@ def create_task(supabase, ctx: UserContext, directive_id: str, payload: dict) ->
     return ins.data[0]
 
 
+def _report_display_rag(
+    rep: Optional[dict],
+    task: dict,
+    *,
+    cycle_locked: bool,
+) -> str:
+    """RAG hiển thị cho lãnh đạo — theo xác nhận Phòng Kế hoạch."""
+    if rep and rep.get('confirmed_at'):
+        return compute_rag(
+            progress_pct=float(rep.get('confirmed_pct') or 0),
+            status=rep.get('confirmed_status') or 'not_started',
+            deadline=task.get('deadline'),
+            cycle_locked=cycle_locked,
+            has_report=True,
+        )
+    return 'gray'
+
+
+def confirm_report(
+    supabase,
+    ctx: UserContext,
+    task_id: str,
+    payload: dict,
+) -> dict:
+    if not can_manage(ctx, supabase):
+        raise PermissionError('Chỉ Phòng Kế hoạch / quản lý mới xác nhận tiến độ')
+
+    task_res = supabase.table('tbkl_tasks').select('*').eq('id', task_id).limit(1).execute()
+    if not task_res.data:
+        raise LookupError('Không tìm thấy đầu việc')
+    task = task_res.data[0]
+
+    directive_res = supabase.table('tbkl_directives').select('cycle_id').eq(
+        'id', task['directive_id']
+    ).limit(1).execute()
+    cycle_id = directive_res.data[0]['cycle_id'] if directive_res.data else None
+    cycle = get_cycle(supabase, cycle_id) if cycle_id else None
+    if cycle and cycle.get('status') == 'locked':
+        raise ValueError('Cuộc họp đã chốt — không xác nhận thêm')
+
+    week_label = (payload.get('week_label') or '').strip() or _week_label()
+
+    existing = supabase.table('tbkl_reports').select('*').eq(
+        'task_id', task_id
+    ).eq('week_label', week_label).limit(1).execute()
+
+    confirmed_pct = max(0, min(100, float(payload.get('confirmed_pct') or 0)))
+    confirmed_status = (payload.get('confirmed_status') or 'in_progress').lower()
+    confirmed_at = _now_iso()
+    rag = compute_rag(
+        progress_pct=confirmed_pct,
+        status=confirmed_status,
+        deadline=task.get('deadline'),
+        cycle_locked=False,
+        has_report=True,
+    )
+
+    if existing.data:
+        rep = existing.data[0]
+        if rep.get('locked'):
+            raise ValueError('Báo cáo tuần này đã khóa — không xác nhận thêm')
+        patch = {
+            'confirmed_pct': confirmed_pct,
+            'confirmed_status': confirmed_status,
+            'confirmed_by_username': ctx.username,
+            'confirmed_at': confirmed_at,
+            'rag': rag,
+        }
+        supabase.table('tbkl_reports').update(patch).eq('id', rep['id']).execute()
+        return {**rep, **patch}
+
+    row = {
+        'task_id': task_id,
+        'week_label': week_label,
+        'progress_pct': 0,
+        'status': 'not_started',
+        'confirmed_pct': confirmed_pct,
+        'confirmed_status': confirmed_status,
+        'confirmed_by_username': ctx.username,
+        'confirmed_at': confirmed_at,
+        'rag': rag,
+        'submitted_by_username': ctx.username,
+        'submitted_at': confirmed_at,
+    }
+    ins = supabase.table('tbkl_reports').insert(row).execute()
+    if not ins.data:
+        raise RuntimeError('Không lưu được xác nhận PKH')
+    return ins.data[0]
+
+
 def submit_report(
     supabase,
     ctx: UserContext,
@@ -292,6 +382,8 @@ def submit_report(
         cycle_locked=False,
         has_report=True,
     )
+    if existing.data and existing.data[0].get('confirmed_at'):
+        rag = _report_display_rag(existing.data[0], task, cycle_locked=False)
 
     row = {
         'task_id': task_id,
@@ -392,13 +484,10 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str, *, unit_only: boo
         rep = reports.get(task['id'])
         progress = float(rep.get('progress_pct') or 0) if rep else 0
         status = rep.get('status') if rep else 'not_started'
-        rag = compute_rag(
-            progress_pct=progress,
-            status=status,
-            deadline=task.get('deadline'),
-            cycle_locked=cycle_locked,
-            has_report=bool(rep),
-        )
+        confirmed = bool(rep and rep.get('confirmed_at'))
+        confirmed_pct = float(rep.get('confirmed_pct') or 0) if confirmed else None
+        confirmed_status = rep.get('confirmed_status') if confirmed else None
+        rag = _report_display_rag(rep, task, cycle_locked=cycle_locked)
 
         row = {
             'task_id': task['id'],
@@ -422,6 +511,12 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str, *, unit_only: boo
             'progress_pct': progress,
             'status': status,
             'status_label': _status_label(status),
+            'confirmed_pct': confirmed_pct,
+            'confirmed_status': confirmed_status,
+            'confirmed_status_label': _status_label(confirmed_status) if confirmed_status else None,
+            'confirmed_at': rep.get('confirmed_at') if rep else None,
+            'confirmed_by_username': rep.get('confirmed_by_username') if rep else None,
+            'is_confirmed': confirmed,
             'difficulties': rep.get('difficulties') if rep else None,
             'solution': rep.get('solution') if rep else None,
             'recommendation': rep.get('recommendation') if rep else None,
@@ -429,6 +524,7 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str, *, unit_only: boo
             'week_label': rep.get('week_label') if rep else _week_label(),
             'report_locked': bool(rep.get('locked')) if rep else False,
             'can_report': unit_can_edit_task(ctx, task, supabase) or can_manage(ctx, supabase),
+            'can_confirm': can_manage(ctx, supabase),
         }
         if unit_view and not row['can_report']:
             continue
@@ -450,6 +546,10 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str, *, unit_only: boo
             'avg_progress': round(
                 sum(r['progress_pct'] for r in child) / len(child), 1
             ) if child else 0,
+            'avg_confirmed_pct': round(
+                sum(r['confirmed_pct'] or 0 for r in child if r.get('is_confirmed')) /
+                max(1, sum(1 for r in child if r.get('is_confirmed'))), 1
+            ) if any(r.get('is_confirmed') for r in child) else None,
         })
 
     directive_summaries = _sort_directives(directive_summaries)
@@ -463,7 +563,7 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str, *, unit_only: boo
     pending_report = sum(1 for r in rows if r.get('can_report') and not r.get('report_locked'))
 
     return {
-        'cycle': cycle,
+        'cycle': enrich_cycle_files(cycle),
         'meeting_label': f"H{int(cycle.get('meeting_seq') or 0)} — {cycle.get('title') or 'Cuộc họp'}",
         'directives': directive_summaries,
         'rows': rows,
@@ -474,6 +574,7 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str, *, unit_only: boo
         'pending_report_count': pending_report,
         'permissions': {
             'can_manage': can_manage(ctx, supabase),
+            'can_confirm': can_manage(ctx, supabase),
             'can_report': can_report(ctx, supabase),
             'can_lock': can_lock(ctx, supabase),
             'is_unit_only': is_unit_reporter_only(ctx, supabase),
@@ -557,3 +658,46 @@ def import_seed_bundle(
         'task_count': task_count,
         'dashboard': dashboard,
     }
+
+
+def update_cycle_attachments(
+    supabase,
+    cycle_id: str,
+    *,
+    conclusion_pdf_path: Optional[str] = None,
+    conclusion_pdf_name: Optional[str] = None,
+    plan_workbook_path: Optional[str] = None,
+    plan_workbook_name: Optional[str] = None,
+) -> dict:
+    patch: dict[str, Any] = {'updated_at': _now_iso()}
+    if conclusion_pdf_path is not None:
+        patch['conclusion_pdf_path'] = conclusion_pdf_path
+    if conclusion_pdf_name is not None:
+        patch['conclusion_pdf_name'] = conclusion_pdf_name
+    if plan_workbook_path is not None:
+        patch['plan_workbook_path'] = plan_workbook_path
+    if plan_workbook_name is not None:
+        patch['plan_workbook_name'] = plan_workbook_name
+    supabase.table('tbkl_cycles').update(patch).eq('id', cycle_id).execute()
+    cycle = get_cycle(supabase, cycle_id)
+    if not cycle:
+        raise LookupError('Không tìm thấy cuộc họp')
+    return cycle
+
+
+def conclusion_pdf_url(cycle: dict) -> Optional[str]:
+    from modules.tbkl import storage_service as storage
+    path = cycle.get('conclusion_pdf_path')
+    if not path:
+        return None
+    return storage.create_signed_url(path)
+
+
+def enrich_cycle_files(cycle: dict) -> dict:
+    out = dict(cycle)
+    out['has_conclusion_pdf'] = bool(cycle.get('conclusion_pdf_path'))
+    out['has_plan_workbook'] = bool(cycle.get('plan_workbook_path'))
+    url = conclusion_pdf_url(cycle)
+    if url:
+        out['conclusion_pdf_url'] = url
+    return out

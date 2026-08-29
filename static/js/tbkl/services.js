@@ -9,11 +9,10 @@
     return u && u.username ? String(u.username).toLowerCase() : '';
   }
 
-  function headers() {
-    return {
-      'Content-Type': 'application/json',
-      'X-RRIV-Username': username()
-    };
+  function headers(json) {
+    var h = { 'X-RRIV-Username': username() };
+    if (json !== false) h['Content-Type'] = 'application/json';
+    return h;
   }
 
   async function parseJson(res, fallback) {
@@ -54,12 +53,58 @@
     return list;
   }
 
+  function planTemplateUrl(meetingSeq) {
+    var seq = meetingSeq || 1;
+    return API + '/plan-template.xlsx?meeting_seq=' + encodeURIComponent(seq) +
+      '&username=' + encodeURIComponent(username());
+  }
+
   window.TbklServices = {
     username: username,
+    planTemplateUrl: planTemplateUrl,
     getContext: function () { return apiFetch('/context'); },
     listCycles: function () { return apiFetch('/cycles'); },
     createCycle: function (payload) {
       return apiFetch('/cycles', { method: 'POST', body: JSON.stringify(payload || {}) });
+    },
+    createCycleFull: function (formData) {
+      var url = API + '/cycles/create-full?username=' + encodeURIComponent(username());
+      return fetch(url, {
+        method: 'POST',
+        headers: { 'X-RRIV-Username': username() },
+        body: formData
+      }).then(function (res) {
+        return parseJson(res, 'Lỗi tạo cuộc họp').then(function (body) {
+          if (!res.ok) {
+            throw new Error(body.message || ('HTTP ' + res.status));
+          }
+          return body;
+        });
+      });
+    },
+    getConclusionPdfUrl: function (cycleId) {
+      return apiFetch('/cycles/' + encodeURIComponent(cycleId) + '/conclusion-pdf');
+    },
+    parsePlanFile: function (file) {
+      var fd = new FormData();
+      fd.append('plan_workbook', file);
+      var url = API + '/plan/parse?username=' + encodeURIComponent(username());
+      return fetch(url, {
+        method: 'POST',
+        headers: { 'X-RRIV-Username': username() },
+        body: fd
+      }).then(function (res) {
+        return parseJson(res, 'Lỗi đọc file kế hoạch').then(function (body) {
+          if (!res.ok) throw new Error(body.message || ('HTTP ' + res.status));
+          return body;
+        });
+      });
+    },
+    publishPlan: function (cycleId, plan, replace) {
+      return apiFetch('/cycles/' + encodeURIComponent(cycleId) + '/plan/publish', {
+        method: 'POST',
+        body: JSON.stringify({ plan: plan, replace: !!replace })
+      });
     },
     getDashboard: function (cycleId, unitOnly) {
       var path = '/cycles/' + encodeURIComponent(cycleId) + '/dashboard';
@@ -78,6 +123,11 @@
     },
     submitReport: function (taskId, payload) {
       return apiFetch('/tasks/' + encodeURIComponent(taskId) + '/reports', {
+        method: 'POST', body: JSON.stringify(payload || {})
+      });
+    },
+    confirmReport: function (taskId, payload) {
+      return apiFetch('/tasks/' + encodeURIComponent(taskId) + '/confirm', {
         method: 'POST', body: JSON.stringify(payload || {})
       });
     },

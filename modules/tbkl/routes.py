@@ -1,10 +1,15 @@
 """Flask routes — /api/tbkl/*"""
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, request
+import json
+import io
+
+from flask import Blueprint, jsonify, request, send_file
 
 from modules.tbkl.decorators import require_tbkl_auth, require_tbkl_manage, require_tbkl_report
 from modules.tbkl import service as svc
+from modules.tbkl import plan_service as plan_svc
+from modules.tbkl import storage_service as storage_svc
 from modules.tbkl.rbac import can_assign, can_lock, can_manage, can_report, is_unit_reporter_only, user_department_name
 
 tbkl_bp = Blueprint('tbkl', __name__)
@@ -34,6 +39,7 @@ def api_tbkl_context():
         'permissions': {
             'can_manage': can_manage(ctx, sb),
             'can_assign': can_assign(ctx, sb),
+            'can_confirm': can_manage(ctx, sb),
             'can_report': can_report(ctx, sb),
             'can_lock': can_lock(ctx, sb),
             'is_unit_only': is_unit_reporter_only(ctx, sb),
@@ -57,9 +63,162 @@ def api_list_cycles():
 def api_create_cycle():
     try:
         doc = svc.create_cycle(_supabase(), _ctx(), request.json or {})
-        return jsonify({'success': True, 'cycle': doc}), 201
+        return jsonify({'success': True, 'cycle': svc.enrich_cycle_files(doc)}), 201
     except Exception as exc:
         print(f'api_create_cycle: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@tbkl_bp.route('/api/tbkl/cycles/create-full', methods=['POST'])
+@require_tbkl_manage
+def api_create_cycle_full():
+    """Tạo cuộc họp kèm PDF kết luận + bảng kế hoạch (JSON hoặc Excel)."""
+    try:
+        raw = request.form.get('data') or '{}'
+        payload = json.loads(raw) if isinstance(raw, str) else (raw or {})
+        sb = _supabase()
+        ctx = _ctx()
+        cycle = svc.create_cycle(sb, ctx, payload)
+
+        pdf = request.files.get('conclusion_pdf')
+        if pdf and pdf.filename:
+            data = pdf.read()
+            path, name = storage_svc.upload_conclusion_pdf(cycle['id'], pdf.filename, data)
+            cycle = svc.update_cycle_attachments(
+                sb, cycle['id'], conclusion_pdf_path=path, conclusion_pdf_name=name
+            )
+
+        plan_file = request.files.get('plan_workbook')
+        plan_json_raw = request.form.get('plan_json')
+        plan: dict | None = None
+        if plan_json_raw:
+            plan = json.loads(plan_json_raw)
+        elif plan_file and plan_file.filename:
+            fdata = plan_file.read()
+            path, name = storage_svc.upload_plan_workbook(cycle['id'], plan_file.filename, fdata)
+            cycle = svc.update_cycle_attachments(
+                sb, cycle['id'], plan_workbook_path=path, plan_workbook_name=name
+            )
+            plan = plan_svc.parse_workbook(fdata, plan_file.filename)
+
+        publish = request.form.get('publish_plan', '1').lower() not in ('0', 'false', 'no')
+        counts = {'directive_count': 0, 'task_count': 0}
+        if plan and publish:
+            counts = plan_svc.publish_plan(sb, ctx, cycle['id'], plan, replace=False)
+
+        return jsonify({
+            'success': True,
+            'cycle': svc.enrich_cycle_files(cycle),
+            **counts,
+        }), 201
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception as exc:
+        print(f'api_create_cycle_full: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@tbkl_bp.route('/api/tbkl/cycles/<cycle_id>/conclusion-pdf', methods=['GET'])
+@require_tbkl_auth
+def api_conclusion_pdf_url(cycle_id):
+    try:
+        cycle = svc.get_cycle(_supabase(), cycle_id)
+        if not cycle:
+            return jsonify({'success': False, 'message': 'Không tìm thấy cuộc họp'}), 404
+        url = svc.conclusion_pdf_url(cycle)
+        if not url:
+            return jsonify({'success': False, 'message': 'Chưa có PDF kết luận'}), 404
+        return jsonify({
+            'success': True,
+            'url': url,
+            'name': cycle.get('conclusion_pdf_name') or 'TB-ket-luan.pdf',
+        })
+    except Exception as exc:
+        print(f'api_conclusion_pdf_url: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@tbkl_bp.route('/api/tbkl/cycles/<cycle_id>/attachments', methods=['POST'])
+@require_tbkl_manage
+def api_upload_cycle_attachments(cycle_id):
+    try:
+        sb = _supabase()
+        cycle = svc.get_cycle(sb, cycle_id)
+        if not cycle:
+            return jsonify({'success': False, 'message': 'Không tìm thấy cuộc họp'}), 404
+
+        pdf = request.files.get('conclusion_pdf')
+        plan_file = request.files.get('plan_workbook')
+        if pdf and pdf.filename:
+            data = pdf.read()
+            path, name = storage_svc.upload_conclusion_pdf(cycle_id, pdf.filename, data)
+            cycle = svc.update_cycle_attachments(
+                sb, cycle_id, conclusion_pdf_path=path, conclusion_pdf_name=name
+            )
+        if plan_file and plan_file.filename:
+            fdata = plan_file.read()
+            path, name = storage_svc.upload_plan_workbook(cycle_id, plan_file.filename, fdata)
+            cycle = svc.update_cycle_attachments(
+                sb, cycle_id, plan_workbook_path=path, plan_workbook_name=name
+            )
+
+        return jsonify({'success': True, 'cycle': svc.enrich_cycle_files(cycle)})
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception as exc:
+        print(f'api_upload_cycle_attachments: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@tbkl_bp.route('/api/tbkl/cycles/<cycle_id>/plan/publish', methods=['POST'])
+@require_tbkl_manage
+def api_publish_plan(cycle_id):
+    payload = request.json or {}
+    try:
+        counts = plan_svc.publish_plan(
+            _supabase(), _ctx(), cycle_id, payload.get('plan') or payload,
+            replace=bool(payload.get('replace')),
+        )
+        return jsonify({'success': True, **counts})
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception as exc:
+        print(f'api_publish_plan: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@tbkl_bp.route('/api/tbkl/plan/parse', methods=['POST'])
+@require_tbkl_manage
+def api_parse_plan():
+    f = request.files.get('plan_workbook') or request.files.get('file')
+    if not f or not f.filename:
+        return jsonify({'success': False, 'message': 'Chọn file Excel/CSV'}), 400
+    try:
+        plan = plan_svc.parse_workbook(f.read(), f.filename)
+        return jsonify({'success': True, 'plan': plan})
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception as exc:
+        print(f'api_parse_plan: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@tbkl_bp.route('/api/tbkl/plan-template.xlsx', methods=['GET'])
+@require_tbkl_auth
+def api_plan_template():
+    meeting_seq = request.args.get('meeting_seq', type=int) or 1
+    try:
+        data = plan_svc.generate_template_xlsx(meeting_seq)
+        return send_file(
+            io.BytesIO(data),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'TBKL-ke-hoach-H{meeting_seq}.xlsx',
+        )
+    except Exception as exc:
+        print(f'api_plan_template: {exc}')
         return jsonify({'success': False, 'message': str(exc)}), 500
 
 
@@ -104,6 +263,23 @@ def api_create_task(directive_id):
         return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as exc:
         print(f'api_create_task: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@tbkl_bp.route('/api/tbkl/tasks/<task_id>/confirm', methods=['POST'])
+@require_tbkl_manage
+def api_confirm_report(task_id):
+    try:
+        doc = svc.confirm_report(_supabase(), _ctx(), task_id, request.json or {})
+        return jsonify({'success': True, 'report': doc})
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception as exc:
+        print(f'api_confirm_report: {exc}')
         return jsonify({'success': False, 'message': str(exc)}), 500
 
 

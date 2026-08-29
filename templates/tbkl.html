@@ -7,7 +7,7 @@
 <title>Theo dõi Kết luận Họp</title>
 <meta name="theme-color" content="#065f46">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-<link rel="stylesheet" href="/static/css/app-tbkl.css?v=6">
+<link rel="stylesheet" href="/static/css/app-tbkl.css?v=8">
 </head>
 <body class="tbkl-body">
 
@@ -86,10 +86,14 @@
           <strong>Văn bản nguồn</strong>
           <p id="sourceDetail"></p>
         </div>
-        <div class="tbkl-source-actions" id="seedActions" hidden>
-          <button type="button" class="tbkl-btn tbkl-btn-outline" id="btnImportSeed">
-            Nạp TB Viện trưởng 11/08/2026
-          </button>
+        <div class="tbkl-source-actions">
+          <a class="tbkl-btn tbkl-btn-outline" id="btnViewConclusionPdf" href="#" target="_blank" rel="noopener" hidden>📄 Đọc TB kết luận (PDF)</a>
+          <button type="button" class="tbkl-btn tbkl-btn-outline" id="btnEditPlan" hidden>📋 Kế hoạch triển khai</button>
+          <span id="seedActions">
+            <button type="button" class="tbkl-btn tbkl-btn-outline" id="btnImportSeed">
+              Nạp TB Viện trưởng 11/08/2026
+            </button>
+          </span>
         </div>
       </section>
 
@@ -143,14 +147,15 @@
             <th>Phòng chủ trì</th>
             <th>Đơn vị TH</th>
             <th>Hạn</th>
-            <th>%</th>
+            <th>% ĐV báo cáo</th>
+            <th>% PKH xác nhận</th>
             <th>Trạng thái</th>
             <th>Khó khăn / Giải pháp</th>
             <th></th>
           </tr>
         </thead>
         <tbody id="taskTableBody">
-          <tr><td colspan="10" class="tbkl-empty">Chọn cuộc họp bên trái để xem kết luận.</td></tr>
+          <tr><td colspan="11" class="tbkl-empty">Chọn cuộc họp bên trái để xem kết luận.</td></tr>
         </tbody>
       </table>
     </section>
@@ -165,22 +170,83 @@
 <!-- Modal: Cuộc họp mới -->
 <div class="tbkl-modal" id="modalCycle" hidden>
   <div class="tbkl-modal-backdrop" data-close="modalCycle"></div>
-  <div class="tbkl-modal-box">
+  <div class="tbkl-modal-box tbkl-modal-xl">
     <header class="tbkl-modal-head">
       <h2>Tạo cuộc họp mới</h2>
       <button type="button" class="tbkl-btn-icon" data-close="modalCycle">✕</button>
     </header>
-    <form id="formCycle" class="tbkl-form">
-      <label>Số cuộc họp <input type="number" name="meeting_seq" min="1" placeholder="Tự động nếu để trống"></label>
+    <form id="formCycle" class="tbkl-form" enctype="multipart/form-data">
+      <div class="tbkl-form-row">
+        <label>Số cuộc họp <input type="number" name="meeting_seq" id="cycleMeetingSeq" min="1" placeholder="Tự động nếu để trống"></label>
+        <label>Ngày họp <input type="date" name="meeting_date"></label>
+      </div>
       <label>Tiêu đề <input type="text" name="title" placeholder="Họp giao ban tuần…"></label>
-      <label>Ngày họp <input type="date" name="meeting_date"></label>
       <label>Số / VB nguồn <input type="text" name="source_ref" placeholder="TB số … / Biên bản …"></label>
-      <label>Tóm tắt kết luận <textarea name="conclusion_summary" rows="3"></textarea></label>
+      <label>Tóm tắt kết luận <textarea name="conclusion_summary" rows="2" placeholder="Tóm tắt ngắn (tuỳ chọn)"></textarea></label>
+
+      <fieldset class="tbkl-fieldset">
+        <legend>Văn bản kết luận (PDF)</legend>
+        <p class="tbkl-field-hint">Đính kèm TB/biên bản kết luận chính thức để mọi người đọc trực tiếp trên app.</p>
+        <label class="tbkl-file-label">
+          <input type="file" name="conclusion_pdf" id="cyclePdfInput" accept=".pdf,application/pdf">
+        </label>
+      </fieldset>
+
+      <fieldset class="tbkl-fieldset">
+        <legend>Bảng kế hoạch triển khai</legend>
+        <p class="tbkl-field-hint">Phòng Kế hoạch điền các mục kết luận lớn (H{n}-01…) và thêm dòng con để giao việc xuống đơn vị.</p>
+        <div class="tbkl-plan-tabs">
+          <button type="button" class="tbkl-plan-tab is-active" data-plan-tab="grid">Nhập trên bảng</button>
+          <button type="button" class="tbkl-plan-tab" data-plan-tab="excel">Tải Excel</button>
+        </div>
+        <div id="planTabGrid" class="tbkl-plan-tab-panel">
+          <div id="cyclePlanEditor"></div>
+        </div>
+        <div id="planTabExcel" class="tbkl-plan-tab-panel" hidden>
+          <div class="tbkl-plan-excel-actions">
+            <a class="tbkl-btn tbkl-btn-sm tbkl-btn-outline" id="btnDownloadPlanTemplate" href="#" download>Tải mẫu Excel</a>
+            <label class="tbkl-file-label tbkl-file-inline">
+              Chọn file đã điền
+              <input type="file" name="plan_workbook" id="cyclePlanFileInput" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv">
+            </label>
+          </div>
+          <p class="tbkl-field-hint" id="planFileHint">Hoặc nhập trực tiếp trên tab «Nhập trên bảng».</p>
+        </div>
+      </fieldset>
+
       <footer class="tbkl-modal-foot">
         <button type="button" class="tbkl-btn tbkl-btn-outline" data-close="modalCycle">Huỷ</button>
-        <button type="submit" class="tbkl-btn tbkl-btn-primary">Tạo cuộc họp</button>
+        <button type="submit" class="tbkl-btn tbkl-btn-primary">Tạo cuộc họp &amp; triển khai</button>
       </footer>
     </form>
+  </div>
+</div>
+
+<!-- Modal: Chỉnh kế hoạch triển khai (cuộc họp đã tạo) -->
+<div class="tbkl-modal" id="modalPlan" hidden>
+  <div class="tbkl-modal-backdrop" data-close="modalPlan"></div>
+  <div class="tbkl-modal-box tbkl-modal-xl">
+    <header class="tbkl-modal-head">
+      <h2 id="planModalTitle">Kế hoạch triển khai</h2>
+      <button type="button" class="tbkl-btn-icon" data-close="modalPlan">✕</button>
+    </header>
+    <div class="tbkl-form">
+      <p class="tbkl-field-hint">Cập nhật bảng kế hoạch rồi bấm «Áp dụng» để sinh kết luận và đầu việc vào hệ thống.</p>
+      <label class="tbkl-check-inline" id="planReplaceWrap" hidden>
+        <input type="checkbox" id="planReplaceCheck"> Ghi đè kết luận/đầu việc hiện có
+      </label>
+      <div id="editPlanEditor"></div>
+      <div class="tbkl-plan-excel-actions">
+        <label class="tbkl-file-label tbkl-file-inline">
+          Nạp từ Excel
+          <input type="file" id="editPlanFileInput" accept=".xlsx,.csv">
+        </label>
+      </div>
+      <footer class="tbkl-modal-foot">
+        <button type="button" class="tbkl-btn tbkl-btn-outline" data-close="modalPlan">Huỷ</button>
+        <button type="button" class="tbkl-btn tbkl-btn-primary" id="btnPublishPlan">Áp dụng kế hoạch</button>
+      </footer>
+    </div>
   </div>
 </div>
 
@@ -290,8 +356,43 @@
 
 <div class="tbkl-toast" id="tbklToast" hidden></div>
 
-<script src="/static/js/tbkl/permissions.js?v=3"></script>
-<script src="/static/js/tbkl/services.js?v=3"></script>
-<script src="/static/js/tbkl/main.js?v=5"></script>
+<!-- Modal: Xác nhận PKH -->
+<div class="tbkl-modal" id="modalConfirm" hidden>
+  <div class="tbkl-modal-backdrop" data-close="modalConfirm"></div>
+  <div class="tbkl-modal-box tbkl-modal-wide">
+    <header class="tbkl-modal-head">
+      <h2 id="confirmModalTitle">Phòng KH xác nhận tiến độ</h2>
+      <button type="button" class="tbkl-btn-icon" data-close="modalConfirm">✕</button>
+    </header>
+    <form id="formConfirm" class="tbkl-form">
+      <input type="hidden" name="task_id" id="confirmTaskId">
+      <p class="tbkl-report-meta" id="confirmMeta"></p>
+      <p class="tbkl-field-hint" id="confirmUnitHint"></p>
+      <div class="tbkl-form-row">
+        <label>Tiến độ xác nhận (%)
+          <input type="number" name="confirmed_pct" min="0" max="100" step="1" value="0" required>
+        </label>
+        <label>Đánh giá trạng thái
+          <select name="confirmed_status">
+            <option value="not_started">Chưa thực hiện</option>
+            <option value="in_progress" selected>Đang thực hiện</option>
+            <option value="at_risk">Có nguy cơ trễ</option>
+            <option value="completed">Hoàn thành</option>
+            <option value="blocked">Tạm dừng / vướng</option>
+          </select>
+        </label>
+      </div>
+      <footer class="tbkl-modal-foot">
+        <button type="button" class="tbkl-btn tbkl-btn-outline" data-close="modalConfirm">Huỷ</button>
+        <button type="submit" class="tbkl-btn tbkl-btn-primary">Lưu xác nhận</button>
+      </footer>
+    </form>
+  </div>
+</div>
+
+<script src="/static/js/tbkl/permissions.js?v=5"></script>
+<script src="/static/js/tbkl/services.js?v=5"></script>
+<script src="/static/js/tbkl/plan-editor.js?v=1"></script>
+<script src="/static/js/tbkl/main.js?v=7"></script>
 </body>
 </html>
