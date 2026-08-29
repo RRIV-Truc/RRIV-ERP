@@ -11,6 +11,7 @@ from modules.tbkl.rbac import (
     can_assess_directive,
     can_confirm_directive,
     can_lock,
+    can_unlock_cycle,
     can_operate,
     can_planning,
     can_report,
@@ -104,6 +105,22 @@ def require_tbkl_lock(f):
         supabase = _get_supabase()
         if not can_lock(ctx, supabase):
             return jsonify({'success': False, 'message': 'Không có quyền chốt báo cáo tuần'}), 403
+        return f(*args, **kwargs)
+    return wrapped
+
+
+def require_tbkl_unlock(f):
+    """Mở chốt cuộc họp — admin hoặc Viện trưởng."""
+    @wraps(f)
+    @require_tbkl_auth
+    def wrapped(*args, **kwargs):
+        ctx = request.tbkl_user  # type: ignore[attr-defined]
+        supabase = _get_supabase()
+        if not can_unlock_cycle(ctx, supabase):
+            return jsonify({
+                'success': False,
+                'message': 'Chỉ quản trị hoặc Viện trưởng mới mở chốt cuộc họp',
+            }), 403
         return f(*args, **kwargs)
     return wrapped
 

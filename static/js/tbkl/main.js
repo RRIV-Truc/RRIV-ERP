@@ -456,6 +456,7 @@
   function updateToolbar(perms, cycle) {
     var manage = $('manageActions');
     var lockBtn = $('btnLockCycle');
+    var unlockBtn = $('btnUnlockCycle');
     var seedActions = $('seedActions');
     var btnSide = $('btnNewCycleSide');
     var btnEditPlan = $('btnEditPlan');
@@ -470,6 +471,9 @@
     if (btnAddDirective) btnAddDirective.hidden = !perms.can_operate;
     if (btnAddTask) btnAddTask.hidden = !perms.can_operate;
     if (lockBtn) lockBtn.hidden = !(perms.can_lock && cycle && cycle.status !== 'locked');
+    if (unlockBtn) {
+      unlockBtn.hidden = !(perms.can_unlock && cycle && cycle.status === 'locked');
+    }
     if (seedActions) {
       seedActions.hidden = !(perms.can_admin && !state.cycles.length);
     }
@@ -896,6 +900,16 @@
       try {
         await TbklServices.lockCycle(state.currentCycleId);
         showToast('Đã chốt báo cáo tuần');
+        await refreshCycles(state.currentCycleId);
+      } catch (err) { showToast(err.message, true); }
+    });
+
+    $('btnUnlockCycle').addEventListener('click', async function () {
+      if (!state.currentCycleId) return;
+      if (!confirm('Mở chốt cuộc họp này để tiếp tục báo cáo và cập nhật tiến độ?')) return;
+      try {
+        await TbklServices.unlockCycle(state.currentCycleId);
+        showToast('Đã mở chốt — có thể báo cáo và cập nhật tiếp');
         await refreshCycles(state.currentCycleId);
       } catch (err) { showToast(err.message, true); }
     });

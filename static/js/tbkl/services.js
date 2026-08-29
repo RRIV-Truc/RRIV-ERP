@@ -158,6 +158,9 @@
     lockCycle: function (cycleId) {
       return apiFetch('/cycles/' + encodeURIComponent(cycleId) + '/lock', { method: 'POST', body: '{}' });
     },
+    unlockCycle: function (cycleId) {
+      return apiFetch('/cycles/' + encodeURIComponent(cycleId) + '/unlock', { method: 'POST', body: '{}' });
+    },
     listSeeds: function () { return apiFetch('/seeds'); },
     importSeed: function (seedId, replace) {
       return apiFetch('/seeds/' + encodeURIComponent(seedId) + '/import', {

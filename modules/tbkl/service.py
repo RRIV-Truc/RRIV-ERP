@@ -13,6 +13,7 @@ from modules.tbkl.rbac import (
     can_confirm,
     can_confirm_directive,
     can_lock,
+    can_unlock_cycle,
     can_manage,
     can_operate,
     can_planning,
@@ -624,6 +625,37 @@ def lock_cycle_reports(supabase, ctx: UserContext, cycle_id: str) -> dict:
     return {'locked': True, 'task_count': len(task_ids), 'directive_count': len(dir_ids)}
 
 
+def unlock_cycle_reports(supabase, ctx: UserContext, cycle_id: str) -> dict:
+    if not can_unlock_cycle(ctx, supabase):
+        raise PermissionError('Chỉ quản trị hoặc Viện trưởng mới mở chốt cuộc họp')
+
+    cycle = get_cycle(supabase, cycle_id)
+    if not cycle:
+        raise LookupError('Không tìm thấy cuộc họp')
+    if cycle.get('status') != 'locked':
+        raise ValueError('Cuộc họp chưa chốt — không cần mở')
+
+    task_ids = _task_ids_for_cycle(supabase, cycle_id)
+    if task_ids:
+        supabase.table('tbkl_reports').update({'locked': False}).in_('task_id', task_ids).execute()
+
+    dir_ids = _directive_ids_for_cycle(supabase, cycle_id)
+    if dir_ids:
+        try:
+            supabase.table('tbkl_directive_reports').update({'locked': False}).in_(
+                'directive_id', dir_ids
+            ).execute()
+        except Exception as exc:
+            print(f'[tbkl] unlock directive_reports: {exc}')
+
+    supabase.table('tbkl_cycles').update({
+        'status': 'active',
+        'updated_at': _now_iso(),
+    }).eq('id', cycle_id).execute()
+
+    return {'unlocked': True, 'task_count': len(task_ids), 'directive_count': len(dir_ids)}
+
+
 def _directive_ids_for_cycle(supabase, cycle_id: str) -> list[str]:
     dirs = supabase.table('tbkl_directives').select('id').eq('cycle_id', cycle_id).execute()
     return [d['id'] for d in (dirs.data or [])]
@@ -810,6 +842,7 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str, *, unit_only: boo
             'can_confirm_directive': can_confirm_directive(ctx, supabase),
             'can_report': can_report(ctx, supabase),
             'can_lock': can_lock(ctx, supabase),
+            'can_unlock': can_unlock_cycle(ctx, supabase),
             'is_planning_dept': is_planning_department(ctx, supabase),
             'is_unit_only': is_unit_reporter_only(ctx, supabase),
         },

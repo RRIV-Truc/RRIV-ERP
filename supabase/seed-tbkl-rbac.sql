@@ -38,6 +38,13 @@ INSERT INTO role_definitions (
     true, 'department', '{"byDepartment":true}'::jsonb, 20, now()
   ),
   (
+    'tbkl_director', 'tbkl_director', 'Viện trưởng',
+    '["tbkl:view","tbkl:unlock","tbkl:confirm_leader"]'::jsonb,
+    '{"app_id":"tbkl","role_id":"director","is_active":true}'::jsonb,
+    'tbkl', 'Viện trưởng', 'Xem tổng hợp, xác nhận mục lớn và mở chốt cuộc họp',
+    true, 'all', '{}'::jsonb, 25, now()
+  ),
+  (
     'tbkl_leader', 'tbkl_leader', 'Ban lãnh đạo',
     '["tbkl:view","tbkl:manage","tbkl:confirm_leader"]'::jsonb,
     '{"app_id":"tbkl","role_id":"leader","is_active":true}'::jsonb,

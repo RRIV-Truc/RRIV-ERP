@@ -13,6 +13,7 @@ from modules.tbkl.decorators import (
     require_tbkl_auth,
     require_tbkl_confirm_directive,
     require_tbkl_lock,
+    require_tbkl_unlock,
     require_tbkl_operate,
     require_tbkl_planning,
     require_tbkl_report,
@@ -27,6 +28,7 @@ from modules.tbkl.rbac import (
     can_confirm,
     can_confirm_directive,
     can_lock,
+    can_unlock_cycle,
     can_manage,
     can_operate,
     can_planning,
@@ -73,6 +75,7 @@ def api_tbkl_context():
             'can_assign': can_assign(ctx, sb),
             'can_report': can_report(ctx, sb),
             'can_lock': can_lock(ctx, sb),
+            'can_unlock': can_unlock_cycle(ctx, sb),
             'is_planning_dept': is_planning_department(ctx, sb),
             'is_unit_only': is_unit_reporter_only(ctx, sb),
         },
@@ -365,6 +368,23 @@ def api_submit_report(task_id):
         return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as exc:
         print(f'api_submit_report: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@tbkl_bp.route('/api/tbkl/cycles/<cycle_id>/unlock', methods=['POST'])
+@require_tbkl_unlock
+def api_unlock_cycle(cycle_id):
+    try:
+        result = svc.unlock_cycle_reports(_supabase(), _ctx(), cycle_id)
+        return jsonify({'success': True, **result})
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception as exc:
+        print(f'api_unlock_cycle: {exc}')
         return jsonify({'success': False, 'message': str(exc)}), 500
 
 

@@ -352,6 +352,8 @@
 .tbkl-btn-primary:hover { background: var(--tbkl-primary-dark); }
 .tbkl-btn-outline { background: white; border: 1px solid var(--tbkl-border); color: var(--tbkl-text); }
 .tbkl-btn-danger { background: var(--tbkl-danger); color: white; }
+.tbkl-btn-unlock { border-color: #d97706; color: #b45309; }
+.tbkl-btn-unlock:hover { background: #fffbeb; }
 .tbkl-btn-sm { padding: 4px 10px; font-size: 0.8rem; }
 
 .tbkl-table-wrap {

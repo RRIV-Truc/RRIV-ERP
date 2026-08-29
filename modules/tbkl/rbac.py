@@ -129,6 +129,23 @@ def can_lock(ctx: UserContext, supabase=None) -> bool:
     )
 
 
+def _is_director_username(ctx: UserContext) -> bool:
+    configured = os.getenv('TBKL_DIRECTOR_USERNAMES', '').strip()
+    if not configured:
+        return False
+    allowed = {x.strip().lower() for x in configured.split(',') if x.strip()}
+    return str(ctx.username or '').strip().lower() in allowed
+
+
+def can_unlock_cycle(ctx: UserContext, supabase=None) -> bool:
+    """Mở chốt cuộc họp — chỉ quản trị TBKL hoặc Viện trưởng."""
+    if can_admin(ctx, supabase):
+        return True
+    if has_permission_with_overrides(ctx, 'tbkl:unlock', supabase, APP_ID):
+        return True
+    return _is_director_username(ctx)
+
+
 def user_department_id(ctx: UserContext) -> str | None:
     return ctx.department_id
 
