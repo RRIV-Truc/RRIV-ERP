@@ -43,3 +43,5 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+      - key: SUPABASE_DB_POOLER_HOST
+        sync: false

@@ -36,8 +36,27 @@ def _conn_label(target: dict[str, Any]) -> str:
     )
 
 
+def _pooler_hosts(region: str) -> list[str]:
+    hosts: list[str] = []
+    custom = (os.getenv("SUPABASE_DB_POOLER_HOST") or "").strip()
+    if custom:
+        hosts.append(custom.rstrip("/"))
+    for idx in range(4):
+        hosts.append(f"aws-{idx}-{region}.pooler.supabase.com")
+    # giữ thứ tự, bỏ trùng
+    out: list[str] = []
+    for h in hosts:
+        if h not in out:
+            out.append(h)
+    return out
+
+
+def _on_render_or_ipv4_only() -> bool:
+    return bool(os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID"))
+
+
 def connection_targets() -> list[dict[str, Any]]:
-    """Danh sách cách kết nối — ưu tiên pooler 6543 (IPv4, giống apply_supabase_schema)."""
+    """Ưu tiên DATABASE_URL / pooler IPv4. Render không dùng direct (IPv6)."""
     targets: list[dict[str, Any]] = []
     seen: set[str] = set()
 
@@ -59,31 +78,32 @@ def connection_targets() -> list[dict[str, Any]]:
     )
     if password and ref:
         region = os.getenv("SUPABASE_DB_REGION", "ap-southeast-1")
-        pooler_host = f"aws-0-{region}.pooler.supabase.com"
-        add({
-            "host": pooler_host,
-            "port": 6543,
-            "user": f"postgres.{ref}",
-            "password": password,
-            "dbname": "postgres",
-            "via": "pooler-tx-6543",
-        })
-        add({
-            "host": pooler_host,
-            "port": 5432,
-            "user": f"postgres.{ref}",
-            "password": password,
-            "dbname": "postgres",
-            "via": "pooler-session-5432",
-        })
-        add({
-            "host": f"db.{ref}.supabase.co",
-            "port": 5432,
-            "user": "postgres",
-            "password": password,
-            "dbname": "postgres",
-            "via": "direct",
-        })
+        for pooler_host in _pooler_hosts(region):
+            add({
+                "host": pooler_host,
+                "port": 6543,
+                "user": f"postgres.{ref}",
+                "password": password,
+                "dbname": "postgres",
+                "via": f"pooler-tx-{pooler_host}",
+            })
+            add({
+                "host": pooler_host,
+                "port": 5432,
+                "user": f"postgres.{ref}",
+                "password": password,
+                "dbname": "postgres",
+                "via": f"pooler-session-{pooler_host}",
+            })
+        if not _on_render_or_ipv4_only():
+            add({
+                "host": f"db.{ref}.supabase.co",
+                "port": 5432,
+                "user": "postgres",
+                "password": password,
+                "dbname": "postgres",
+                "via": "direct",
+            })
 
     return targets
 
@@ -243,8 +263,9 @@ def _run_backup(use_pg_dump: bool) -> tuple[bytes, str]:
             print(f"[backup] psycopg2 via {target.get('via', '?')} failed: {exc}")
 
     raise RuntimeError(
-        "Không kết nối được Supabase DB. Kiểm tra SUPABASE_DB_PASSWORD trên Render "
-        "và Supabase → Database → Network (tắt giới hạn IP hoặc cho phép mọi IP)."
+        "Không kết nối được Supabase DB. Trên Render: thêm DATABASE_URL "
+        "(Supabase → Connect → Transaction pooler, copy nguyên URI). "
+        "Hoặc thêm SUPABASE_DB_POOLER_HOST nếu host không phải aws-0."
     ) from last_err
 
 
