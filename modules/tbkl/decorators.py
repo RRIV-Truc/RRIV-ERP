@@ -6,7 +6,16 @@ from functools import wraps
 from flask import jsonify, request
 
 from modules.meetings.rbac import UserContext, load_user_context
-from modules.tbkl.rbac import can_manage, can_report, can_view
+from modules.tbkl.rbac import (
+    can_admin,
+    can_lock,
+    can_operate,
+    can_planning,
+    can_report,
+    can_update_attachments,
+    can_view,
+    unit_can_edit_task,
+)
 
 
 def _resolve_username() -> str:
@@ -38,14 +47,77 @@ def require_tbkl_auth(f):
     return wrapped
 
 
-def require_tbkl_manage(f):
+def require_tbkl_admin(f):
+    """Full quyền — chỉ tbkl:* / global admin."""
     @wraps(f)
     @require_tbkl_auth
     def wrapped(*args, **kwargs):
         ctx = request.tbkl_user  # type: ignore[attr-defined]
         supabase = _get_supabase()
-        if not can_manage(ctx, supabase):
-            return jsonify({'success': False, 'message': 'Chỉ Phòng NV / quản trị mới thao tác này'}), 403
+        if not can_admin(ctx, supabase):
+            return jsonify({'success': False, 'message': 'Chỉ quản trị TBKL mới thao tác này'}), 403
+        return f(*args, **kwargs)
+    return wrapped
+
+
+def require_tbkl_planning(f):
+    """Phòng KH chủ trì — admin hoặc cán bộ thuộc phòng KH (có tbkl:view)."""
+    @wraps(f)
+    @require_tbkl_auth
+    def wrapped(*args, **kwargs):
+        ctx = request.tbkl_user  # type: ignore[attr-defined]
+        supabase = _get_supabase()
+        if not can_planning(ctx, supabase):
+            return jsonify({
+                'success': False,
+                'message': 'Chỉ quản trị hoặc Phòng Kế hoạch mới thực hiện thao tác này',
+            }), 403
+        return f(*args, **kwargs)
+    return wrapped
+
+
+def require_tbkl_operate(f):
+    """Nghiệp vụ chung — admin, Phòng KH, hoặc Phòng NV."""
+    @wraps(f)
+    @require_tbkl_auth
+    def wrapped(*args, **kwargs):
+        ctx = request.tbkl_user  # type: ignore[attr-defined]
+        supabase = _get_supabase()
+        if not can_operate(ctx, supabase):
+            return jsonify({'success': False, 'message': 'Không có quyền thao tác nghiệp vụ TBKL'}), 403
+        return f(*args, **kwargs)
+    return wrapped
+
+
+def require_tbkl_manage(f):
+    """Giữ tên cũ — map sang can_operate."""
+    return require_tbkl_operate(f)
+
+
+def require_tbkl_lock(f):
+    @wraps(f)
+    @require_tbkl_auth
+    def wrapped(*args, **kwargs):
+        ctx = request.tbkl_user  # type: ignore[attr-defined]
+        supabase = _get_supabase()
+        if not can_lock(ctx, supabase):
+            return jsonify({'success': False, 'message': 'Không có quyền chốt báo cáo tuần'}), 403
+        return f(*args, **kwargs)
+    return wrapped
+
+
+def require_tbkl_attachments(f):
+    """Cập nhật PDF / file đính kèm."""
+    @wraps(f)
+    @require_tbkl_auth
+    def wrapped(*args, **kwargs):
+        ctx = request.tbkl_user  # type: ignore[attr-defined]
+        supabase = _get_supabase()
+        if not can_update_attachments(ctx, supabase):
+            return jsonify({
+                'success': False,
+                'message': 'Chỉ quản trị hoặc Phòng Kế hoạch mới cập nhật văn bản PDF',
+            }), 403
         return f(*args, **kwargs)
     return wrapped
 
@@ -56,7 +128,7 @@ def require_tbkl_report(f):
     def wrapped(*args, **kwargs):
         ctx = request.tbkl_user  # type: ignore[attr-defined]
         supabase = _get_supabase()
-        if not (can_report(ctx, supabase) or can_manage(ctx, supabase)):
+        if not can_report(ctx, supabase):
             return jsonify({'success': False, 'message': 'Không có quyền báo cáo tiến độ'}), 403
         return f(*args, **kwargs)
     return wrapped

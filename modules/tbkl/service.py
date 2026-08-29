@@ -7,7 +7,20 @@ from pathlib import Path
 from typing import Any, Optional
 
 from modules.meetings.rbac import UserContext
-from modules.tbkl.rbac import can_lock, can_manage, can_report, is_unit_reporter_only, unit_can_edit_task, user_department_name
+from modules.tbkl.rbac import (
+    can_admin,
+    can_confirm,
+    can_lock,
+    can_manage,
+    can_operate,
+    can_planning,
+    can_report,
+    can_update_attachments,
+    is_planning_department,
+    is_unit_reporter_only,
+    unit_can_edit_task,
+    user_department_name,
+)
 
 
 def _now_iso() -> str:
@@ -285,8 +298,8 @@ def confirm_report(
     task_id: str,
     payload: dict,
 ) -> dict:
-    if not can_manage(ctx, supabase):
-        raise PermissionError('Chỉ Phòng Kế hoạch / quản lý mới xác nhận tiến độ')
+    if not can_confirm(ctx, supabase):
+        raise PermissionError('Chỉ quản trị hoặc Phòng Kế hoạch mới xác nhận tiến độ')
 
     task_res = supabase.table('tbkl_tasks').select('*').eq('id', task_id).limit(1).execute()
     if not task_res.data:
@@ -362,7 +375,7 @@ def submit_report(
         raise LookupError('Không tìm thấy đầu việc')
     task = task_res.data[0]
 
-    if not unit_can_edit_task(ctx, task, supabase) and not can_manage(ctx, supabase):
+    if not unit_can_edit_task(ctx, task, supabase):
         raise PermissionError('Bạn không được báo cáo đầu việc này — chỉ đơn vị được giao mới nhập')
 
     week_label = (payload.get('week_label') or '').strip() or _week_label()
@@ -523,8 +536,8 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str, *, unit_only: boo
             'rag': rag,
             'week_label': rep.get('week_label') if rep else _week_label(),
             'report_locked': bool(rep.get('locked')) if rep else False,
-            'can_report': unit_can_edit_task(ctx, task, supabase) or can_manage(ctx, supabase),
-            'can_confirm': can_manage(ctx, supabase),
+            'can_report': unit_can_edit_task(ctx, task, supabase),
+            'can_confirm': can_confirm(ctx, supabase),
         }
         if unit_view and not row['can_report']:
             continue
@@ -573,10 +586,15 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str, *, unit_only: boo
         'department_name': dept_name,
         'pending_report_count': pending_report,
         'permissions': {
+            'can_admin': can_admin(ctx, supabase),
+            'can_planning': can_planning(ctx, supabase),
             'can_manage': can_manage(ctx, supabase),
-            'can_confirm': can_manage(ctx, supabase),
+            'can_operate': can_operate(ctx, supabase),
+            'can_update_attachments': can_update_attachments(ctx, supabase),
+            'can_confirm': can_confirm(ctx, supabase),
             'can_report': can_report(ctx, supabase),
             'can_lock': can_lock(ctx, supabase),
+            'is_planning_dept': is_planning_department(ctx, supabase),
             'is_unit_only': is_unit_reporter_only(ctx, supabase),
         },
     }
@@ -618,8 +636,8 @@ def import_seed_bundle(
     *,
     replace: bool = False,
 ) -> dict:
-    if not can_manage(ctx, supabase):
-        raise PermissionError('Chỉ quản trị / Phòng NV mới nạp dữ liệu mẫu')
+    if not can_admin(ctx, supabase):
+        raise PermissionError('Chỉ quản trị TBKL mới nạp dữ liệu mẫu')
 
     bundle = load_seed_bundle(seed_id)
     cycle_payload = dict(bundle.get('cycle') or {})

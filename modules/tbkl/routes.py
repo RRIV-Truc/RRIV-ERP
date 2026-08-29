@@ -6,11 +6,32 @@ import io
 
 from flask import Blueprint, jsonify, request, send_file
 
-from modules.tbkl.decorators import require_tbkl_auth, require_tbkl_manage, require_tbkl_report
+from modules.tbkl.decorators import (
+    require_tbkl_admin,
+    require_tbkl_attachments,
+    require_tbkl_auth,
+    require_tbkl_lock,
+    require_tbkl_operate,
+    require_tbkl_planning,
+    require_tbkl_report,
+)
 from modules.tbkl import service as svc
 from modules.tbkl import plan_service as plan_svc
 from modules.tbkl import storage_service as storage_svc
-from modules.tbkl.rbac import can_assign, can_lock, can_manage, can_report, is_unit_reporter_only, user_department_name
+from modules.tbkl.rbac import (
+    can_admin,
+    can_assign,
+    can_confirm,
+    can_lock,
+    can_manage,
+    can_operate,
+    can_planning,
+    can_report,
+    can_update_attachments,
+    is_planning_department,
+    is_unit_reporter_only,
+    user_department_name,
+)
 
 tbkl_bp = Blueprint('tbkl', __name__)
 
@@ -37,11 +58,16 @@ def api_tbkl_context():
             'department_name': user_department_name(ctx, sb),
         },
         'permissions': {
+            'can_admin': can_admin(ctx, sb),
+            'can_planning': can_planning(ctx, sb),
             'can_manage': can_manage(ctx, sb),
+            'can_operate': can_operate(ctx, sb),
+            'can_update_attachments': can_update_attachments(ctx, sb),
+            'can_confirm': can_confirm(ctx, sb),
             'can_assign': can_assign(ctx, sb),
-            'can_confirm': can_manage(ctx, sb),
             'can_report': can_report(ctx, sb),
             'can_lock': can_lock(ctx, sb),
+            'is_planning_dept': is_planning_department(ctx, sb),
             'is_unit_only': is_unit_reporter_only(ctx, sb),
         },
     })
@@ -59,7 +85,7 @@ def api_list_cycles():
 
 
 @tbkl_bp.route('/api/tbkl/cycles', methods=['POST'])
-@require_tbkl_manage
+@require_tbkl_planning
 def api_create_cycle():
     try:
         doc = svc.create_cycle(_supabase(), _ctx(), request.json or {})
@@ -70,7 +96,7 @@ def api_create_cycle():
 
 
 @tbkl_bp.route('/api/tbkl/cycles/create-full', methods=['POST'])
-@require_tbkl_manage
+@require_tbkl_planning
 def api_create_cycle_full():
     """Tạo cuộc họp kèm PDF kết luận + bảng kế hoạch (JSON hoặc Excel)."""
     try:
@@ -139,7 +165,7 @@ def api_conclusion_pdf_url(cycle_id):
 
 
 @tbkl_bp.route('/api/tbkl/cycles/<cycle_id>/attachments', methods=['POST'])
-@require_tbkl_manage
+@require_tbkl_attachments
 def api_upload_cycle_attachments(cycle_id):
     try:
         sb = _supabase()
@@ -149,6 +175,8 @@ def api_upload_cycle_attachments(cycle_id):
 
         pdf = request.files.get('conclusion_pdf')
         plan_file = request.files.get('plan_workbook')
+        if not (pdf and pdf.filename) and not (plan_file and plan_file.filename):
+            return jsonify({'success': False, 'message': 'Chọn file PDF hoặc Excel cần cập nhật'}), 400
         if pdf and pdf.filename:
             data = pdf.read()
             path, name = storage_svc.upload_conclusion_pdf(cycle_id, pdf.filename, data)
@@ -171,7 +199,7 @@ def api_upload_cycle_attachments(cycle_id):
 
 
 @tbkl_bp.route('/api/tbkl/cycles/<cycle_id>/plan/publish', methods=['POST'])
-@require_tbkl_manage
+@require_tbkl_planning
 def api_publish_plan(cycle_id):
     payload = request.json or {}
     try:
@@ -190,7 +218,7 @@ def api_publish_plan(cycle_id):
 
 
 @tbkl_bp.route('/api/tbkl/plan/parse', methods=['POST'])
-@require_tbkl_manage
+@require_tbkl_planning
 def api_parse_plan():
     f = request.files.get('plan_workbook') or request.files.get('file')
     if not f or not f.filename:
@@ -237,7 +265,7 @@ def api_dashboard(cycle_id):
 
 
 @tbkl_bp.route('/api/tbkl/cycles/<cycle_id>/directives', methods=['POST'])
-@require_tbkl_manage
+@require_tbkl_operate
 def api_create_directive(cycle_id):
     try:
         doc = svc.create_directive(_supabase(), _ctx(), cycle_id, request.json or {})
@@ -252,7 +280,7 @@ def api_create_directive(cycle_id):
 
 
 @tbkl_bp.route('/api/tbkl/directives/<directive_id>/tasks', methods=['POST'])
-@require_tbkl_manage
+@require_tbkl_operate
 def api_create_task(directive_id):
     try:
         doc = svc.create_task(_supabase(), _ctx(), directive_id, request.json or {})
@@ -267,7 +295,7 @@ def api_create_task(directive_id):
 
 
 @tbkl_bp.route('/api/tbkl/tasks/<task_id>/confirm', methods=['POST'])
-@require_tbkl_manage
+@require_tbkl_planning
 def api_confirm_report(task_id):
     try:
         doc = svc.confirm_report(_supabase(), _ctx(), task_id, request.json or {})
@@ -301,7 +329,7 @@ def api_submit_report(task_id):
 
 
 @tbkl_bp.route('/api/tbkl/cycles/<cycle_id>/lock', methods=['POST'])
-@require_tbkl_manage
+@require_tbkl_lock
 def api_lock_cycle(cycle_id):
     try:
         result = svc.lock_cycle_reports(_supabase(), _ctx(), cycle_id)
@@ -325,7 +353,7 @@ def api_list_seeds():
 
 
 @tbkl_bp.route('/api/tbkl/seeds/<seed_id>/import', methods=['POST'])
-@require_tbkl_manage
+@require_tbkl_admin
 def api_import_seed(seed_id):
     payload = request.json or {}
     replace = bool(payload.get('replace'))

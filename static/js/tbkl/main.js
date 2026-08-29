@@ -407,12 +407,19 @@
     var seedActions = $('seedActions');
     var btnSide = $('btnNewCycleSide');
     var btnEditPlan = $('btnEditPlan');
-    if (manage) manage.hidden = !perms.can_manage;
-    if (btnSide) btnSide.hidden = !perms.can_manage;
-    if (btnEditPlan) btnEditPlan.hidden = !(perms.can_manage && cycle);
+    var btnNewCycle = $('btnNewCycle');
+    var btnAddDirective = $('btnAddDirective');
+    var btnAddTask = $('btnAddTask');
+
+    if (manage) manage.hidden = !perms.can_operate;
+    if (btnSide) btnSide.hidden = !perms.can_planning;
+    if (btnNewCycle) btnNewCycle.hidden = !perms.can_planning;
+    if (btnEditPlan) btnEditPlan.hidden = !(perms.can_planning && cycle);
+    if (btnAddDirective) btnAddDirective.hidden = !perms.can_operate;
+    if (btnAddTask) btnAddTask.hidden = !perms.can_operate;
     if (lockBtn) lockBtn.hidden = !(perms.can_lock && cycle && cycle.status !== 'locked');
     if (seedActions) {
-      seedActions.hidden = !(perms.can_manage && !state.cycles.length);
+      seedActions.hidden = !(perms.can_admin && !state.cycles.length);
     }
   }
 
@@ -421,21 +428,27 @@
     var detail = $('sourceDetail');
     var importBtn = $('btnImportSeed');
     var pdfBtn = $('btnViewConclusionPdf');
+    var pdfUpdateBtn = $('btnUpdateCyclePdf');
     var editPlanBtn = $('btnEditPlan');
     if (!banner) return;
 
     var hasPdf = cycle && (cycle.has_conclusion_pdf || cycle.conclusion_pdf_url);
     var hasText = cycle && (cycle.source_ref || cycle.conclusion_summary);
-    var showSeed = state.permissions.can_manage && !state.cycles.length;
+    var showSeed = state.permissions.can_admin && !state.cycles.length;
+    var canPlanning = state.permissions.can_planning;
+    var canUpdatePdf = state.permissions.can_update_attachments;
 
-    if (cycle && (hasPdf || hasText || state.permissions.can_manage)) {
+    if (cycle && (hasPdf || hasText || state.permissions.can_operate || canPlanning)) {
       banner.hidden = false;
       var parts = [];
       if (cycle.conclusion_summary) parts.push(cycle.conclusion_summary);
       if (cycle.source_ref) parts.push(cycle.source_ref);
+      if (cycle.conclusion_pdf_name) parts.push('PDF: ' + cycle.conclusion_pdf_name);
       if (detail) detail.textContent = parts.join(' · ') || 'Cuộc họp H' + cycle.meeting_seq;
       if (importBtn) importBtn.hidden = !showSeed;
+      if (pdfUpdateBtn) pdfUpdateBtn.hidden = !canUpdatePdf;
       if (pdfBtn) {
+        pdfBtn.onclick = null;
         if (hasPdf && cycle.conclusion_pdf_url) {
           pdfBtn.hidden = false;
           pdfBtn.href = cycle.conclusion_pdf_url;
@@ -453,16 +466,39 @@
           pdfBtn.hidden = true;
         }
       }
-      if (editPlanBtn) editPlanBtn.hidden = !state.permissions.can_manage;
+      if (editPlanBtn) editPlanBtn.hidden = !canPlanning;
     } else if (showSeed) {
       banner.hidden = false;
       if (detail) detail.textContent = 'Chưa có cuộc họp — nạp TB Viện trưởng 11/08/2026 hoặc tạo cuộc họp mới.';
       if (importBtn) importBtn.hidden = false;
       if (pdfBtn) pdfBtn.hidden = true;
+      if (pdfUpdateBtn) pdfUpdateBtn.hidden = true;
       if (editPlanBtn) editPlanBtn.hidden = true;
     } else {
       banner.hidden = true;
     }
+  }
+
+  function openCyclePdfModal() {
+    if (!state.currentCycleId || !state.dashboard) {
+      showToast('Chọn cuộc họp trước', true);
+      return;
+    }
+    if (!state.permissions.can_update_attachments) {
+      showToast('Chỉ quản trị TBKL hoặc Phòng Kế hoạch mới cập nhật PDF', true);
+      return;
+    }
+    var cycle = state.dashboard.cycle || {};
+    $('cyclePdfModalTitle').textContent = 'Cập nhật PDF — H' + (cycle.meeting_seq || '');
+    var hint = $('cyclePdfCurrent');
+    if (hint) {
+      hint.textContent = cycle.conclusion_pdf_name
+        ? ('File hiện tại: ' + cycle.conclusion_pdf_name + '. Chọn file PDF mới để thay thế.')
+        : 'Cuộc họp chưa có PDF — chọn file để đính kèm văn bản kết luận.';
+    }
+    var form = $('formCyclePdf');
+    if (form) form.reset();
+    openModal('modalCyclePdf');
   }
 
   function guessNextMeetingSeq() {
@@ -672,6 +708,26 @@
     $('btnNewCycle').addEventListener('click', openCycleModalFn);
     $('btnNewCycleSide').addEventListener('click', openCycleModalFn);
     $('btnEditPlan').addEventListener('click', openPlanModal);
+    $('btnUpdateCyclePdf').addEventListener('click', openCyclePdfModal);
+
+    $('formCyclePdf').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      if (!state.currentCycleId) return;
+      var input = $('cyclePdfUpdateInput');
+      var file = input && input.files && input.files[0];
+      if (!file) {
+        showToast('Chọn file PDF', true);
+        return;
+      }
+      var fd = new FormData();
+      fd.append('conclusion_pdf', file);
+      try {
+        await TbklServices.uploadCycleAttachments(state.currentCycleId, fd);
+        closeModal('modalCyclePdf');
+        showToast('Đã cập nhật PDF kết luận');
+        await refreshCycles(state.currentCycleId);
+      } catch (err) { showToast(err.message, true); }
+    });
 
     var seqInput = $('cycleMeetingSeq');
     if (seqInput) {

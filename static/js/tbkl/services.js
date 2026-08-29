@@ -131,6 +131,20 @@
         method: 'POST', body: JSON.stringify(payload || {})
       });
     },
+    uploadCycleAttachments: function (cycleId, formData) {
+      var url = API + '/cycles/' + encodeURIComponent(cycleId) + '/attachments?username=' +
+        encodeURIComponent(username());
+      return fetch(url, {
+        method: 'POST',
+        headers: { 'X-RRIV-Username': username() },
+        body: formData
+      }).then(function (res) {
+        return parseJson(res, 'Lỗi cập nhật file').then(function (body) {
+          if (!res.ok) throw new Error(body.message || ('HTTP ' + res.status));
+          return body;
+        });
+      });
+    },
     lockCycle: function (cycleId) {
       return apiFetch('/cycles/' + encodeURIComponent(cycleId) + '/lock', { method: 'POST', body: '{}' });
     },

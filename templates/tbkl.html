@@ -88,6 +88,7 @@
         </div>
         <div class="tbkl-source-actions">
           <a class="tbkl-btn tbkl-btn-outline" id="btnViewConclusionPdf" href="#" target="_blank" rel="noopener" hidden>📄 Đọc TB kết luận (PDF)</a>
+          <button type="button" class="tbkl-btn tbkl-btn-outline" id="btnUpdateCyclePdf" hidden>📎 Cập nhật PDF</button>
           <button type="button" class="tbkl-btn tbkl-btn-outline" id="btnEditPlan" hidden>📋 Kế hoạch triển khai</button>
           <span id="seedActions">
             <button type="button" class="tbkl-btn tbkl-btn-outline" id="btnImportSeed">
@@ -354,6 +355,27 @@
   </div>
 </div>
 
+<!-- Modal: Cập nhật PDF cuộc họp (admin) -->
+<div class="tbkl-modal" id="modalCyclePdf" hidden>
+  <div class="tbkl-modal-backdrop" data-close="modalCyclePdf"></div>
+  <div class="tbkl-modal-box">
+    <header class="tbkl-modal-head">
+      <h2 id="cyclePdfModalTitle">Cập nhật PDF kết luận</h2>
+      <button type="button" class="tbkl-btn-icon" data-close="modalCyclePdf">✕</button>
+    </header>
+    <form id="formCyclePdf" class="tbkl-form">
+      <p class="tbkl-field-hint" id="cyclePdfCurrent">Quản trị TBKL hoặc Phòng Kế hoạch được thay thế văn bản PDF của cuộc họp.</p>
+      <label>Văn bản kết luận (PDF)
+        <input type="file" name="conclusion_pdf" id="cyclePdfUpdateInput" accept=".pdf,application/pdf" required>
+      </label>
+      <footer class="tbkl-modal-foot">
+        <button type="button" class="tbkl-btn tbkl-btn-outline" data-close="modalCyclePdf">Huỷ</button>
+        <button type="submit" class="tbkl-btn tbkl-btn-primary">Lưu PDF</button>
+      </footer>
+    </form>
+  </div>
+</div>
+
 <div class="tbkl-toast" id="tbklToast" hidden></div>
 
 <!-- Modal: Xác nhận PKH -->
@@ -391,8 +413,8 @@
 </div>
 
 <script src="/static/js/tbkl/permissions.js?v=5"></script>
-<script src="/static/js/tbkl/services.js?v=5"></script>
+<script src="/static/js/tbkl/services.js?v=6"></script>
 <script src="/static/js/tbkl/plan-editor.js?v=1"></script>
-<script src="/static/js/tbkl/main.js?v=7"></script>
+<script src="/static/js/tbkl/main.js?v=10"></script>
 </body>
 </html>
