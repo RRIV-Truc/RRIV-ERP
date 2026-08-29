@@ -260,7 +260,7 @@ body {
 .card-sky { background: linear-gradient(135deg, #38bdf8 0%, #0369a1 100%); }
 
 .admin-tools-panel {
-    margin-top: 28px;
+    margin: 0 0 22px;
     padding: 18px 20px;
     border-radius: 16px;
     border: 1px solid rgba(255, 255, 255, 0.12);

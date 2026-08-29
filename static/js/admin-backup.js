@@ -9,16 +9,38 @@ const RrivAdminBackup = (function () {
   var IDB_KEY = 'backupDir';
   var DEFAULT_DIR_HINT = 'D:\\BackupSQL';
 
-  function isGlobalAdmin(user) {
+  function isGlobalAdminClient(user) {
     if (!user) return false;
     if (user.isSuperAdmin === true) return true;
-    return String(user.role || '').toLowerCase() === 'admin';
+    if (String(user.role || '').toLowerCase() === 'admin') return true;
+    var roles = user.systemRoles || user.system_roles || [];
+    for (var i = 0; i < roles.length; i++) {
+      var n = String(roles[i] || '').toLowerCase().replace(/_/g, '');
+      if (n === 'superadmin' || n === 'instituteexecutive') return true;
+    }
+    return false;
   }
 
   function currentUsername() {
     var u = (typeof RrivHub !== 'undefined' && RrivHub.getCurrentUser && RrivHub.getCurrentUser())
       || (typeof Auth !== 'undefined' && Auth.getUser && Auth.getUser());
     return u && u.username ? String(u.username).toLowerCase() : '';
+  }
+
+  function setPanelVisible(show) {
+    var panel = document.getElementById('adminToolsPanel');
+    if (!panel) return;
+    panel.hidden = !show;
+  }
+
+  function checkEligibleOnServer(username) {
+    if (!username) return Promise.resolve(false);
+    return fetch('/api/admin/backup-eligible?username=' + encodeURIComponent(username), {
+      headers: { 'X-RRIV-Username': username }
+    }).then(function (res) {
+      if (!res.ok) return false;
+      return res.json().then(function (body) { return !!body.eligible; });
+    }).catch(function () { return false; });
   }
 
   function openIdb() {
@@ -113,10 +135,28 @@ const RrivAdminBackup = (function () {
     }
   }
 
-  function updatePanelVisibility(user) {
-    var panel = document.getElementById('adminToolsPanel');
-    if (!panel) return;
-    panel.hidden = !isGlobalAdmin(user);
+  function bindButtons() {
+    var btn = document.getElementById('btnAdminBackupDb');
+    var pickBtn = document.getElementById('btnAdminPickBackupDir');
+    if (btn && !btn.dataset.bound) {
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', function () { runBackup(false); });
+    }
+    if (pickBtn && !pickBtn.dataset.bound) {
+      pickBtn.dataset.bound = '1';
+      pickBtn.addEventListener('click', chooseFolder);
+    }
+  }
+
+  function refresh(user) {
+    bindButtons();
+    var username = (user && user.username) ? String(user.username).toLowerCase() : currentUsername();
+    var clientOk = isGlobalAdminClient(user || (typeof RrivHub !== 'undefined' ? RrivHub.getCurrentUser() : null));
+    if (clientOk) setPanelVisible(true);
+    return checkEligibleOnServer(username).then(function (eligible) {
+      setPanelVisible(!!eligible);
+      return eligible;
+    });
   }
 
   function chooseFolder() {
@@ -163,7 +203,7 @@ const RrivAdminBackup = (function () {
       }
       if (!window.showDirectoryPicker) {
         downloadFallback(payload.blob, payload.filename);
-        setStatus('Đã tải file (chọn thư mục Downloads hoặc đặt D:\\BackupSQL trong cài đặt trình duyệt).', false);
+        setStatus('Đã tải file — kiểm tra thư mục Downloads.', false);
         return payload;
       }
       setStatus('Đang lưu vào thư mục bạn chọn…', true);
@@ -173,7 +213,7 @@ const RrivAdminBackup = (function () {
           setStatus('Đã lưu: ' + label, false);
           return payload;
         });
-      }).catch(function (err) {
+      }).catch(function () {
         downloadFallback(payload.blob, payload.filename);
         setStatus('Không ghi được thư mục — đã tải file về máy.', false);
         return payload;
@@ -185,23 +225,13 @@ const RrivAdminBackup = (function () {
   }
 
   function init(user) {
-    updatePanelVisibility(user);
-    var btn = document.getElementById('btnAdminBackupDb');
-    var pickBtn = document.getElementById('btnAdminPickBackupDir');
-    if (btn && !btn.dataset.bound) {
-      btn.dataset.bound = '1';
-      btn.addEventListener('click', function () { runBackup(false); });
-    }
-    if (pickBtn && !pickBtn.dataset.bound) {
-      pickBtn.dataset.bound = '1';
-      pickBtn.addEventListener('click', chooseFolder);
-    }
+    refresh(user);
   }
 
   return {
-    isGlobalAdmin: isGlobalAdmin,
+    isGlobalAdminClient: isGlobalAdminClient,
     init: init,
-    updatePanelVisibility: updatePanelVisibility,
+    refresh: refresh,
     runBackup: runBackup
   };
 })();

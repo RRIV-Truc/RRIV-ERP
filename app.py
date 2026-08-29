@@ -1363,6 +1363,22 @@ def get_profile():
         return jsonify({"profile": None}), 500
 
 
+@app.route('/api/admin/backup-eligible', methods=['GET'])
+def admin_backup_eligible():
+    """Kiểm tra user có được dùng nút backup trên hub không."""
+    from modules.meetings.rbac import load_user_context
+
+    username = (
+        request.headers.get('X-RRIV-Username')
+        or request.args.get('username')
+        or ''
+    ).strip().lower()
+    if not username:
+        return jsonify({'eligible': False})
+    ctx = load_user_context(supabase, username)
+    return jsonify({'eligible': bool(ctx and ctx.is_global_admin)})
+
+
 @app.route('/api/admin/database-backup', methods=['POST'])
 def admin_database_backup():
     """Backup Supabase public schema — chỉ global admin."""
