@@ -1398,7 +1398,10 @@ def admin_database_backup():
         return jsonify({"success": False, "message": str(exc)}), 503
     except Exception as exc:
         print(f'admin_database_backup: {exc}')
-        return jsonify({"success": False, "message": "Không tạo được backup: " + str(exc)}), 500
+        return jsonify({
+            "success": False,
+            "message": "Không tạo được backup. Kiểm tra SUPABASE_DB_PASSWORD trên Render và thử lại.",
+        }), 500
 
     saved_path = save_backup_to_local_dir(content, filename)
     print(f'[backup] user={ctx.username} file={filename} saved={saved_path or "(download)"}')

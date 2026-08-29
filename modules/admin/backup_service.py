@@ -18,6 +18,13 @@ def project_ref_from_url(url: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _ensure_sslmode(dsn: str) -> str:
+    if "sslmode=" in dsn:
+        return dsn
+    sep = "&" if "?" in dsn else "?"
+    return dsn + sep + "sslmode=require"
+
+
 def build_direct_db_url() -> str:
     password = os.getenv("SUPABASE_DB_PASSWORD")
     ref = os.getenv("SUPABASE_PROJECT_REF") or project_ref_from_url(
@@ -25,12 +32,39 @@ def build_direct_db_url() -> str:
     )
     if password and ref:
         pwd = quote_plus(password)
-        return f"postgresql://postgres:{pwd}@db.{ref}.supabase.co:5432/postgres"
+        return _ensure_sslmode(
+            f"postgresql://postgres:{pwd}@db.{ref}.supabase.co:5432/postgres"
+        )
 
     direct = (os.getenv("DATABASE_URL") or os.getenv("SUPABASE_DB_URL") or "").strip()
     if direct and re.search(r"db\.[a-z0-9]+\.supabase\.co:5432", direct):
-        return direct
+        return _ensure_sslmode(direct)
     return ""
+
+
+def build_pooler_db_url() -> str:
+    password = os.getenv("SUPABASE_DB_PASSWORD")
+    ref = os.getenv("SUPABASE_PROJECT_REF") or project_ref_from_url(
+        os.getenv("SUPABASE_URL", "")
+    )
+    if not password or not ref:
+        return ""
+    region = os.getenv("SUPABASE_DB_REGION", "ap-southeast-1")
+    pwd = quote_plus(password)
+    return _ensure_sslmode(
+        f"postgresql://postgres.{ref}:{pwd}"
+        f"@aws-0-{region}.pooler.supabase.com:5432/postgres"
+    )
+
+
+def candidate_db_urls() -> list[str]:
+    seen: set[str] = set()
+    urls: list[str] = []
+    for url in (build_direct_db_url(), build_pooler_db_url()):
+        if url and url not in seen:
+            seen.add(url)
+            urls.append(url)
+    return urls
 
 
 def find_pg_dump() -> str | None:
@@ -47,10 +81,11 @@ def find_pg_dump() -> str | None:
 def _dump_with_pg_dump(dsn: str, pg_dump: str) -> bytes:
     import tempfile
 
+    safe_dsn = _ensure_sslmode(dsn)
     with tempfile.NamedTemporaryFile(suffix=".sql", delete=False) as tmp:
         tmp_path = tmp.name
     try:
-        subprocess.run(
+        proc = subprocess.run(
             [
                 pg_dump,
                 "--no-owner",
@@ -59,11 +94,14 @@ def _dump_with_pg_dump(dsn: str, pg_dump: str) -> bytes:
                 "--format=plain",
                 "--file",
                 tmp_path,
-                dsn,
+                safe_dsn,
             ],
             check=True,
             capture_output=True,
+            text=True,
         )
+        if proc.stderr:
+            print(f"[backup] pg_dump stderr: {proc.stderr[:500]}")
         raw = Path(tmp_path).read_bytes()
     finally:
         Path(tmp_path).unlink(missing_ok=True)
@@ -73,14 +111,13 @@ def _dump_with_pg_dump(dsn: str, pg_dump: str) -> bytes:
 def _sql_literal(cur, value) -> str:
     if value is None:
         return "NULL"
-    adapted = cur.mogrify("%s", (value,)).decode("utf-8")
-    return adapted
+    return cur.mogrify("%s", (value,)).decode("utf-8")
 
 
 def _dump_with_psycopg2(dsn: str) -> bytes:
     import psycopg2
 
-    conn = psycopg2.connect(dsn)
+    conn = psycopg2.connect(_ensure_sslmode(dsn))
     conn.set_client_encoding("UTF8")
     cur = conn.cursor()
 
@@ -123,26 +160,67 @@ def _dump_with_psycopg2(dsn: str) -> bytes:
     return out.getvalue().encode("utf-8")
 
 
-def create_backup_bytes() -> tuple[bytes, str]:
-    """Tạo file .sql.gz — ưu tiên pg_dump, fallback psycopg2."""
-    dsn = build_direct_db_url()
-    if not dsn:
-        raise RuntimeError(
-            "Thiếu SUPABASE_DB_PASSWORD hoặc DATABASE_URL trực tiếp (db.*.supabase.co:5432)."
-        )
-
-    pg_dump = find_pg_dump()
-    if pg_dump:
-        raw = _dump_with_pg_dump(dsn, pg_dump)
-    else:
-        raw = _dump_with_psycopg2(dsn)
-
+def _gzip_sql(raw: bytes) -> tuple[bytes, str]:
     stamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
     filename = f"rriv-data-{stamp}.sql.gz"
     buf = io.BytesIO()
     with gzip.GzipFile(fileobj=buf, mode="wb", mtime=0) as gz:
         gz.write(raw)
     return buf.getvalue(), filename
+
+
+def create_backup_bytes() -> tuple[bytes, str]:
+    """API / server — luôn dùng psycopg2 (ổn định trên Render)."""
+    urls = candidate_db_urls()
+    if not urls:
+        raise RuntimeError(
+            "Thiếu SUPABASE_DB_PASSWORD hoặc DATABASE_URL trực tiếp (db.*.supabase.co:5432)."
+        )
+
+    last_err: Exception | None = None
+    for dsn in urls:
+        try:
+            raw = _dump_with_psycopg2(dsn)
+            return _gzip_sql(raw)
+        except Exception as exc:
+            last_err = exc
+            safe = re.sub(r":([^:@/]+)@", ":***@", dsn)
+            print(f"[backup] psycopg2 failed ({safe}): {exc}")
+
+    raise RuntimeError(
+        "Không kết nối được Supabase DB. Kiểm tra SUPABASE_DB_PASSWORD trên Render."
+    ) from last_err
+
+
+def create_backup_bytes_local() -> tuple[bytes, str]:
+    """CLI máy local — thử pg_dump trước, fallback psycopg2."""
+    urls = candidate_db_urls()
+    if not urls:
+        raise RuntimeError(
+            "Thiếu SUPABASE_DB_PASSWORD hoặc DATABASE_URL trực tiếp (db.*.supabase.co:5432)."
+        )
+
+    pg_dump = find_pg_dump()
+    if pg_dump:
+        for dsn in urls:
+            try:
+                raw = _dump_with_pg_dump(dsn, pg_dump)
+                return _gzip_sql(raw)
+            except Exception as exc:
+                safe = re.sub(r":([^:@/]+)@", ":***@", dsn)
+                print(f"[backup] pg_dump failed ({safe}): {exc}")
+
+    last_err: Exception | None = None
+    for dsn in urls:
+        try:
+            raw = _dump_with_psycopg2(dsn)
+            return _gzip_sql(raw)
+        except Exception as exc:
+            last_err = exc
+
+    raise RuntimeError(
+        "Không tạo được backup. Kiểm tra SUPABASE_DB_PASSWORD và kết nối mạng."
+    ) from last_err
 
 
 def save_backup_to_local_dir(content: bytes, filename: str) -> Optional[str]:

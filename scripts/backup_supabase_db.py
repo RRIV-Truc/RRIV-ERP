@@ -12,12 +12,12 @@ from dotenv import load_dotenv
 
 load_dotenv(ROOT / ".env")
 
-from modules.admin.backup_service import create_backup_bytes, save_backup_to_local_dir  # noqa: E402
+from modules.admin.backup_service import create_backup_bytes_local, save_backup_to_local_dir  # noqa: E402
 
 
 def main() -> None:
     try:
-        content, filename = create_backup_bytes()
+        content, filename = create_backup_bytes_local()
     except RuntimeError as exc:
         sys.stderr.write(str(exc) + "\n")
         sys.stderr.write(
