@@ -352,7 +352,15 @@
 .tbkl-btn-primary:hover { background: var(--tbkl-primary-dark); }
 .tbkl-btn-outline { background: white; border: 1px solid var(--tbkl-border); color: var(--tbkl-text); }
 .tbkl-btn-danger { background: var(--tbkl-danger); color: white; }
-.tbkl-btn-unlock { border-color: #d97706; color: #b45309; }
+.tbkl-locked-banner {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+  margin-bottom: 14px; padding: 12px 16px;
+  background: #fff7ed; border: 1px solid #fdba74; border-radius: var(--tbkl-radius);
+}
+.tbkl-locked-banner[hidden] { display: none !important; }
+.tbkl-locked-banner-text strong { display: block; font-size: 0.92rem; color: #9a3412; }
+.tbkl-locked-banner-text p { margin: 4px 0 0; font-size: 0.8rem; color: #c2410c; }
+.tbkl-btn-unlock { border-color: #d97706; color: #b45309; white-space: nowrap; }
 .tbkl-btn-unlock:hover { background: #fffbeb; }
 .tbkl-btn-sm { padding: 4px 10px; font-size: 0.8rem; }
 

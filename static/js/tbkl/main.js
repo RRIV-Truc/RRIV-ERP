@@ -453,10 +453,27 @@
     });
   }
 
+  function updateLockedBanner(perms, cycle) {
+    var banner = $('lockedBanner');
+    var unlockBtn = $('btnUnlockCycle');
+    var hint = $('lockedBannerHint');
+    if (!banner) return;
+    var isLocked = cycle && cycle.status === 'locked';
+    banner.hidden = !isLocked;
+    if (!isLocked) return;
+    if (unlockBtn) {
+      unlockBtn.hidden = !perms.can_unlock;
+    }
+    if (hint) {
+      hint.textContent = perms.can_unlock
+        ? 'Bấm «Mở chốt» để cho phép báo cáo và cập nhật tiến độ trở lại.'
+        : 'Không thể cập nhật tiến độ. Liên hệ Viện trưởng hoặc quản trị để mở chốt.';
+    }
+  }
+
   function updateToolbar(perms, cycle) {
     var manage = $('manageActions');
     var lockBtn = $('btnLockCycle');
-    var unlockBtn = $('btnUnlockCycle');
     var seedActions = $('seedActions');
     var btnSide = $('btnNewCycleSide');
     var btnEditPlan = $('btnEditPlan');
@@ -471,9 +488,7 @@
     if (btnAddDirective) btnAddDirective.hidden = !perms.can_operate;
     if (btnAddTask) btnAddTask.hidden = !perms.can_operate;
     if (lockBtn) lockBtn.hidden = !(perms.can_lock && cycle && cycle.status !== 'locked');
-    if (unlockBtn) {
-      unlockBtn.hidden = !(perms.can_unlock && cycle && cycle.status === 'locked');
-    }
+    updateLockedBanner(perms, cycle);
     if (seedActions) {
       seedActions.hidden = !(perms.can_admin && !state.cycles.length);
     }

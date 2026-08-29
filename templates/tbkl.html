@@ -7,7 +7,7 @@
 <title>Theo dõi Kết luận Họp</title>
 <meta name="theme-color" content="#065f46">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-<link rel="stylesheet" href="/static/css/app-tbkl.css?v=13">
+<link rel="stylesheet" href="/static/css/app-tbkl.css?v=14">
 </head>
 <body class="tbkl-body">
 
@@ -60,6 +60,16 @@
         <button type="button" class="tbkl-tab is-active" data-view="all">Tổng hợp Viện</button>
         <button type="button" class="tbkl-tab" data-view="unit">Báo cáo đơn vị</button>
       </div>
+    </section>
+
+    <section class="tbkl-locked-banner" id="lockedBanner" hidden>
+      <div class="tbkl-locked-banner-text">
+        <strong>🔒 Cuộc họp đã chốt báo cáo</strong>
+        <p id="lockedBannerHint">Không thể cập nhật tiến độ. Viện trưởng hoặc quản trị có thể mở chốt để chuyển về «Đang theo dõi».</p>
+      </div>
+      <button type="button" class="tbkl-btn tbkl-btn-outline tbkl-btn-unlock" id="btnUnlockCycle" hidden>
+        Mở chốt — Đang theo dõi
+      </button>
     </section>
 
     <section class="tbkl-unit-banner" id="unitBanner" hidden>
@@ -134,7 +144,6 @@
         <button type="button" class="tbkl-btn tbkl-btn-outline" id="btnAddTask">+ Đầu việc</button>
         <button type="button" class="tbkl-btn tbkl-btn-primary" id="btnNewCycle">+ Cuộc họp mới</button>
         <button type="button" class="tbkl-btn tbkl-btn-danger" id="btnLockCycle" hidden>Chốt báo cáo tuần</button>
-        <button type="button" class="tbkl-btn tbkl-btn-outline tbkl-btn-unlock" id="btnUnlockCycle" hidden>Mở chốt</button>
       </div>
     </section>
 
@@ -490,6 +499,6 @@
 <script src="/static/js/tbkl/services.js?v=8"></script>
 <script src="/static/js/tbkl/org-units.js?v=2"></script>
 <script src="/static/js/tbkl/plan-editor.js?v=3"></script>
-<script src="/static/js/tbkl/main.js?v=16"></script>
+<script src="/static/js/tbkl/main.js?v=17"></script>
 </body>
 </html>
