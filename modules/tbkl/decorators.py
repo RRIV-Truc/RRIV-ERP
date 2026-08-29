@@ -8,6 +8,8 @@ from flask import jsonify, request
 from modules.meetings.rbac import UserContext, load_user_context
 from modules.tbkl.rbac import (
     can_admin,
+    can_assess_directive,
+    can_confirm_directive,
     can_lock,
     can_operate,
     can_planning,
@@ -130,5 +132,37 @@ def require_tbkl_report(f):
         supabase = _get_supabase()
         if not can_report(ctx, supabase):
             return jsonify({'success': False, 'message': 'Không có quyền báo cáo tiến độ'}), 403
+        return f(*args, **kwargs)
+    return wrapped
+
+
+def require_tbkl_assess_directive(f):
+    """Phòng KHCN đánh giá tiến độ mục lớn."""
+    @wraps(f)
+    @require_tbkl_auth
+    def wrapped(*args, **kwargs):
+        ctx = request.tbkl_user  # type: ignore[attr-defined]
+        supabase = _get_supabase()
+        if not can_assess_directive(ctx, supabase):
+            return jsonify({
+                'success': False,
+                'message': 'Chỉ quản trị hoặc Phòng KHCN mới đánh giá mục lớn',
+            }), 403
+        return f(*args, **kwargs)
+    return wrapped
+
+
+def require_tbkl_confirm_directive(f):
+    """Viện trưởng / Thư ký xác nhận mục lớn."""
+    @wraps(f)
+    @require_tbkl_auth
+    def wrapped(*args, **kwargs):
+        ctx = request.tbkl_user  # type: ignore[attr-defined]
+        supabase = _get_supabase()
+        if not can_confirm_directive(ctx, supabase):
+            return jsonify({
+                'success': False,
+                'message': 'Chỉ Viện trưởng, Thư ký hoặc Ban lãnh đạo mới xác nhận mục lớn',
+            }), 403
         return f(*args, **kwargs)
     return wrapped

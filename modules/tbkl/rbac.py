@@ -63,6 +63,32 @@ def can_confirm(ctx: UserContext, supabase=None) -> bool:
     return can_planning(ctx, supabase)
 
 
+def can_assess_directive(ctx: UserContext, supabase=None) -> bool:
+    """Phòng KHCN/KH đánh giá tiến độ mục kết luận lớn."""
+    return can_planning(ctx, supabase)
+
+
+def _is_leader_username(ctx: UserContext) -> bool:
+    configured = os.getenv('TBKL_LEADER_USERNAMES', '').strip()
+    if not configured:
+        return False
+    allowed = {x.strip().lower() for x in configured.split(',') if x.strip()}
+    return str(ctx.username or '').strip().lower() in allowed
+
+
+def can_confirm_directive(ctx: UserContext, supabase=None) -> bool:
+    """Viện trưởng hoặc Thư ký (đại diện VT) xác nhận mục lớn."""
+    if can_admin(ctx, supabase):
+        return True
+    if _is_leader_username(ctx):
+        return True
+    if has_permission_with_overrides(ctx, 'tbkl:confirm_leader', supabase, APP_ID):
+        return True
+    app_data = get_effective_app_data(ctx, APP_ID)
+    roles = {str(r).lower() for r in (app_data.get('roles') or [])}
+    return 'leader' in roles
+
+
 def can_manage(ctx: UserContext, supabase=None) -> bool:
     """Role Phòng NV — tbkl:manage (không tự động theo phòng ban)."""
     if can_admin(ctx, supabase):

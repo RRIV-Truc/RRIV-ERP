@@ -251,6 +251,8 @@
       if (d.lead_department_name) meta.push('TC chung: ' + d.lead_department_name);
       if (d.supervisor_name) meta.push('GS: ' + d.supervisor_name);
       if (d.deadline) meta.push('Hạn: ' + fmtDate(d.deadline));
+      var disp = directiveDisplayPct(d);
+      var pctLabel = disp.tag ? (' · ' + disp.tag) : '';
       return '<button type="button" class="tbkl-conclusion-item" data-directive-id="' + d.id + '">' +
         '<div class="tbkl-conclusion-code-col">' +
         '<div class="tbkl-conclusion-code">' + escapeHtml(d.code || '') + '</div>' +
@@ -260,10 +262,8 @@
         '<p>' + escapeHtml(excerpt) + '</p>' +
         '<div class="tbkl-conclusion-meta">' + escapeHtml(meta.join(' · ')) + '</div></div>' +
         '<div class="tbkl-conclusion-side">' +
-        '<div class="tbkl-conclusion-progress">' +
-        (d.avg_confirmed_pct != null ? Math.round(d.avg_confirmed_pct) : Math.round(d.avg_progress || 0)) + '%</div>' +
-        '<div class="tbkl-conclusion-count">' + (d.task_count || 0) + ' đầu việc' +
-        (d.avg_confirmed_pct != null ? ' · PKH' : '') + '</div></div></button>';
+        '<div class="tbkl-conclusion-progress">' + Math.round(disp.pct || 0) + '%</div>' +
+        '<div class="tbkl-conclusion-count">' + (d.task_count || 0) + ' đầu việc' + pctLabel + '</div></div></button>';
     }).join('');
 
     list.querySelectorAll('[data-directive-id]').forEach(function (btn) {
@@ -280,6 +280,60 @@
         }, 350);
       });
     });
+  }
+
+  function directiveByIdMap() {
+    var map = {};
+    (state.dashboard && state.dashboard.directives || []).forEach(function (d) {
+      map[d.id] = d;
+    });
+    return map;
+  }
+
+  function directiveDisplayPct(d) {
+    if (d.is_confirmed && d.confirmed_pct != null) return { pct: d.confirmed_pct, tag: 'VT' };
+    if (d.is_assessed || (d.progress_pct != null && d.progress_pct > 0)) {
+      return { pct: d.progress_pct || 0, tag: 'KHCN' };
+    }
+    if (d.avg_confirmed_pct != null) return { pct: d.avg_confirmed_pct, tag: 'con' };
+    return { pct: d.avg_progress || 0, tag: '' };
+  }
+
+  function renderDirectiveRow(d, unitMode) {
+    var btns = '';
+    if (d.can_assess_directive && !d.report_locked && !unitMode) {
+      btns += '<button type="button" class="tbkl-btn tbkl-btn-sm tbkl-btn-primary" data-assess-directive="' +
+        d.id + '">ĐG KHCN</button>';
+    } else if (d.report_locked) {
+      btns += '<span class="tbkl-note">Đã chốt</span>';
+    }
+    if (d.can_confirm_directive && !d.report_locked && !unitMode) {
+      btns += (btns ? ' ' : '') +
+        '<button type="button" class="tbkl-btn tbkl-btn-sm tbkl-btn-outline" data-confirm-directive="' +
+        d.id + '">XN VT</button>';
+    }
+    var assessedCell = d.is_assessed || (d.progress_pct != null && d.progress_pct > 0)
+      ? pctCell(d.progress_pct, 'unit')
+      : pctCell(0, 'pkh-empty');
+    if (!(d.is_assessed || (d.progress_pct != null && d.progress_pct > 0))) {
+      assessedCell = '<span class="tbkl-note">Chưa ĐG</span>';
+    }
+    return '<tr class="tbkl-group-row tbkl-directive-progress-row" id="dir-group-' + d.id + '" data-rag="' +
+      escapeHtml(d.rag || 'gray') + '">' +
+      '<td><span class="' + ragClass(d.rag) + '"></span></td>' +
+      '<td><span class="tbkl-code">' + escapeHtml(d.code || '') + '</span></td>' +
+      '<td><div class="tbkl-task-title">' + escapeHtml(d.title || '') + '</div>' +
+      '<div class="tbkl-dir-ref">Mục kết luận lớn · ' + (d.task_count || 0) + ' đầu việc con</div></td>' +
+      '<td>' + escapeHtml(d.lead_department_name || '—') + '</td>' +
+      '<td>—</td>' +
+      '<td>' + fmtDate(d.deadline) + '</td>' +
+      '<td>' + assessedCell + '</td>' +
+      '<td>' + (d.is_confirmed ? pctCell(d.confirmed_pct, 'pkh') : pctCell(0, 'pkh-empty')) + '</td>' +
+      '<td>' + escapeHtml(d.is_confirmed
+        ? (d.confirmed_status_label || d.status_label || '—')
+        : (d.is_assessed ? (d.status_label || '—') : '—')) + '</td>' +
+      '<td class="tbkl-note">' + escapeHtml(d.note || '—') + '</td>' +
+      '<td>' + btns + '</td></tr>';
   }
 
   function pctCell(pct, mode) {
@@ -316,18 +370,20 @@
 
     var html = '';
     var lastGroup = null;
+    var dirMap = directiveByIdMap();
     filtered.forEach(function (r) {
       var gk = groupKey(r);
       if (gk !== null && gk !== lastGroup) {
         lastGroup = gk;
-        var rowClass = state.groupBy === 'owner_unit' || state.groupBy === 'lead_dept'
-          ? 'tbkl-group-row tbkl-group-row-unit' : 'tbkl-group-row';
-        var anchor = state.groupBy === 'directive' ? (' id="dir-group-' + r.directive_id + '"') : '';
-        var prefix = state.groupBy === 'directive'
-          ? ('<span class="tbkl-group-code">' + escapeHtml(r.directive_code || '') + '</span>')
-          : '';
-        html += '<tr class="' + rowClass + '"' + anchor + '><td colspan="11">' +
-          prefix + escapeHtml(groupLabel(r) || '') + '</td></tr>';
+        if (state.groupBy === 'directive') {
+          var d = dirMap[r.directive_id];
+          if (d) html += renderDirectiveRow(d, unitMode);
+        } else {
+          var rowClass = state.groupBy === 'owner_unit' || state.groupBy === 'lead_dept'
+            ? 'tbkl-group-row tbkl-group-row-unit' : 'tbkl-group-row';
+          html += '<tr class="' + rowClass + '"><td colspan="11">' +
+            escapeHtml(groupLabel(r) || '') + '</td></tr>';
+        }
       }
       var note = [r.difficulties, r.solution].filter(Boolean).join(' → ');
       var reportBtn = '';
@@ -342,7 +398,7 @@
       if (r.can_confirm && !r.report_locked && !unitMode) {
         reportBtn += (reportBtn ? ' ' : '') +
           '<button type="button" class="tbkl-btn tbkl-btn-sm tbkl-btn-outline" data-confirm="' +
-          r.task_id + '">XN PKH</button>';
+          r.task_id + '">XN KHCN</button>';
       }
       html += '<tr data-rag="' + r.rag + '">' +
         '<td><span class="' + ragClass(r.rag) + '"></span></td>' +
@@ -375,6 +431,16 @@
     tbody.querySelectorAll('[data-confirm]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         openConfirmModal(btn.getAttribute('data-confirm'));
+      });
+    });
+    tbody.querySelectorAll('[data-assess-directive]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openAssessDirectiveModal(btn.getAttribute('data-assess-directive'));
+      });
+    });
+    tbody.querySelectorAll('[data-confirm-directive]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openConfirmDirectiveModal(btn.getAttribute('data-confirm-directive'));
       });
     });
   }
@@ -622,6 +688,43 @@
     }
   }
 
+  function openAssessDirectiveModal(directiveId) {
+    var d = (state.dashboard && state.dashboard.directives || []).find(function (x) {
+      return x.id === directiveId;
+    });
+    if (!d) return;
+    $('assessDirectiveId').value = directiveId;
+    $('assessDirectiveMeta').textContent = (state.dashboard.meeting_label || '') + ' · ' +
+      (d.code || '') + ' — ' + (d.title || '');
+    var form = $('formAssessDirective');
+    form.progress_pct.value = d.is_assessed ? (d.progress_pct || 0) : (d.avg_progress || 0);
+    form.status.value = d.is_assessed ? (d.status || 'in_progress') : 'in_progress';
+    form.note.value = d.note || '';
+    openModal('modalAssessDirective');
+  }
+
+  function openConfirmDirectiveModal(directiveId) {
+    var d = (state.dashboard && state.dashboard.directives || []).find(function (x) {
+      return x.id === directiveId;
+    });
+    if (!d) return;
+    $('confirmDirectiveId').value = directiveId;
+    $('confirmDirectiveMeta').textContent = (state.dashboard.meeting_label || '') + ' · ' +
+      (d.code || '') + ' — ' + (d.title || '');
+    $('confirmDirectiveKhcnHint').textContent = d.is_assessed
+      ? ('KHCN đánh giá: ' + Math.round(d.progress_pct || 0) + '% — ' + (d.status_label || '—') +
+        '. RAG mục lớn tính theo xác nhận VT.')
+      : 'Chưa có đánh giá KHCN — có thể xác nhận trực tiếp nếu cần.';
+    var form = $('formConfirmDirective');
+    form.confirmed_pct.value = d.is_confirmed
+      ? (d.confirmed_pct || 0)
+      : (d.is_assessed ? (d.progress_pct || 0) : (d.avg_confirmed_pct != null ? d.avg_confirmed_pct : d.avg_progress || 0));
+    form.confirmed_status.value = d.is_confirmed
+      ? (d.confirmed_status || 'in_progress')
+      : (d.is_assessed ? (d.status || 'in_progress') : 'in_progress');
+    openModal('modalConfirmDirective');
+  }
+
   function openConfirmModal(taskId) {
     var row = (state.dashboard && state.dashboard.rows || []).find(function (r) {
       return r.task_id === taskId;
@@ -630,7 +733,7 @@
     $('confirmTaskId').value = taskId;
     $('confirmMeta').textContent = (state.dashboard.meeting_label || '') + ' · ' + row.task_code + ' — ' + row.task_title;
     $('confirmUnitHint').textContent = 'Đơn vị báo cáo: ' + Math.round(row.progress_pct || 0) + '% — ' +
-      (row.status_label || '—') + '. RAG trên dashboard tính theo % xác nhận PKH.';
+      (row.status_label || '—') + '. RAG trên dashboard tính theo % xác nhận KHCN.';
     var form = $('formConfirm');
     form.confirmed_pct.value = row.is_confirmed ? (row.confirmed_pct || 0) : (row.progress_pct || 0);
     form.confirmed_status.value = row.is_confirmed
@@ -922,7 +1025,36 @@
           confirmed_status: fd.get('confirmed_status')
         });
         closeModal('modalConfirm');
-        showToast('Đã lưu xác nhận PKH — RAG cập nhật theo đánh giá Phòng KH');
+        showToast('Đã lưu xác nhận KHCN — RAG cập nhật theo đánh giá Phòng KHCN');
+        await loadDashboard(state.currentCycleId);
+      } catch (err) { showToast(err.message, true); }
+    });
+
+    $('formAssessDirective').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var fd = new FormData(e.target);
+      try {
+        await TbklServices.assessDirective(fd.get('directive_id'), {
+          progress_pct: parseFloat(fd.get('progress_pct') || 0),
+          status: fd.get('status'),
+          note: fd.get('note')
+        });
+        closeModal('modalAssessDirective');
+        showToast('Đã lưu đánh giá KHCN cho mục lớn');
+        await loadDashboard(state.currentCycleId);
+      } catch (err) { showToast(err.message, true); }
+    });
+
+    $('formConfirmDirective').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var fd = new FormData(e.target);
+      try {
+        await TbklServices.confirmDirective(fd.get('directive_id'), {
+          confirmed_pct: parseFloat(fd.get('confirmed_pct') || 0),
+          confirmed_status: fd.get('confirmed_status')
+        });
+        closeModal('modalConfirmDirective');
+        showToast('Đã lưu xác nhận VT — RAG mục lớn cập nhật');
         await loadDashboard(state.currentCycleId);
       } catch (err) { showToast(err.message, true); }
     });

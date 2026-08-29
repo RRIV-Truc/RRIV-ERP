@@ -9,7 +9,9 @@ from typing import Any, Optional
 from modules.meetings.rbac import UserContext
 from modules.tbkl.rbac import (
     can_admin,
+    can_assess_directive,
     can_confirm,
+    can_confirm_directive,
     can_lock,
     can_manage,
     can_operate,
@@ -292,6 +294,32 @@ def _report_display_rag(
     return 'gray'
 
 
+def _directive_display_rag(
+    rep: Optional[dict],
+    directive: dict,
+    *,
+    cycle_locked: bool,
+) -> str:
+    """RAG mục lớn — theo xác nhận VT nếu có, không thì theo đánh giá KHCN."""
+    if rep and rep.get('confirmed_at'):
+        return compute_rag(
+            progress_pct=float(rep.get('confirmed_pct') or 0),
+            status=rep.get('confirmed_status') or 'not_started',
+            deadline=directive.get('deadline'),
+            cycle_locked=cycle_locked,
+            has_report=True,
+        )
+    if rep and rep.get('assessed_at'):
+        return compute_rag(
+            progress_pct=float(rep.get('progress_pct') or 0),
+            status=rep.get('status') or 'not_started',
+            deadline=directive.get('deadline'),
+            cycle_locked=cycle_locked,
+            has_report=True,
+        )
+    return 'gray'
+
+
 def confirm_report(
     supabase,
     ctx: UserContext,
@@ -422,6 +450,154 @@ def submit_report(
     return row
 
 
+def _latest_directive_reports_map(supabase, directive_ids: list[str]) -> dict[str, dict]:
+    if not directive_ids:
+        return {}
+    try:
+        res = supabase.table('tbkl_directive_reports').select('*').in_(
+            'directive_id', directive_ids
+        ).order('week_label', desc=True).execute()
+    except Exception as exc:
+        print(f'[tbkl] directive_reports (chạy schema-tbkl-directive-reports.sql): {exc}')
+        return {}
+    out: dict[str, dict] = {}
+    for row in res.data or []:
+        did = row.get('directive_id')
+        if did and did not in out:
+            out[did] = row
+    return out
+
+
+def assess_directive_report(
+    supabase,
+    ctx: UserContext,
+    directive_id: str,
+    payload: dict,
+) -> dict:
+    if not can_assess_directive(ctx, supabase):
+        raise PermissionError('Chỉ quản trị hoặc Phòng KHCN mới đánh giá mục lớn')
+
+    dres = supabase.table('tbkl_directives').select('*').eq('id', directive_id).limit(1).execute()
+    if not dres.data:
+        raise LookupError('Không tìm thấy mục kết luận lớn')
+    directive = dres.data[0]
+
+    cycle = get_cycle(supabase, directive['cycle_id'])
+    if cycle and cycle.get('status') == 'locked':
+        raise ValueError('Cuộc họp đã chốt — không đánh giá thêm')
+
+    week_label = (payload.get('week_label') or '').strip() or _week_label()
+    existing = supabase.table('tbkl_directive_reports').select('*').eq(
+        'directive_id', directive_id
+    ).eq('week_label', week_label).limit(1).execute()
+
+    progress = max(0, min(100, float(payload.get('progress_pct') or 0)))
+    status = (payload.get('status') or 'in_progress').lower()
+    assessed_at = _now_iso()
+    rag = compute_rag(
+        progress_pct=progress,
+        status=status,
+        deadline=directive.get('deadline'),
+        cycle_locked=False,
+        has_report=True,
+    )
+
+    row = {
+        'progress_pct': progress,
+        'status': status,
+        'note': (payload.get('note') or '').strip() or None,
+        'assessed_by_username': ctx.username,
+        'assessed_at': assessed_at,
+        'rag': rag,
+    }
+
+    if existing.data:
+        rep = existing.data[0]
+        if rep.get('locked'):
+            raise ValueError('Báo cáo tuần này đã khóa — không đánh giá thêm')
+        if rep.get('confirmed_at'):
+            row['rag'] = _directive_display_rag({**rep, **row}, directive, cycle_locked=False)
+        supabase.table('tbkl_directive_reports').update(row).eq('id', rep['id']).execute()
+        return {**rep, **row}
+
+    insert_row = {
+        'directive_id': directive_id,
+        'week_label': week_label,
+        **row,
+    }
+    ins = supabase.table('tbkl_directive_reports').insert(insert_row).execute()
+    if not ins.data:
+        raise RuntimeError('Không lưu được đánh giá KHCN')
+    return ins.data[0]
+
+
+def confirm_directive_report(
+    supabase,
+    ctx: UserContext,
+    directive_id: str,
+    payload: dict,
+) -> dict:
+    if not can_confirm_directive(ctx, supabase):
+        raise PermissionError('Chỉ Viện trưởng, Thư ký hoặc Ban lãnh đạo mới xác nhận mục lớn')
+
+    dres = supabase.table('tbkl_directives').select('*').eq('id', directive_id).limit(1).execute()
+    if not dres.data:
+        raise LookupError('Không tìm thấy mục kết luận lớn')
+    directive = dres.data[0]
+
+    cycle = get_cycle(supabase, directive['cycle_id'])
+    if cycle and cycle.get('status') == 'locked':
+        raise ValueError('Cuộc họp đã chốt — không xác nhận thêm')
+
+    week_label = (payload.get('week_label') or '').strip() or _week_label()
+    existing = supabase.table('tbkl_directive_reports').select('*').eq(
+        'directive_id', directive_id
+    ).eq('week_label', week_label).limit(1).execute()
+
+    confirmed_pct = max(0, min(100, float(payload.get('confirmed_pct') or 0)))
+    confirmed_status = (payload.get('confirmed_status') or 'in_progress').lower()
+    confirmed_at = _now_iso()
+    rag = compute_rag(
+        progress_pct=confirmed_pct,
+        status=confirmed_status,
+        deadline=directive.get('deadline'),
+        cycle_locked=False,
+        has_report=True,
+    )
+
+    if existing.data:
+        rep = existing.data[0]
+        if rep.get('locked'):
+            raise ValueError('Báo cáo tuần này đã khóa — không xác nhận thêm')
+        patch = {
+            'confirmed_pct': confirmed_pct,
+            'confirmed_status': confirmed_status,
+            'confirmed_by_username': ctx.username,
+            'confirmed_at': confirmed_at,
+            'rag': rag,
+        }
+        supabase.table('tbkl_directive_reports').update(patch).eq('id', rep['id']).execute()
+        return {**rep, **patch}
+
+    row = {
+        'directive_id': directive_id,
+        'week_label': week_label,
+        'progress_pct': 0,
+        'status': 'not_started',
+        'confirmed_pct': confirmed_pct,
+        'confirmed_status': confirmed_status,
+        'confirmed_by_username': ctx.username,
+        'confirmed_at': confirmed_at,
+        'assessed_by_username': ctx.username,
+        'assessed_at': confirmed_at,
+        'rag': rag,
+    }
+    ins = supabase.table('tbkl_directive_reports').insert(row).execute()
+    if not ins.data:
+        raise RuntimeError('Không lưu được xác nhận VT')
+    return ins.data[0]
+
+
 def lock_cycle_reports(supabase, ctx: UserContext, cycle_id: str) -> dict:
     if not can_lock(ctx, supabase):
         raise PermissionError('Không có quyền chốt báo cáo')
@@ -434,12 +610,23 @@ def lock_cycle_reports(supabase, ctx: UserContext, cycle_id: str) -> dict:
     if task_ids:
         supabase.table('tbkl_reports').update({'locked': True}).in_('task_id', task_ids).execute()
 
+    dir_ids = _directive_ids_for_cycle(supabase, cycle_id)
+    if dir_ids:
+        supabase.table('tbkl_directive_reports').update({'locked': True}).in_(
+            'directive_id', dir_ids
+        ).execute()
+
     supabase.table('tbkl_cycles').update({
         'status': 'locked',
         'updated_at': _now_iso(),
     }).eq('id', cycle_id).execute()
 
-    return {'locked': True, 'task_count': len(task_ids)}
+    return {'locked': True, 'task_count': len(task_ids), 'directive_count': len(dir_ids)}
+
+
+def _directive_ids_for_cycle(supabase, cycle_id: str) -> list[str]:
+    dirs = supabase.table('tbkl_directives').select('id').eq('cycle_id', cycle_id).execute()
+    return [d['id'] for d in (dirs.data or [])]
 
 
 def _task_ids_for_cycle(supabase, cycle_id: str) -> list[str]:
@@ -484,6 +671,7 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str, *, unit_only: boo
 
     task_ids = [t['id'] for t in tasks]
     reports = _latest_reports_map(supabase, task_ids)
+    dir_reports = _latest_directive_reports_map(supabase, dir_ids)
     cycle_locked = cycle.get('status') == 'locked'
     unit_view = unit_only or is_unit_reporter_only(ctx, supabase)
     dept_name = user_department_name(ctx, supabase)
@@ -550,12 +738,38 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str, *, unit_only: boo
             continue
         child = [r for r in rows if r['directive_id'] == d['id']]
         rags = [r['rag'] for r in child] if child else ['gray']
-        d_rag = 'red' if 'red' in rags else ('yellow' if 'yellow' in rags else ('green' if child and all(x == 'green' for x in rags) else 'gray'))
+        child_rag = 'red' if 'red' in rags else ('yellow' if 'yellow' in rags else ('green' if child and all(x == 'green' for x in rags) else 'gray'))
+        rep = dir_reports.get(d['id'])
+        progress = float(rep.get('progress_pct') or 0) if rep else 0
+        status = rep.get('status') if rep else 'not_started'
+        assessed = bool(rep and rep.get('assessed_at'))
+        confirmed = bool(rep and rep.get('confirmed_at'))
+        confirmed_pct = float(rep.get('confirmed_pct') or 0) if confirmed else None
+        confirmed_status = rep.get('confirmed_status') if confirmed else None
+        directive_rag = _directive_display_rag(rep, d, cycle_locked=cycle_locked)
+        display_rag = directive_rag if rep else child_rag
         directive_summaries.append({
             **d,
             'priority_label': _priority_label(d.get('priority')),
-            'rag': d_rag,
+            'rag': display_rag,
+            'directive_rag': directive_rag,
+            'child_rag': child_rag,
             'task_count': len(child),
+            'progress_pct': progress,
+            'status': status,
+            'status_label': _status_label(status),
+            'assessed_at': rep.get('assessed_at') if rep else None,
+            'is_assessed': assessed,
+            'confirmed_pct': confirmed_pct,
+            'confirmed_status': confirmed_status,
+            'confirmed_status_label': _status_label(confirmed_status) if confirmed_status else None,
+            'confirmed_at': rep.get('confirmed_at') if rep else None,
+            'is_confirmed': confirmed,
+            'note': rep.get('note') if rep else None,
+            'week_label': rep.get('week_label') if rep else _week_label(),
+            'report_locked': bool(rep.get('locked')) if rep else False,
+            'can_assess_directive': can_assess_directive(ctx, supabase),
+            'can_confirm_directive': can_confirm_directive(ctx, supabase),
             'avg_progress': round(
                 sum(r['progress_pct'] for r in child) / len(child), 1
             ) if child else 0,
@@ -592,6 +806,8 @@ def build_dashboard(supabase, ctx: UserContext, cycle_id: str, *, unit_only: boo
             'can_operate': can_operate(ctx, supabase),
             'can_update_attachments': can_update_attachments(ctx, supabase),
             'can_confirm': can_confirm(ctx, supabase),
+            'can_assess_directive': can_assess_directive(ctx, supabase),
+            'can_confirm_directive': can_confirm_directive(ctx, supabase),
             'can_report': can_report(ctx, supabase),
             'can_lock': can_lock(ctx, supabase),
             'is_planning_dept': is_planning_department(ctx, supabase),

@@ -8,8 +8,10 @@ from flask import Blueprint, jsonify, request, send_file
 
 from modules.tbkl.decorators import (
     require_tbkl_admin,
+    require_tbkl_assess_directive,
     require_tbkl_attachments,
     require_tbkl_auth,
+    require_tbkl_confirm_directive,
     require_tbkl_lock,
     require_tbkl_operate,
     require_tbkl_planning,
@@ -20,8 +22,10 @@ from modules.tbkl import plan_service as plan_svc
 from modules.tbkl import storage_service as storage_svc
 from modules.tbkl.rbac import (
     can_admin,
+    can_assess_directive,
     can_assign,
     can_confirm,
+    can_confirm_directive,
     can_lock,
     can_manage,
     can_operate,
@@ -64,6 +68,8 @@ def api_tbkl_context():
             'can_operate': can_operate(ctx, sb),
             'can_update_attachments': can_update_attachments(ctx, sb),
             'can_confirm': can_confirm(ctx, sb),
+            'can_assess_directive': can_assess_directive(ctx, sb),
+            'can_confirm_directive': can_confirm_directive(ctx, sb),
             'can_assign': can_assign(ctx, sb),
             'can_report': can_report(ctx, sb),
             'can_lock': can_lock(ctx, sb),
@@ -291,6 +297,40 @@ def api_create_task(directive_id):
         return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as exc:
         print(f'api_create_task: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@tbkl_bp.route('/api/tbkl/directives/<directive_id>/assess', methods=['POST'])
+@require_tbkl_assess_directive
+def api_assess_directive(directive_id):
+    try:
+        doc = svc.assess_directive_report(_supabase(), _ctx(), directive_id, request.json or {})
+        return jsonify({'success': True, 'report': doc})
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception as exc:
+        print(f'api_assess_directive: {exc}')
+        return jsonify({'success': False, 'message': str(exc)}), 500
+
+
+@tbkl_bp.route('/api/tbkl/directives/<directive_id>/confirm', methods=['POST'])
+@require_tbkl_confirm_directive
+def api_confirm_directive(directive_id):
+    try:
+        doc = svc.confirm_directive_report(_supabase(), _ctx(), directive_id, request.json or {})
+        return jsonify({'success': True, 'report': doc})
+    except LookupError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 404
+    except PermissionError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception as exc:
+        print(f'api_confirm_directive: {exc}')
         return jsonify({'success': False, 'message': str(exc)}), 500
 
 

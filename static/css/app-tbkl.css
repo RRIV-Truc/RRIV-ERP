@@ -480,6 +480,9 @@
   border-radius: 6px; font-size: 0.78rem; max-width: 220px;
 }
 .tbkl-plan-row-directive { background: #ecfdf5; }
+.tbkl-directive-progress-row { background: #ecfdf5; }
+.tbkl-directive-progress-row td { font-weight: 600; vertical-align: middle; }
+.tbkl-directive-progress-row .tbkl-task-title { color: var(--tbkl-primary-dark); }
 .tbkl-plan-row-directive td { font-weight: 600; }
 .tbkl-plan-row-task td:first-child { padding-left: 18px; color: var(--tbkl-muted); }
 .tbkl-plan-code { font-family: ui-monospace, monospace; white-space: nowrap; font-size: 0.78rem; }

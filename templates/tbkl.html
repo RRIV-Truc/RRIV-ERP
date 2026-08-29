@@ -7,7 +7,7 @@
 <title>Theo dõi Kết luận Họp</title>
 <meta name="theme-color" content="#065f46">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-<link rel="stylesheet" href="/static/css/app-tbkl.css?v=9">
+<link rel="stylesheet" href="/static/css/app-tbkl.css?v=10">
 </head>
 <body class="tbkl-body">
 
@@ -148,8 +148,8 @@
             <th>Trách nhiệm chung</th>
             <th>Đơn vị TH</th>
             <th>Hạn</th>
-            <th>% ĐV báo cáo</th>
-            <th>% PKH xác nhận</th>
+            <th title="ĐV báo cáo (mục con) · Phòng KHCN đánh giá (mục lớn)">% Tiến độ</th>
+            <th title="Phòng KHCN xác nhận (mục con) · Viện trưởng/Thư ký xác nhận (mục lớn)">% Xác nhận</th>
             <th>Trạng thái</th>
             <th>Khó khăn / Giải pháp</th>
             <th></th>
@@ -383,7 +383,7 @@
   <div class="tbkl-modal-backdrop" data-close="modalConfirm"></div>
   <div class="tbkl-modal-box tbkl-modal-wide">
     <header class="tbkl-modal-head">
-      <h2 id="confirmModalTitle">Phòng KH xác nhận tiến độ</h2>
+      <h2 id="confirmModalTitle">Phòng KHCN xác nhận tiến độ (mục con)</h2>
       <button type="button" class="tbkl-btn-icon" data-close="modalConfirm">✕</button>
     </header>
     <form id="formConfirm" class="tbkl-form">
@@ -412,10 +412,83 @@
   </div>
 </div>
 
+</div>
+
+<!-- Modal: KHCN đánh giá mục lớn -->
+<div class="tbkl-modal" id="modalAssessDirective" hidden>
+  <div class="tbkl-modal-backdrop" data-close="modalAssessDirective"></div>
+  <div class="tbkl-modal-box tbkl-modal-wide">
+    <header class="tbkl-modal-head">
+      <h2>Phòng KHCN đánh giá tiến độ mục lớn</h2>
+      <button type="button" class="tbkl-btn-icon" data-close="modalAssessDirective">✕</button>
+    </header>
+    <form id="formAssessDirective" class="tbkl-form">
+      <input type="hidden" name="directive_id" id="assessDirectiveId">
+      <p class="tbkl-report-meta" id="assessDirectiveMeta"></p>
+      <p class="tbkl-field-hint">Đánh giá tổng thể mục kết luận lớn — Viện trưởng/Thư ký sẽ xác nhận sau.</p>
+      <div class="tbkl-form-row">
+        <label>Tiến độ đánh giá (%)
+          <input type="number" name="progress_pct" min="0" max="100" step="1" value="0" required>
+        </label>
+        <label>Trạng thái
+          <select name="status">
+            <option value="not_started">Chưa thực hiện</option>
+            <option value="in_progress" selected>Đang thực hiện</option>
+            <option value="at_risk">Có nguy cơ trễ</option>
+            <option value="completed">Hoàn thành</option>
+            <option value="blocked">Tạm dừng / vướng</option>
+          </select>
+        </label>
+      </div>
+      <label>Ghi chú đánh giá
+        <textarea name="note" rows="2" placeholder="Nhận xét tổng hợp từ các đầu việc con…"></textarea>
+      </label>
+      <footer class="tbkl-modal-foot">
+        <button type="button" class="tbkl-btn tbkl-btn-outline" data-close="modalAssessDirective">Huỷ</button>
+        <button type="submit" class="tbkl-btn tbkl-btn-primary">Lưu đánh giá KHCN</button>
+      </footer>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: VT/Thư ký xác nhận mục lớn -->
+<div class="tbkl-modal" id="modalConfirmDirective" hidden>
+  <div class="tbkl-modal-backdrop" data-close="modalConfirmDirective"></div>
+  <div class="tbkl-modal-box tbkl-modal-wide">
+    <header class="tbkl-modal-head">
+      <h2>Viện trưởng / Thư ký xác nhận mục lớn</h2>
+      <button type="button" class="tbkl-btn-icon" data-close="modalConfirmDirective">✕</button>
+    </header>
+    <form id="formConfirmDirective" class="tbkl-form">
+      <input type="hidden" name="directive_id" id="confirmDirectiveId">
+      <p class="tbkl-report-meta" id="confirmDirectiveMeta"></p>
+      <p class="tbkl-field-hint" id="confirmDirectiveKhcnHint"></p>
+      <div class="tbkl-form-row">
+        <label>Tiến độ xác nhận (%)
+          <input type="number" name="confirmed_pct" min="0" max="100" step="1" value="0" required>
+        </label>
+        <label>Đánh giá trạng thái
+          <select name="confirmed_status">
+            <option value="not_started">Chưa thực hiện</option>
+            <option value="in_progress" selected>Đang thực hiện</option>
+            <option value="at_risk">Có nguy cơ trễ</option>
+            <option value="completed">Hoàn thành</option>
+            <option value="blocked">Tạm dừng / vướng</option>
+          </select>
+        </label>
+      </div>
+      <footer class="tbkl-modal-foot">
+        <button type="button" class="tbkl-btn tbkl-btn-outline" data-close="modalConfirmDirective">Huỷ</button>
+        <button type="submit" class="tbkl-btn tbkl-btn-primary">Lưu xác nhận VT</button>
+      </footer>
+    </form>
+  </div>
+</div>
+
 <script src="/static/js/tbkl/permissions.js?v=5"></script>
-<script src="/static/js/tbkl/services.js?v=6"></script>
+<script src="/static/js/tbkl/services.js?v=7"></script>
 <script src="/static/js/tbkl/org-units.js?v=2"></script>
 <script src="/static/js/tbkl/plan-editor.js?v=3"></script>
-<script src="/static/js/tbkl/main.js?v=12"></script>
+<script src="/static/js/tbkl/main.js?v=13"></script>
 </body>
 </html>

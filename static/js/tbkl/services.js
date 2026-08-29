@@ -131,6 +131,16 @@
         method: 'POST', body: JSON.stringify(payload || {})
       });
     },
+    assessDirective: function (directiveId, payload) {
+      return apiFetch('/directives/' + encodeURIComponent(directiveId) + '/assess', {
+        method: 'POST', body: JSON.stringify(payload || {})
+      });
+    },
+    confirmDirective: function (directiveId, payload) {
+      return apiFetch('/directives/' + encodeURIComponent(directiveId) + '/confirm', {
+        method: 'POST', body: JSON.stringify(payload || {})
+      });
+    },
     uploadCycleAttachments: function (cycleId, formData) {
       var url = API + '/cycles/' + encodeURIComponent(cycleId) + '/attachments?username=' +
         encodeURIComponent(username());

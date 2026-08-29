@@ -39,9 +39,9 @@ INSERT INTO role_definitions (
   ),
   (
     'tbkl_leader', 'tbkl_leader', 'Ban lãnh đạo',
-    '["tbkl:view","tbkl:manage"]'::jsonb,
+    '["tbkl:view","tbkl:manage","tbkl:confirm_leader"]'::jsonb,
     '{"app_id":"tbkl","role_id":"leader","is_active":true}'::jsonb,
-    'tbkl', 'Ban lãnh đạo', 'Xem toàn Viện, giám sát đơn vị',
+    'tbkl', 'Ban lãnh đạo', 'Xem toàn Viện, xác nhận tiến độ mục lớn (VT/Thư ký)',
     true, 'all', '{}'::jsonb, 30, now()
   ),
   (
