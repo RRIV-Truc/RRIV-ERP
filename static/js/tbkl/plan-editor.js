@@ -311,7 +311,16 @@
       '<button type="button" class="tbkl-btn tbkl-btn-sm tbkl-btn-outline" data-pe-action="add-directive">+ Mục kết luận lớn</button>' +
       '<span class="tbkl-plan-hint">Mã tự sinh: H' + seq + '-01, H' + seq + '-01-01…</span></div>';
 
-    html += '<div class="tbkl-plan-table-wrap"><table class="tbkl-plan-table"><thead><tr>' +
+    html += '<div class="tbkl-plan-table-wrap"><table class="tbkl-plan-table">' +
+      '<colgroup>' +
+      '<col class="tbkl-plan-col-code">' +
+      '<col class="tbkl-plan-col-text">' +
+      '<col class="tbkl-plan-col-sp">' +
+      '<col class="tbkl-plan-col-lead">' +
+      '<col class="tbkl-plan-col-unit">' +
+      '<col class="tbkl-plan-col-date">' +
+      '<col class="tbkl-plan-col-act">' +
+      '</colgroup><thead><tr>' +
       '<th class="tbkl-plan-col-code">Mã</th>' +
       '<th class="tbkl-plan-col-text">Kết luận / Đầu việc</th>' +
       '<th class="tbkl-plan-col-sp">Sản phẩm</th>' +
@@ -329,8 +338,8 @@
           'Nội dung kết luận lớn…', dirText, 4) + '</td>' +
         '<td>' + planTextarea('directive', 'data-pe-dir="' + dir._id + '"', 'deliverable',
           'Sản phẩm / kết quả lớn (nếu có)…', dir.deliverable || '', 3) + '</td>' +
-        '<td>' + self._sharedSelect(dir) + '</td>' +
-        '<td>' + self._directiveExecutorSelect(dir) + '</td>' +
+        '<td class="tbkl-plan-col-lead">' + self._sharedSelect(dir) + '</td>' +
+        '<td class="tbkl-plan-col-unit">' + self._directiveExecutorSelect(dir) + '</td>' +
         '<td><input type="date" data-pe-kind="directive" data-pe-dir="' + dir._id + '" data-pe-field="deadline" value="' + escapeHtml(dir.deadline) + '"></td>' +
         '<td class="tbkl-plan-actions">' +
         '<button type="button" class="tbkl-btn tbkl-btn-sm tbkl-btn-outline" data-pe-action="add-task" data-pe-dir="' + dir._id + '" title="Thêm đầu việc con">+ Con</button> ' +
@@ -344,8 +353,8 @@
             'Đầu việc chi tiết…', task.title, 4) + '</td>' +
           '<td>' + planTextarea('task', 'data-pe-dir="' + dir._id + '" data-pe-task="' + task._id + '"', 'deliverable',
             'Sản phẩm / kết quả…', task.deliverable || '', 3) + '</td>' +
-          '<td>—</td>' +
-          '<td>' + self._executorSelect(dir, task) + '</td>' +
+          '<td class="tbkl-plan-col-lead">—</td>' +
+          '<td class="tbkl-plan-col-unit">' + self._executorSelect(dir, task) + '</td>' +
           '<td><input type="date" data-pe-kind="task" data-pe-dir="' + dir._id + '" data-pe-task="' + task._id + '" data-pe-field="deadline" value="' + escapeHtml(task.deadline) + '"></td>' +
           '<td class="tbkl-plan-actions">' +
           '<button type="button" class="tbkl-btn tbkl-btn-sm tbkl-btn-danger" data-pe-action="remove-task" data-pe-dir="' + dir._id + '" data-pe-task="' + task._id + '">✕</button></td></tr>';
