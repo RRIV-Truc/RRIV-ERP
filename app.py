@@ -1400,7 +1400,10 @@ def admin_database_backup():
         print(f'admin_database_backup: {exc}')
         return jsonify({
             "success": False,
-            "message": "Không tạo được backup. Kiểm tra SUPABASE_DB_PASSWORD trên Render và thử lại.",
+            "message": (
+                "Không tạo được backup. Kiểm tra SUPABASE_DB_PASSWORD trên Render; "
+                "Supabase → Database → Network — tắt giới hạn IP nếu đang bật."
+            ),
         }), 500
 
     saved_path = save_backup_to_local_dir(content, filename)

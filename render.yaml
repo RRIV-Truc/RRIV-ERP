@@ -41,3 +41,5 @@ services:
         sync: false
       - key: SUPABASE_DB_PASSWORD
         sync: false
+      - key: DATABASE_URL
+        sync: false
