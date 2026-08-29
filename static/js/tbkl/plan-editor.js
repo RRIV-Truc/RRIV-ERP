@@ -261,8 +261,8 @@
   };
 
   function planTextarea(kind, attrs, field, placeholder, value, rows) {
-    var r = rows || 2;
-    var rowClass = r >= 3 ? ' tbkl-plan-text-lg' : '';
+    var r = rows || 3;
+    var rowClass = r >= 4 ? ' tbkl-plan-text-xl' : (r >= 3 ? ' tbkl-plan-text-lg' : '');
     return '<textarea rows="' + r + '" class="tbkl-plan-text' + rowClass + '" data-pe-kind="' + kind + '" ' + attrs +
       ' data-pe-field="' + field + '" placeholder="' + escapeHtml(placeholder) + '">' +
       escapeHtml(value) + '</textarea>';
@@ -324,9 +324,9 @@
       html += '<tr class="tbkl-plan-row-directive">' +
         '<td class="tbkl-plan-code">' + escapeHtml(dCode) + '</td>' +
         '<td>' + planTextarea('directive', 'data-pe-dir="' + dir._id + '"', 'title',
-          'Nội dung kết luận lớn…', dirText, 3) + '</td>' +
+          'Nội dung kết luận lớn…', dirText, 4) + '</td>' +
         '<td>' + planTextarea('directive', 'data-pe-dir="' + dir._id + '"', 'deliverable',
-          'Sản phẩm / kết quả lớn (nếu có)…', dir.deliverable || '', 2) + '</td>' +
+          'Sản phẩm / kết quả lớn (nếu có)…', dir.deliverable || '', 3) + '</td>' +
         '<td>' + self._sharedSelect(dir) + '</td>' +
         '<td>' + self._directiveExecutorSelect(dir) + '</td>' +
         '<td><input type="date" data-pe-kind="directive" data-pe-dir="' + dir._id + '" data-pe-field="deadline" value="' + escapeHtml(dir.deadline) + '"></td>' +
@@ -339,9 +339,9 @@
         html += '<tr class="tbkl-plan-row-task">' +
           '<td class="tbkl-plan-code">' + escapeHtml(tCode) + '</td>' +
           '<td>' + planTextarea('task', 'data-pe-dir="' + dir._id + '" data-pe-task="' + task._id + '"', 'title',
-            'Đầu việc chi tiết…', task.title, 3) + '</td>' +
+            'Đầu việc chi tiết…', task.title, 4) + '</td>' +
           '<td>' + planTextarea('task', 'data-pe-dir="' + dir._id + '" data-pe-task="' + task._id + '"', 'deliverable',
-            'Sản phẩm / kết quả…', task.deliverable || '', 2) + '</td>' +
+            'Sản phẩm / kết quả…', task.deliverable || '', 3) + '</td>' +
           '<td>—</td>' +
           '<td>' + self._executorSelect(dir, task) + '</td>' +
           '<td><input type="date" data-pe-kind="task" data-pe-dir="' + dir._id + '" data-pe-task="' + task._id + '" data-pe-field="deadline" value="' + escapeHtml(task.deadline) + '"></td>' +

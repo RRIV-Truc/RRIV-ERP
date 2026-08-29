@@ -435,7 +435,7 @@
   box-shadow: 0 20px 40px rgba(0,0,0,0.15);
 }
 .tbkl-modal-wide { max-width: 560px; }
-.tbkl-modal-xl { max-width: min(1120px, 98vw); }
+.tbkl-modal-xl { max-width: min(1180px, 98vw); }
 .tbkl-modal-head {
   display: flex; justify-content: space-between; align-items: center;
   padding: 14px 16px; border-bottom: 1px solid #f1f5f9;
@@ -492,26 +492,31 @@
 
 .tbkl-plan-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 8px; }
 .tbkl-plan-hint { font-size: 0.78rem; color: var(--tbkl-muted); }
-.tbkl-plan-table-wrap { overflow: auto; max-height: min(560px, 65vh); border: 1px solid #e2e8f0; border-radius: 8px; }
-.tbkl-plan-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; min-width: 980px; }
+#cyclePlanEditor,
+#editPlanEditor { width: 100%; }
+.tbkl-plan-table-wrap { overflow: auto; max-height: min(620px, 70vh); border: 1px solid #e2e8f0; border-radius: 8px; width: 100%; }
+.tbkl-plan-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; min-width: 1040px; table-layout: fixed; }
 .tbkl-plan-table th {
   position: sticky; top: 0; background: #f1f5f9; text-align: left;
-  padding: 8px 6px; border-bottom: 1px solid #e2e8f0; white-space: nowrap;
+  padding: 10px 8px; border-bottom: 1px solid #e2e8f0; white-space: nowrap;
 }
-.tbkl-plan-col-text { min-width: 300px; width: 34%; }
-.tbkl-plan-col-sp { min-width: 180px; width: 22%; }
-.tbkl-plan-table td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+.tbkl-plan-col-text { width: 36%; min-width: 320px; }
+.tbkl-plan-col-sp { width: 24%; min-width: 200px; }
+.tbkl-plan-table td { padding: 8px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
 .tbkl-plan-table input,
 .tbkl-plan-table textarea.tbkl-plan-text {
-  width: 100%; min-width: 0; padding: 8px 10px; border: 1px solid #e2e8f0;
-  border-radius: 6px; font-size: 0.82rem; font-family: inherit; line-height: 1.45;
-  box-sizing: border-box;
+  width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid #cbd5e1;
+  border-radius: 8px; font-size: 0.84rem; font-family: inherit; line-height: 1.5;
+  box-sizing: border-box; background: #fff;
 }
 .tbkl-plan-table textarea.tbkl-plan-text {
-  min-height: 2.8em; resize: vertical; display: block;
+  min-height: 3.2em; resize: vertical; display: block;
 }
 .tbkl-plan-table textarea.tbkl-plan-text-lg {
-  min-height: 4.5em;
+  min-height: 5.5em;
+}
+.tbkl-plan-table textarea.tbkl-plan-text-xl {
+  min-height: 7em;
 }
 .tbkl-plan-table select.tbkl-plan-select,
 .tbkl-plan-table select {
