@@ -9,10 +9,14 @@ const RrivAdminBackup = (function () {
   var IDB_KEY = 'backupDir';
   var DEFAULT_DIR_HINT = 'D:\\BackupSQL';
 
+  var BACKUP_ADMIN_USERNAMES = ['rriv.nttruc', 'rriv.admin'];
+
   function isGlobalAdminClient(user) {
     if (!user) return false;
     if (user.isSuperAdmin === true) return true;
     if (String(user.role || '').toLowerCase() === 'admin') return true;
+    var uname = String(user.username || '').toLowerCase();
+    if (BACKUP_ADMIN_USERNAMES.indexOf(uname) >= 0) return true;
     var roles = user.systemRoles || user.system_roles || [];
     for (var i = 0; i < roles.length; i++) {
       var n = String(roles[i] || '').toLowerCase().replace(/_/g, '');

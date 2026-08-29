@@ -1366,23 +1366,22 @@ def get_profile():
 @app.route('/api/admin/backup-eligible', methods=['GET'])
 def admin_backup_eligible():
     """Kiểm tra user có được dùng nút backup trên hub không."""
+    from modules.admin.permissions import can_database_backup
+    from modules.admin.decorators import resolve_api_username
     from modules.meetings.rbac import load_user_context
 
-    username = (
-        request.headers.get('X-RRIV-Username')
-        or request.args.get('username')
-        or ''
-    ).strip().lower()
+    username = resolve_api_username()
     if not username:
         return jsonify({'eligible': False})
     ctx = load_user_context(supabase, username)
-    return jsonify({'eligible': bool(ctx and ctx.is_global_admin)})
+    return jsonify({'eligible': can_database_backup(ctx)})
 
 
 @app.route('/api/admin/database-backup', methods=['POST'])
 def admin_database_backup():
     """Backup Supabase public schema — chỉ global admin."""
-    from modules.admin.decorators import require_global_admin, resolve_api_username
+    from modules.admin.permissions import can_database_backup
+    from modules.admin.decorators import resolve_api_username
     from modules.admin.backup_service import create_backup_bytes, save_backup_to_local_dir
     from modules.meetings.rbac import load_user_context
 
@@ -1390,7 +1389,7 @@ def admin_database_backup():
     if not username:
         return jsonify({"success": False, "message": "Thiếu username"}), 401
     ctx = load_user_context(supabase, username)
-    if not ctx or not ctx.is_global_admin:
+    if not can_database_backup(ctx):
         return jsonify({"success": False, "message": "Chỉ admin hệ thống mới thao tác này"}), 403
 
     try:

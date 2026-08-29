@@ -169,7 +169,7 @@ def load_user_context(supabase, username: str) -> Optional[UserContext]:
     if employee_id:
         try:
             emp = supabase.table('employee').select(
-                'id, department_id, app_roles_cache'
+                'id, department_id, app_roles_cache, erp_role'
             ).eq('id', employee_id).limit(1).execute()
             if emp.data:
                 row = emp.data[0]
@@ -178,6 +178,9 @@ def load_user_context(supabase, username: str) -> Optional[UserContext]:
                 cache = row.get('app_roles_cache')
                 if isinstance(cache, dict):
                     app_roles_cache = cache
+                emp_role = (row.get('erp_role') or '').strip()
+                if emp_role:
+                    erp_role = emp_role
         except Exception as exc:
             print(f'[meetings.rbac] employee: {exc}')
 
