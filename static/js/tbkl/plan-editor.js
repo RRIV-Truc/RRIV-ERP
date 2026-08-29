@@ -312,10 +312,12 @@
       '<span class="tbkl-plan-hint">Mã tự sinh: H' + seq + '-01, H' + seq + '-01-01…</span></div>';
 
     html += '<div class="tbkl-plan-table-wrap"><table class="tbkl-plan-table"><thead><tr>' +
-      '<th>Mã</th>' +
+      '<th class="tbkl-plan-col-code">Mã</th>' +
       '<th class="tbkl-plan-col-text">Kết luận / Đầu việc</th>' +
       '<th class="tbkl-plan-col-sp">Sản phẩm</th>' +
-      '<th>Trách nhiệm chung</th><th>Đơn vị TH</th><th>Hạn</th><th></th>' +
+      '<th class="tbkl-plan-col-lead">Trách nhiệm chung</th>' +
+      '<th class="tbkl-plan-col-unit">Đơn vị TH</th>' +
+      '<th class="tbkl-plan-col-date">Hạn</th><th class="tbkl-plan-col-act"></th>' +
       '</tr></thead><tbody>';
 
     this.directives.forEach(function (dir, di) {

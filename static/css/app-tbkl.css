@@ -436,6 +436,33 @@
 }
 .tbkl-modal-wide { max-width: 560px; }
 .tbkl-modal-xl { max-width: min(1180px, 98vw); }
+.tbkl-modal-fullscreen {
+  width: min(1600px, 98vw);
+  max-width: 98vw;
+  height: min(960px, 96vh);
+  max-height: 96vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.tbkl-modal-fullscreen .tbkl-modal-head { flex-shrink: 0; }
+.tbkl-modal-fullscreen .tbkl-form {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.tbkl-modal-fullscreen #cyclePlanEditor,
+.tbkl-modal-fullscreen #editPlanEditor {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tbkl-modal-fullscreen .tbkl-plan-toolbar { flex-shrink: 0; }
+.tbkl-modal-fullscreen .tbkl-plan-excel-actions,
+.tbkl-modal-fullscreen .tbkl-modal-foot { flex-shrink: 0; }
 .tbkl-modal-head {
   display: flex; justify-content: space-between; align-items: center;
   padding: 14px 16px; border-bottom: 1px solid #f1f5f9;
@@ -494,14 +521,29 @@
 .tbkl-plan-hint { font-size: 0.78rem; color: var(--tbkl-muted); }
 #cyclePlanEditor,
 #editPlanEditor { width: 100%; }
+.tbkl-modal-fullscreen .tbkl-plan-table-wrap {
+  flex: 1;
+  min-height: 280px;
+  max-height: none;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  width: 100%;
+}
 .tbkl-plan-table-wrap { overflow: auto; max-height: min(620px, 70vh); border: 1px solid #e2e8f0; border-radius: 8px; width: 100%; }
-.tbkl-plan-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; min-width: 1040px; table-layout: fixed; }
+.tbkl-plan-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; min-width: 1320px; table-layout: fixed; }
 .tbkl-plan-table th {
   position: sticky; top: 0; background: #f1f5f9; text-align: left;
   padding: 10px 8px; border-bottom: 1px solid #e2e8f0; white-space: nowrap;
+  z-index: 1;
 }
-.tbkl-plan-col-text { width: 36%; min-width: 320px; }
-.tbkl-plan-col-sp { width: 24%; min-width: 200px; }
+.tbkl-plan-col-code { width: 5%; min-width: 72px; }
+.tbkl-plan-col-text { width: 24%; min-width: 220px; }
+.tbkl-plan-col-sp { width: 16%; min-width: 150px; }
+.tbkl-plan-col-lead { width: 22%; min-width: 260px; }
+.tbkl-plan-col-unit { width: 22%; min-width: 260px; }
+.tbkl-plan-col-date { width: 9%; min-width: 118px; }
+.tbkl-plan-col-act { width: 6%; min-width: 72px; }
 .tbkl-plan-table td { padding: 8px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
 .tbkl-plan-table input,
 .tbkl-plan-table textarea.tbkl-plan-text {
@@ -520,8 +562,9 @@
 }
 .tbkl-plan-table select.tbkl-plan-select,
 .tbkl-plan-table select {
-  width: 100%; min-width: 0; padding: 5px 6px; border: 1px solid #e2e8f0;
-  border-radius: 6px; font-size: 0.78rem; max-width: 220px;
+  width: 100%; min-width: 0; max-width: none; padding: 8px 10px;
+  border: 1px solid #e2e8f0; border-radius: 6px; font-size: 0.78rem;
+  line-height: 1.35; white-space: normal;
 }
 .tbkl-plan-row-directive { background: #ecfdf5; }
 .tbkl-directive-progress-row { background: #ecfdf5; }
