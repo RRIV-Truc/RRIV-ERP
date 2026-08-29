@@ -90,6 +90,7 @@ def _rows_to_plan(rows: list[dict]) -> dict:
             current = {
                 'title': payload['title'],
                 'content': payload['content'] or payload['title'],
+                'deliverable': payload['deliverable'] or None,
                 'lead_department_name': payload['lead_department_name'] or None,
                 'executor_unit_name': payload['owner_unit_name'] or None,
                 'supervisor_name': payload['supervisor_name'] or None,
@@ -173,7 +174,7 @@ def generate_template_xlsx(meeting_seq: int = 1) -> bytes:
         cell.fill = header_fill
 
     samples = [
-        ('Lớn', f'H{meeting_seq}-01', 'Thực hiện kế hoạch sản lượng mủ cao su 744 tấn năm 2026', '', 'Phó Viện trưởng Nguyễn Đôn Hiệu', 'Các đơn vị (phối hợp nhiều đơn vị)', '2026-12-31'),
+        ('Lớn', f'H{meeting_seq}-01', 'Thực hiện kế hoạch sản lượng mủ cao su 744 tấn năm 2026', 'Kế hoạch sản lượng 744 tấn hoàn thành', 'Phó Viện trưởng Nguyễn Đôn Hiệu', 'Các đơn vị (phối hợp nhiều đơn vị)', '2026-12-31'),
         ('Chi tiết', f'H{meeting_seq}-01-01', 'Xây dựng phương án điều hành sản lượng', 'Phương án điều hành', 'Phòng khoa học công nghệ', 'Trung tâm nghiên cứu phát triển sản phẩm mới', '2026-08-31'),
         ('Chi tiết', f'H{meeting_seq}-01-02', 'Thiết lập Dashboard điều hành sản lượng mủ', 'Dashboard cập nhật tuần', 'Phòng khoa học công nghệ', 'Phòng khoa học công nghệ', '2026-09-15'),
         ('Lớn', f'H{meeting_seq}-02', 'Tổ chức và Quy chế hoạt động…', '', 'Phó Viện trưởng Trần Ánh Pha', '', '2026-10-31'),
@@ -240,6 +241,7 @@ def publish_plan(
         d_payload = {
             'title': (d.get('title') or '').strip() or 'Kết luận',
             'content': content,
+            'deliverable': (d.get('deliverable') or '').strip() or None,
             'lead_department_id': lead_id,
             'lead_department_name': lead_name,
             'supervisor_name': supervisor,

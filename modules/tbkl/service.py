@@ -223,6 +223,7 @@ def create_directive(supabase, ctx: UserContext, cycle_id: str, payload: dict) -
         'code': code,
         'title': (payload.get('title') or '').strip() or f'Kết luận {code}',
         'content': (payload.get('content') or '').strip() or None,
+        'deliverable': (payload.get('deliverable') or '').strip() or None,
         'lead_department_id': payload.get('lead_department_id') or None,
         'lead_department_name': (payload.get('lead_department_name') or '').strip() or None,
         'supervisor_name': (payload.get('supervisor_name') or '').strip() or None,

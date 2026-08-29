@@ -33,6 +33,7 @@
       lead_department_name: '',
       executor_unit_id: '',
       executor_unit_name: '',
+      deliverable: '',
       supervisor_name: '',
       deadline: '',
       tasks: []
@@ -90,6 +91,7 @@
         lead_department_name: leadName || '',
         executor_unit_id: execId || '',
         executor_unit_name: execName || '',
+        deliverable: d.deliverable || '',
         supervisor_name: d.supervisor_name || '',
         deadline: d.deadline || '',
         tasks: (d.tasks || []).map(function (t) {
@@ -127,6 +129,7 @@
           lead_department_name: (leadName || '').trim() || null,
           executor_unit_id: execId && execId !== '__legacy__' ? execId : null,
           executor_unit_name: (execName || '').trim() || null,
+          deliverable: (d.deliverable || '').trim() || null,
           supervisor_name: (d.supervisor_name || '').trim() || null,
           deadline: d.deadline || null,
           tasks: (d.tasks || []).map(function (t) {
@@ -229,7 +232,10 @@
         var field = el.getAttribute('data-pe-field');
         if (kind === 'directive') {
           var dir = self.directives.find(function (d) { return d._id === dirId; });
-          if (dir) dir[field] = el.value;
+          if (dir) {
+            dir[field] = el.value;
+            if (field === 'title') dir.content = el.value;
+          }
         } else if (kind === 'task') {
           var d2 = self.directives.find(function (d) { return d._id === dirId; });
           if (d2) {
@@ -253,6 +259,14 @@
       });
     });
   };
+
+  function planTextarea(kind, attrs, field, placeholder, value, rows) {
+    var r = rows || 2;
+    var rowClass = r >= 3 ? ' tbkl-plan-text-lg' : '';
+    return '<textarea rows="' + r + '" class="tbkl-plan-text' + rowClass + '" data-pe-kind="' + kind + '" ' + attrs +
+      ' data-pe-field="' + field + '" placeholder="' + escapeHtml(placeholder) + '">' +
+      escapeHtml(value) + '</textarea>';
+  }
 
   PlanEditor.prototype._sharedSelect = function (dir) {
     var ou = orgUnits();
@@ -298,16 +312,21 @@
       '<span class="tbkl-plan-hint">Mã tự sinh: H' + seq + '-01, H' + seq + '-01-01…</span></div>';
 
     html += '<div class="tbkl-plan-table-wrap"><table class="tbkl-plan-table"><thead><tr>' +
-      '<th>Mã</th><th>Kết luận / Đầu việc</th><th>SP</th><th>Trách nhiệm chung</th><th>Đơn vị TH</th><th>Hạn</th><th></th>' +
+      '<th>Mã</th>' +
+      '<th class="tbkl-plan-col-text">Kết luận / Đầu việc</th>' +
+      '<th class="tbkl-plan-col-sp">Sản phẩm</th>' +
+      '<th>Trách nhiệm chung</th><th>Đơn vị TH</th><th>Hạn</th><th></th>' +
       '</tr></thead><tbody>';
 
     this.directives.forEach(function (dir, di) {
       var dCode = directiveCode(seq, di + 1);
+      var dirText = dir.title || dir.content || '';
       html += '<tr class="tbkl-plan-row-directive">' +
         '<td class="tbkl-plan-code">' + escapeHtml(dCode) + '</td>' +
-        '<td><input type="text" data-pe-kind="directive" data-pe-dir="' + dir._id + '" data-pe-field="title" ' +
-        'placeholder="Nội dung kết luận lớn…" value="' + escapeHtml(dir.title) + '"></td>' +
-        '<td>—</td>' +
+        '<td>' + planTextarea('directive', 'data-pe-dir="' + dir._id + '"', 'title',
+          'Nội dung kết luận lớn…', dirText, 3) + '</td>' +
+        '<td>' + planTextarea('directive', 'data-pe-dir="' + dir._id + '"', 'deliverable',
+          'Sản phẩm / kết quả lớn (nếu có)…', dir.deliverable || '', 2) + '</td>' +
         '<td>' + self._sharedSelect(dir) + '</td>' +
         '<td>' + self._directiveExecutorSelect(dir) + '</td>' +
         '<td><input type="date" data-pe-kind="directive" data-pe-dir="' + dir._id + '" data-pe-field="deadline" value="' + escapeHtml(dir.deadline) + '"></td>' +
@@ -319,10 +338,10 @@
         var tCode = taskCode(seq, di + 1, ti + 1);
         html += '<tr class="tbkl-plan-row-task">' +
           '<td class="tbkl-plan-code">' + escapeHtml(tCode) + '</td>' +
-          '<td><input type="text" data-pe-kind="task" data-pe-dir="' + dir._id + '" data-pe-task="' + task._id + '" data-pe-field="title" ' +
-          'placeholder="Đầu việc chi tiết…" value="' + escapeHtml(task.title) + '"></td>' +
-          '<td><input type="text" data-pe-kind="task" data-pe-dir="' + dir._id + '" data-pe-task="' + task._id + '" data-pe-field="deliverable" ' +
-          'placeholder="Sản phẩm" value="' + escapeHtml(task.deliverable) + '"></td>' +
+          '<td>' + planTextarea('task', 'data-pe-dir="' + dir._id + '" data-pe-task="' + task._id + '"', 'title',
+            'Đầu việc chi tiết…', task.title, 3) + '</td>' +
+          '<td>' + planTextarea('task', 'data-pe-dir="' + dir._id + '" data-pe-task="' + task._id + '"', 'deliverable',
+            'Sản phẩm / kết quả…', task.deliverable || '', 2) + '</td>' +
           '<td>—</td>' +
           '<td>' + self._executorSelect(dir, task) + '</td>' +
           '<td><input type="date" data-pe-kind="task" data-pe-dir="' + dir._id + '" data-pe-task="' + task._id + '" data-pe-field="deadline" value="' + escapeHtml(task.deadline) + '"></td>' +
