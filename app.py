@@ -1,4 +1,5 @@
 import os
+import io
 import socket
 import uuid
 import random
@@ -7,7 +8,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 
-from flask import Flask, render_template, request, jsonify, abort, send_from_directory, redirect
+from flask import Flask, render_template, request, jsonify, abort, send_from_directory, redirect, send_file
 from supabase import create_client
 from dotenv import load_dotenv
 
@@ -1360,6 +1361,43 @@ def get_profile():
     except Exception as e:
         print(e)
         return jsonify({"profile": None}), 500
+
+
+@app.route('/api/admin/database-backup', methods=['POST'])
+def admin_database_backup():
+    """Backup Supabase public schema — chỉ global admin."""
+    from modules.admin.decorators import require_global_admin, resolve_api_username
+    from modules.admin.backup_service import create_backup_bytes, save_backup_to_local_dir
+    from modules.meetings.rbac import load_user_context
+
+    username = resolve_api_username()
+    if not username:
+        return jsonify({"success": False, "message": "Thiếu username"}), 401
+    ctx = load_user_context(supabase, username)
+    if not ctx or not ctx.is_global_admin:
+        return jsonify({"success": False, "message": "Chỉ admin hệ thống mới thao tác này"}), 403
+
+    try:
+        content, filename = create_backup_bytes()
+    except RuntimeError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 503
+    except Exception as exc:
+        print(f'admin_database_backup: {exc}')
+        return jsonify({"success": False, "message": "Không tạo được backup: " + str(exc)}), 500
+
+    saved_path = save_backup_to_local_dir(content, filename)
+    print(f'[backup] user={ctx.username} file={filename} saved={saved_path or "(download)"}')
+
+    resp = send_file(
+        io.BytesIO(content),
+        mimetype='application/gzip',
+        as_attachment=True,
+        download_name=filename,
+    )
+    resp.headers['X-Backup-Filename'] = filename
+    if saved_path:
+        resp.headers['X-Backup-Saved-Path'] = saved_path
+    return resp
 
 
 def _system_role_erp_role(system_role_id):

@@ -11,3 +11,6 @@ __pycache__/
 *.log
 tmp_out.txt
 terminals/
+supabase/backups/data/**
+!supabase/backups/data/.gitkeep
+!supabase/backups/data/logs/.gitkeep

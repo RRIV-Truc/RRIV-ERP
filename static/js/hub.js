@@ -40,6 +40,10 @@ const RrivHub = (function () {
 
     applyHubAppLocks();
 
+    if (typeof RrivAdminBackup !== 'undefined') {
+      RrivAdminBackup.init(currentUser);
+    }
+
     if (typeof RrivPWA !== 'undefined') RrivPWA.showInstallBanner();
   }
 

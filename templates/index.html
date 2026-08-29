@@ -324,7 +324,22 @@
                     <div class="vrg-card-link">Truy cập ngay →</div>
                 </div>
 
-            </div> <div class="logout-section">
+            </div>
+
+            <div id="adminToolsPanel" class="admin-tools-panel" hidden>
+                <h3 class="admin-tools-title">🛠️ Quản trị hệ thống</h3>
+                <p class="admin-tools-hint">
+                    Backup toàn bộ dữ liệu Supabase (schema public). Khuyến nghị lưu vào
+                    <strong>D:\BackupSQL</strong> — bấm «Chọn thư mục» một lần, các lần sau tự lưu vào đó.
+                </p>
+                <div class="admin-tools-actions">
+                    <button type="button" class="admin-backup-btn" id="btnAdminBackupDb">💾 Backup database</button>
+                    <button type="button" class="admin-backup-btn admin-backup-btn-outline" id="btnAdminPickBackupDir">📁 Chọn thư mục</button>
+                </div>
+                <p class="admin-tools-status" id="adminBackupStatus" aria-live="polite"></p>
+            </div>
+
+            <div class="logout-section">
                 <button class="change-pwd-btn" onclick="alert('Tính năng đổi mật khẩu sẽ cấu hình sau!')">🔑 Đổi mật khẩu</button>
                 <button class="logout-btn" onclick="Auth.logout()">🚪 Đăng xuất</button>
             </div>
@@ -341,7 +356,8 @@
     <script src="{{ url_for('static', filename='js/services/SupabaseService.js') }}"></script>
     <script src="{{ url_for('static', filename='js/services/FirestoreService.js') }}"></script>
     <script src="{{ url_for('static', filename='js/modules/auth.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/hub.js') }}?v=33"></script>
+    <script src="{{ url_for('static', filename='js/hub.js') }}?v=34"></script>
+    <script src="{{ url_for('static', filename='js/admin-backup.js') }}?v=1"></script>
     <script>
         let currentActiveUsername = "";
 
