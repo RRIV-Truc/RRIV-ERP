@@ -9,6 +9,9 @@ const RrivAdminBackup = (function () {
   var IDB_KEY = 'backupDir';
   var DEFAULT_DIR_HINT = 'D:\\BackupSQL';
 
+  /** Tạm ẩn nút backup trên hub — đổi thành true khi cần dùng lại. */
+  var BACKUP_UI_ENABLED = false;
+
   var BACKUP_ADMIN_USERNAMES = ['rriv.nttruc', 'rriv.admin'];
 
   function isGlobalAdminClient(user) {
@@ -154,6 +157,10 @@ const RrivAdminBackup = (function () {
 
   function refresh(user) {
     bindButtons();
+    if (!BACKUP_UI_ENABLED) {
+      setPanelVisible(false);
+      return Promise.resolve(false);
+    }
     var username = (user && user.username) ? String(user.username).toLowerCase() : currentUsername();
     var clientOk = isGlobalAdminClient(user || (typeof RrivHub !== 'undefined' ? RrivHub.getCurrentUser() : null));
     if (clientOk) setPanelVisible(true);

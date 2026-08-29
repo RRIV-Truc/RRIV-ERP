@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import gzip
 import io
+import json
 import os
 import re
 import shutil
 import subprocess
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -236,9 +239,145 @@ def _gzip_sql(raw: bytes) -> tuple[bytes, str]:
     return buf.getvalue(), filename
 
 
+def _rest_config() -> tuple[str, str]:
+    base = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
+    key = (os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY") or "").strip()
+    if not base or not key:
+        raise RuntimeError("Thiếu SUPABASE_URL hoặc SUPABASE_SERVICE_KEY cho backup REST.")
+    return base, key
+
+
+def _rest_request(
+    path: str,
+    *,
+    headers: dict[str, str] | None = None,
+    accept: str = "application/json",
+) -> tuple[int, dict[str, str], bytes]:
+    base, key = _rest_config()
+    url = f"{base}/rest/v1{path}"
+    req_headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Accept": accept,
+    }
+    if headers:
+        req_headers.update(headers)
+    req = urllib.request.Request(url, headers=req_headers, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            body = resp.read()
+            resp_headers = {k.lower(): v for k, v in resp.headers.items()}
+            return resp.status, resp_headers, body
+    except urllib.error.HTTPError as exc:
+        body = exc.read()
+        raise RuntimeError(f"REST {path} failed ({exc.code}): {body[:300]!r}") from exc
+
+
+def _rest_table_names() -> list[str]:
+    _, _, body = _rest_request("/", accept="application/openapi+json")
+    spec = json.loads(body.decode("utf-8"))
+    names: list[str] = []
+    for path in spec.get("paths", {}):
+        if path.startswith("/") and path.count("/") == 1:
+            name = path[1:]
+            if name:
+                names.append(name)
+    return sorted(set(names))
+
+
+def _rest_sql_literal(value: Any) -> str:
+    if value is None:
+        return "NULL"
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, (dict, list)):
+        encoded = json.dumps(value, ensure_ascii=False).replace("'", "''")
+        return f"'{encoded}'::jsonb"
+    text = str(value).replace("'", "''")
+    return f"'{text}'"
+
+
+def _dump_with_rest_api() -> bytes:
+    base, key = _rest_config()
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    out = io.StringIO()
+    out.write("-- RRIV ERP — backup Supabase qua REST API (public schema)\n")
+    out.write(f"-- Generated: {now}\n\n")
+    out.write("SET client_encoding = 'UTF8';\n\n")
+
+    page_size = 500
+    tables = _rest_table_names()
+    print(f"[backup] REST: {len(tables)} tables")
+
+    for table in tables:
+        quoted = f'"{table}"'
+        path = f"/{quote_plus(table)}?select=*"
+        offset = 0
+        row_count = 0
+        cols: list[str] | None = None
+        table_started = False
+
+        while True:
+            headers = {
+                "Range-Unit": "items",
+                "Range": f"{offset}-{offset + page_size - 1}",
+                "Prefer": "count=exact",
+            }
+            _, resp_headers, body = _rest_request(path, headers=headers)
+            rows = json.loads(body.decode("utf-8"))
+            if not isinstance(rows, list):
+                break
+            if not rows:
+                if not table_started:
+                    out.write(f"\n-- Table: {table} (0 rows)\n")
+                break
+
+            if not table_started:
+                out.write(f"\n-- Table: {table}\n")
+                table_started = True
+
+            if cols is None:
+                cols = list(rows[0].keys())
+                col_sql = ", ".join(f'"{c}"' for c in cols)
+
+            for row in rows:
+                vals = ", ".join(_rest_sql_literal(row.get(c)) for c in cols)
+                out.write(
+                    f'INSERT INTO public.{quoted} ({col_sql}) VALUES ({vals});\n'
+                )
+            row_count += len(rows)
+
+            content_range = resp_headers.get("content-range", "")
+            if "/" in content_range:
+                try:
+                    total = int(content_range.rsplit("/", 1)[1])
+                except ValueError:
+                    total = None
+            else:
+                total = None
+
+            if total is not None and row_count >= total:
+                break
+            if len(rows) < page_size:
+                break
+            offset += page_size
+
+        if table_started and row_count:
+            out.write(f"-- End {table}: {row_count} rows\n")
+
+    print("[backup] OK via REST API")
+    return out.getvalue().encode("utf-8")
+
+
 def _run_backup(use_pg_dump: bool) -> tuple[bytes, str]:
     targets = connection_targets()
-    if not targets:
+    has_rest = bool(
+        (os.getenv("SUPABASE_SERVICE_KEY") or "").strip()
+        and (os.getenv("SUPABASE_URL") or "").strip()
+    )
+    if not targets and not has_rest:
         raise RuntimeError(
             "Thiếu SUPABASE_DB_PASSWORD hoặc DATABASE_URL trên Render."
         )
@@ -261,6 +400,15 @@ def _run_backup(use_pg_dump: bool) -> tuple[bytes, str]:
         except Exception as exc:
             last_err = exc
             print(f"[backup] psycopg2 via {target.get('via', '?')} failed: {exc}")
+
+    service_key = (os.getenv("SUPABASE_SERVICE_KEY") or "").strip()
+    if service_key and os.getenv("SUPABASE_URL"):
+        try:
+            raw = _dump_with_rest_api()
+            return _gzip_sql(raw)
+        except Exception as exc:
+            print(f"[backup] REST fallback failed: {exc}")
+            last_err = exc
 
     raise RuntimeError(
         "Không kết nối được Supabase DB. Trên Render: thêm DATABASE_URL "
