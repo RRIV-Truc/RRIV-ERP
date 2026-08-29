@@ -3,21 +3,22 @@
   'use strict';
 
   var DEPUTIES = [
-    { id: 'pvt-hieu', label: 'Phó Viện trưởng Nguyễn Đôn Hiệu', kind: 'deputy' },
-    { id: 'pvt-pha', label: 'Phó Viện trưởng Trần Ánh Pha', kind: 'deputy' }
+    { id: 'pvt-hieu', label: 'Phó Viện trưởng Nguyễn Đôn Hiệu', short: 'PVT Hiệu', kind: 'deputy' },
+    { id: 'pvt-pha', label: 'Phó Viện trưởng Trần Ánh Pha', short: 'PVT Pha', kind: 'deputy' }
   ];
 
   var OFFICES = [
-    { id: 'dl-5', label: 'Phòng khoa học công nghệ', kind: 'office' },
-    { id: 'dl-6', label: 'Phòng quản trị - tài chính kế toán', kind: 'office' }
+    { id: 'dl-5', label: 'Phòng khoa học công nghệ', short: 'KHCN', kind: 'office' },
+    { id: 'dl-6', label: 'Phòng quản trị - tài chính kế toán', short: 'QT-TCKT', kind: 'office' }
   ];
 
   var CENTERS = [
-    { id: 'dl-2', label: 'Trung tâm nghiên cứu phát triển sản phẩm mới', kind: 'center' },
-    { id: 'dl-3', label: 'Trung tâm nghiên cứu phát triển Giống cao su', kind: 'center' },
+    { id: 'dl-2', label: 'Trung tâm nghiên cứu phát triển sản phẩm mới', short: 'SPM', kind: 'center' },
+    { id: 'dl-3', label: 'Trung tâm nghiên cứu phát triển Giống cao su', short: 'Giống', kind: 'center' },
     {
       id: 'dl-4',
       label: 'Trung tâm nghiên cứu ứng dụng nông nghiệp công nghệ cao và chuyển giao kỹ thuật',
+      short: 'NNCNC',
       kind: 'center'
     }
   ];
@@ -25,6 +26,7 @@
   var ALL_UNITS = {
     id: 'all-units',
     label: 'Các đơn vị (phối hợp nhiều đơn vị)',
+    short: 'Các ĐV',
     kind: 'all'
   };
 
@@ -56,7 +58,9 @@
     if (!s) return null;
     var lists = [allShared(), allDirectiveExecutors()];
     for (var i = 0; i < lists.length; i++) {
-      var hit = lists[i].find(function (u) { return u.label === s; });
+      var hit = lists[i].find(function (u) {
+        return u.label === s || u.short === s;
+      });
       if (hit) return hit;
     }
     if (/các đơn vị/i.test(s) || /cac don vi/i.test(s)) return ALL_UNITS;
@@ -75,12 +79,22 @@
     return hit ? hit.label : String(idOrLabel || '').trim();
   }
 
-  function optionsHtml(list, selectedId, placeholder) {
+  function shortLabelFor(idOrLabel) {
+    var hit = findById(idOrLabel) || findByLabel(idOrLabel);
+    return hit ? (hit.short || hit.label) : String(idOrLabel || '').trim();
+  }
+
+  function displayLabel(u, useShort) {
+    return useShort && u.short ? u.short : u.label;
+  }
+
+  function optionsHtml(list, selectedId, placeholder, useShort) {
     var html = '<option value="">' + (placeholder || '— Chọn —') + '</option>';
     list.forEach(function (u) {
       var sel = selectedId === u.id ? ' selected' : '';
+      var text = displayLabel(u, useShort);
       html += '<option value="' + u.id + '" data-label="' + u.label.replace(/"/g, '&quot;') + '"' + sel + '>' +
-        u.label + '</option>';
+        text + '</option>';
     });
     return html;
   }
@@ -112,6 +126,7 @@
     findByLabel: findByLabel,
     resolveId: resolveId,
     labelFor: labelFor,
+    shortLabelFor: shortLabelFor,
     optionsHtml: optionsHtml,
     fillSelect: fillSelect
   };

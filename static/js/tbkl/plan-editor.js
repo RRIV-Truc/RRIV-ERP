@@ -197,9 +197,11 @@
         if (val && String(val).indexOf('pvt-') === 0) {
           dir.supervisor_name = dir.lead_department_name;
         }
+        el.title = dir.lead_department_name || 'Trách nhiệm chung';
       } else if (field === 'executor_unit_id') {
         dir.executor_unit_id = val;
         dir.executor_unit_name = val === '__legacy__' ? label : (ou ? ou.labelFor(val) : label);
+        el.title = dir.executor_unit_name || 'Đơn vị TH';
       } else {
         dir[field] = val;
       }
@@ -211,6 +213,7 @@
       if (field === 'owner_unit_id') {
         task.owner_unit_id = val;
         task.owner_unit_name = val === '__legacy__' ? label : (ou ? ou.labelFor(val) : label);
+        el.title = task.owner_unit_name || 'Đơn vị TH';
       } else {
         task[field] = val;
       }
@@ -275,9 +278,10 @@
         'placeholder="Trách nhiệm chung" value="' + escapeHtml(dir.lead_department_name) + '">';
     }
     var selId = dir.lead_department_id || ou.resolveId(dir.lead_department_name);
+    var fullTitle = ou.labelFor(selId || dir.lead_department_name) || 'Trách nhiệm chung';
     return '<select data-pe-kind="directive" data-pe-dir="' + dir._id + '" data-pe-field="lead_department_id" ' +
-      'class="tbkl-plan-select" title="Trách nhiệm chung">' +
-      ou.optionsHtml(ou.sharedResponsibility(), selId, '— Trách nhiệm chung —') + '</select>';
+      'class="tbkl-plan-select" title="' + escapeHtml(fullTitle) + '">' +
+      ou.optionsHtml(ou.sharedResponsibility(), selId, '— TC chung —', true) + '</select>';
   };
 
   PlanEditor.prototype._directiveExecutorSelect = function (dir) {
@@ -287,9 +291,10 @@
         'placeholder="Đơn vị TH" value="' + escapeHtml(dir.executor_unit_name) + '">';
     }
     var selId = dir.executor_unit_id || ou.resolveId(dir.executor_unit_name);
+    var fullTitle = ou.labelFor(selId || dir.executor_unit_name) || 'Đơn vị TH';
     return '<select data-pe-kind="directive" data-pe-dir="' + dir._id + '" data-pe-field="executor_unit_id" ' +
-      'class="tbkl-plan-select" title="Đơn vị thực hiện (mục lớn)">' +
-      ou.optionsHtml(ou.directiveExecutors(), selId, '— Đơn vị TH —') + '</select>';
+      'class="tbkl-plan-select" title="' + escapeHtml(fullTitle) + '">' +
+      ou.optionsHtml(ou.directiveExecutors(), selId, '— ĐV TH —', true) + '</select>';
   };
 
   PlanEditor.prototype._executorSelect = function (dir, task) {
@@ -299,9 +304,10 @@
         'data-pe-field="owner_unit_name" placeholder="Đơn vị TH" value="' + escapeHtml(task.owner_unit_name) + '">';
     }
     var selId = task.owner_unit_id || ou.resolveId(task.owner_unit_name);
+    var fullTitle = ou.labelFor(selId || task.owner_unit_name) || 'Đơn vị TH';
     return '<select data-pe-kind="task" data-pe-dir="' + dir._id + '" data-pe-task="' + task._id + '" ' +
-      'data-pe-field="owner_unit_id" class="tbkl-plan-select" title="Đơn vị thực hiện">' +
-      ou.optionsHtml(ou.executors(), selId, '— Đơn vị TH —') + '</select>';
+      'data-pe-field="owner_unit_id" class="tbkl-plan-select" title="' + escapeHtml(fullTitle) + '">' +
+      ou.optionsHtml(ou.executors(), selId, '— ĐV TH —', true) + '</select>';
   };
 
   PlanEditor.prototype.render = function () {
