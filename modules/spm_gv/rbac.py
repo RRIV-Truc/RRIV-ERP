@@ -24,6 +24,11 @@ def deputy_usernames() -> set[str]:
 
 INTERNAL_DEPTS = {"pgd", "nv", "nc", "pkn", "ktc", "tckt", "lx"}
 
+# PGD also heads Testing/Calibration department (pkn)
+EXTRA_DEPTS_BY_USER = {
+    "rriv.nhtruong": {"pkn"},
+}
+
 
 def spm_dept_ids() -> set[str]:
     raw = os.getenv(DEPT_ENV, "dl-2").strip()
@@ -71,14 +76,45 @@ def is_head(ctx: UserContext, supabase=None) -> bool:
     return bool(row and row.get("role") == "head")
 
 
-def staff_department_id(ctx: UserContext, supabase=None) -> str:
+def extra_departments(username: str | None) -> set[str]:
+    u = str(username or "").strip().lower()
+    ids = set(EXTRA_DEPTS_BY_USER.get(u) or set())
+    raw = os.getenv("SPM_GV_EXTRA_DEPTS", "").strip()
+    if raw:
+        for part in raw.split(","):
+            if ":" not in part:
+                continue
+            name, depts = part.split(":", 1)
+            if name.strip().lower() == u:
+                ids |= {d.strip() for d in depts.split("|") if d.strip() in INTERNAL_DEPTS}
+    return {d for d in ids if d in INTERNAL_DEPTS}
+
+
+def staff_department_ids(ctx: UserContext, supabase=None) -> set[str]:
+    ids: set[str] = set()
     row = staff_of(ctx, supabase) or {}
     did = str(row.get("department_id") or "").strip()
     if did in INTERNAL_DEPTS:
-        return did
+        ids.add(did)
     if is_deputy(ctx, supabase):
+        ids.add("pgd")
+    if ctx:
+        ids |= extra_departments(ctx.username)
+    return ids
+
+
+def staff_department_id(ctx: UserContext, supabase=None) -> str:
+    ids = staff_department_ids(ctx, supabase)
+    if "pgd" in ids:
         return "pgd"
-    return ""
+    return next(iter(sorted(ids)), "")
+
+
+def owns_department(ctx: UserContext, supabase, department_id: str | None) -> bool:
+    did = str(department_id or "").strip()
+    if not did:
+        return False
+    return did in staff_department_ids(ctx, supabase)
 
 
 def can_enter(ctx: UserContext, supabase=None) -> bool:
@@ -101,16 +137,12 @@ def can_assign_center(ctx: UserContext, supabase=None) -> bool:
 def can_assign_dept(ctx: UserContext, supabase=None, department_id: str | None = None) -> bool:
     if can_assign_center(ctx, supabase):
         return True
-    if is_deputy(ctx, supabase):
-        if not department_id:
-            return True
-        mine = staff_department_id(ctx, supabase) or "pgd"
-        return str(department_id) in (mine, "pgd")
-    if not is_head(ctx, supabase):
+    mine = staff_department_ids(ctx, supabase)
+    if not (is_deputy(ctx, supabase) or is_head(ctx, supabase)):
         return False
     if not department_id:
-        return True
-    return staff_department_id(ctx, supabase) == department_id
+        return bool(mine)
+    return str(department_id) in mine
 
 
 def can_report_task(ctx: UserContext, supabase, task: dict) -> bool:
@@ -118,15 +150,12 @@ def can_report_task(ctx: UserContext, supabase, task: dict) -> bool:
     if can_assign_center(ctx, supabase):
         return True
     dept = str(task.get("department_id") or "")
-    my_dept = staff_department_id(ctx, supabase)
-    if is_deputy(ctx, supabase) and (not dept or dept == "pgd" or dept == my_dept):
+    if owns_department(ctx, supabase, dept) and (is_deputy(ctx, supabase) or is_head(ctx, supabase)):
         return True
     uname = ctx.username
     for a in task.get("assignees") or []:
         if str(a.get("username") or "").lower() == uname:
             return True
-    if dept and my_dept == dept and (is_head(ctx, supabase) or is_deputy(ctx, supabase)):
-        return True
     return False
 
 
@@ -143,7 +172,7 @@ def can_see_leader_notes_center(ctx: UserContext, supabase=None) -> bool:
 def can_see_leader_notes_dept(ctx: UserContext, supabase, department_id: str) -> bool:
     if can_see_leader_notes_center(ctx, supabase):
         return True
-    if is_head(ctx, supabase) and staff_department_id(ctx, supabase) == str(department_id or ""):
+    if (is_head(ctx, supabase) or is_deputy(ctx, supabase)) and owns_department(ctx, supabase, department_id):
         return True
     return False
 
@@ -155,7 +184,7 @@ def can_write_leader_notes_center(ctx: UserContext, supabase=None) -> bool:
 def can_write_leader_notes_dept(ctx: UserContext, supabase, department_id: str) -> bool:
     if is_director(ctx, supabase):
         return True
-    return is_head(ctx, supabase) and staff_department_id(ctx, supabase) == str(department_id or "")
+    return (is_head(ctx, supabase) or is_deputy(ctx, supabase)) and owns_department(ctx, supabase, department_id)
 
 
 def role_label(role: str) -> str:

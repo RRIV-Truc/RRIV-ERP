@@ -9,11 +9,11 @@ from modules.meetings.rbac import UserContext
 from modules.spm_gv import rbac
 
 STATUS_LABEL = {
-    "not_started": "Chưa bắt đầu",
-    "in_progress": "Đang thực hiện",
-    "at_risk": "Rủi ro",
-    "completed": "Hoàn thành",
-    "blocked": "Bị vướng",
+    "not_started": "Ch?a b?t ??u",
+    "in_progress": "?ang th?c hi?n",
+    "at_risk": "R?i ro",
+    "completed": "Ho�n th�nh",
+    "blocked": "B? v??ng",
 }
 
 HIEN_USERNAME = "rriv.ntdhien"
@@ -32,7 +32,7 @@ def iso_week_bounds(d: date | None = None):
 
 
 def week_label(year: int, week_no: int, start: date, end: date) -> str:
-    return "Tuần %02d/%s (%s-%s)" % (
+    return "Tu?n %02d/%s (%s-%s)" % (
         week_no, year, start.strftime("%d/%m"), end.strftime("%d/%m"),
     )
 
@@ -135,7 +135,7 @@ def ensure_hien_ktc(sb) -> None:
     try:
         sb.table("category_teams").upsert({
             "id": KTC_TEAM_ID,
-            "name": "Kiểm tra chéo",
+            "name": "Ki?m tra ch�o",
             "department": SPM_DEPT,
             "metadata": {"source": "spm-gv"},
         }).execute()
@@ -144,7 +144,7 @@ def ensure_hien_ktc(sb) -> None:
     try:
         sb.table("employee").update({
             "team_id": KTC_TEAM_ID,
-            "position_name": "Phụ trách kiểm tra chéo",
+            "position_name": "Ph? tr�ch ki?m tra ch�o",
             "position_id": "pos-phu-trach",
         }).eq("username", HIEN_USERNAME).execute()
     except Exception:
@@ -414,6 +414,7 @@ def board(sb, ctx: UserContext, week_id: str, level: str) -> dict:
     staff = list_staff(sb)
     heads = dept_heads(staff)
     dept_id = rbac.staff_department_id(ctx, sb)
+    dept_ids = rbac.staff_department_ids(ctx, sb)
     is_dir = rbac.is_director(ctx, sb) or ctx.is_global_admin
     is_head = rbac.is_head(ctx, sb)
     is_deputy = rbac.is_deputy(ctx, sb)
@@ -421,10 +422,7 @@ def board(sb, ctx: UserContext, week_id: str, level: str) -> dict:
     def visible_dept(did: str | None) -> bool:
         if is_dir:
             return True
-        mine = dept_id if dept_id in INTERNAL_DEPTS else ""
-        if is_deputy:
-            return str(did or "") in {mine, "pgd"} or not did
-        return bool(mine) and str(did or "") == mine
+        return str(did or "") in dept_ids
 
     if not is_dir:
         center_raw = [t for t in center_raw if visible_dept(t.get("department_id"))]
@@ -495,9 +493,13 @@ def board(sb, ctx: UserContext, week_id: str, level: str) -> dict:
             out_tasks.extend(g["children"])
         out_tasks.extend(orphans)
         people_notes = []
-        if is_dir or is_head:
-            scope_dept = None if is_dir else dept_id
-            people_notes = _leader_notes_map(sb, week_id, "dept", scope_dept)["rows"]
+        if is_dir or is_head or is_deputy:
+            if is_dir:
+                people_notes = _leader_notes_map(sb, week_id, "dept")["rows"]
+            else:
+                people_notes = []
+                for d in sorted(dept_ids):
+                    people_notes.extend(_leader_notes_map(sb, week_id, "dept", d)["rows"])
 
     n = len(out_tasks) if level == "dept" else len(center_packed)
     src = center_packed if level == "center" else out_tasks
@@ -515,7 +517,7 @@ def board(sb, ctx: UserContext, week_id: str, level: str) -> dict:
         "leader_notes": people_notes,
         "can_see_leader": (
             (level == "center" and show_center_notes)
-            or (level == "dept" and (is_dir or is_head))
+            or (level == "dept" and (is_dir or is_head or is_deputy))
         ),
     }
 
@@ -771,5 +773,6 @@ def permissions_payload(ctx: UserContext, sb) -> dict:
         "can_manage_staff": rbac.can_assign_center(ctx, sb),
         "role": staff.get("role") or ("director" if rbac.is_director(ctx, sb) else "staff"),
         "department_id": rbac.staff_department_id(ctx, sb),
+        "department_ids": sorted(rbac.staff_department_ids(ctx, sb)),
         "full_name": staff.get("full_name") or ctx.username,
     }

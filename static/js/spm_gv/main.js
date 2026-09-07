@@ -71,7 +71,7 @@
   }
   function canSeeLeader() {
     if (state.level === 'center') return !!state.perms.can_see_leader_center;
-    return !!(state.perms.is_director || state.perms.is_admin || state.perms.is_head);
+    return !!(state.perms.is_director || state.perms.is_admin || state.perms.is_head || state.perms.is_deputy);
   }
   function canAssign() {
     if (state.level === 'center') return !!state.perms.can_assign_center;
