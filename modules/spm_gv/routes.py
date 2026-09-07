@@ -128,6 +128,18 @@ def api_task_update(task_id):
         return jsonify({"success": False, "message": str(exc)}), 400
 
 
+@spmgv_bp.route("/api/spm-gv/tasks/<task_id>", methods=["DELETE"])
+@require_spm_auth
+def api_task_delete(task_id):
+    try:
+        svc.delete_task(_sb(), _ctx(), task_id)
+        return jsonify({"success": True})
+    except PermissionError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 403
+    except Exception as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
+
+
 @spmgv_bp.route("/api/spm-gv/tasks/<task_id>/report", methods=["POST"])
 @require_spm_auth
 def api_task_report(task_id):

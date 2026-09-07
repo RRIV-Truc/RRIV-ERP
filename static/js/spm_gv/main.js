@@ -10,7 +10,7 @@
   var state = {
     weeks: [], week: null, level: 'center', board: null,
     perms: {}, user: {}, departments: [], staff: [],
-    reportTaskId: null, scoreTaskId: null
+    reportTaskId: null, scoreTaskId: null, editTaskId: null
   };
 
   function $(id) { return document.getElementById(id); }
@@ -167,6 +167,10 @@
     if (t.can_report) {
       html += '<button type="button" class="gv-btn-sm gv-btn-outline" data-report="' + t.id + '">' + T('btnReport') + '</button> ';
     }
+    if (t.can_edit) {
+      html += '<button type="button" class="gv-btn-sm gv-btn-outline" data-edit="' + t.id + '">' + T('btnEdit') + '</button> ';
+      html += '<button type="button" class="gv-btn-sm gv-btn-outline" data-del="' + t.id + '">' + T('btnDelete') + '</button> ';
+    }
     if (canAssign()) {
       html += '<button type="button" class="gv-btn-sm gv-btn-outline" data-score="' + t.id + '">' + T('btnScore') + '</button>';
     }
@@ -254,16 +258,21 @@
     var html = groups.map(function (g) {
       var p = g.parent || {};
       var kids = g.children || [];
-      var cascadeBtn = (p.can_cascade)
-        ? '<button type="button" class="gv-btn gv-btn-sm gv-btn-primary" data-cascade="' + p.id + '">' + T('btnCascade') + '</button>'
-        : '';
+      var cascadeBtn = '';
+      if (p.can_cascade) {
+        cascadeBtn += '<button type="button" class="gv-btn gv-btn-sm gv-btn-primary" data-cascade="' + p.id + '">' + T('btnCascade') + '</button> ';
+      }
+      if (p.can_edit) {
+        cascadeBtn += '<button type="button" class="gv-btn gv-btn-sm gv-btn-outline" data-edit="' + p.id + '">' + T('btnEdit') + '</button> ';
+        cascadeBtn += '<button type="button" class="gv-btn gv-btn-sm gv-btn-outline" data-del="' + p.id + '">' + T('btnDelete') + '</button>';
+      }
       var head = '<div class="gv-group">' +
         '<div class="gv-group-head">' +
           '<div><span class="gv-pill">' + T('fromDirector') + '</span> ' +
           '<strong>' + esc(p.title) + '</strong>' +
           '<div class="gv-week-card-meta">' + esc(deptName(p.department_id)) +
-            (p.deadline ? ' ù han ' + p.deadline : '') +
-            ' ù ' + (p.progress_pct || 0) + '%</div>' +
+            (p.deadline ? ' ? han ' + p.deadline : '') +
+            ' ? ' + (p.progress_pct || 0) + '%</div>' +
           (p.description ? '<div class="gv-week-card-meta">' + esc(p.description) + '</div>' : '') +
           '</div><div>' + cascadeBtn + '</div></div>';
       if (!kids.length) {
@@ -313,33 +322,46 @@
     if (!$('fDeadline').value && p.deadline) $('fDeadline').value = p.deadline;
   }
 
-  function setupAssignForm(parentId) {
-    var center = state.level === 'center';
-    $('assignTitle').textContent = center ? T('assignCenter') : T('assignDept');
-    $('assignHint').textContent = center ? T('hintAssignCenter') : T('hintAssignDept');
-    $('lblDept').textContent = center ? T('lblDeptCenter') : T('lblDept');
-    $('wrapLead').hidden = center;
-    $('wrapParent').hidden = center;
-    $('wrapDept').hidden = !center;
+  function setupAssignForm(parentId, editTask) {
+    state.editTaskId = editTask ? editTask.id : null;
+    var isCenterTask = editTask ? (editTask.level === 'center') : (state.level === 'center');
+    $('assignTitle').textContent = editTask
+      ? T('editTitle')
+      : (isCenterTask ? T('assignCenter') : T('assignDept'));
+    $('assignHint').textContent = isCenterTask ? T('hintAssignCenter') : T('hintAssignDept');
+    $('lblDept').textContent = isCenterTask ? T('lblDeptCenter') : T('lblDept');
+    $('wrapLead').hidden = isCenterTask;
+    $('wrapParent').hidden = isCenterTask;
+    $('wrapDept').hidden = !isCenterTask;
     $('fTitle').value = '';
     $('fDesc').value = '';
     $('fDoers').value = '';
     $('fDeadline').value = '';
     $('fDept').value = '';
     fillSelect($('fDept'), state.departments, 'id', 'name', true, T('pickDept'));
-    if (!center) {
+    if (!isCenterTask) {
       var inbox = parentOptions() || [];
       var opts = inbox.map(function (p) {
-        return { id: p.id, label: (deptName(p.department_id) + ' ù ' + (p.title || '')) };
+        return { id: p.id, label: (deptName(p.department_id) + ' | ' + (p.title || '')) };
       });
       fillSelect($('fParent'), opts, 'id', 'label', true, T('pickParent'));
       fillSelect($('fLead'), staffForLead(), 'username', 'full_name', true, T('pickPerson'));
       $('fLead').value = '';
-      if (parentId) {
-        $('fParent').value = parentId;
-        fillParentFromSelect();
-      }
       $('fParent').onchange = fillParentFromSelect;
+    }
+    if (editTask) {
+      $('fTitle').value = editTask.title || '';
+      $('fDesc').value = editTask.description || '';
+      $('fDoers').value = editTask.doer_text || '';
+      $('fDeadline').value = editTask.deadline || '';
+      $('fDept').value = editTask.department_id || '';
+      if (!isCenterTask) {
+        $('fParent').value = editTask.parent_id || parentId || '';
+        if (editTask.lead && editTask.lead.username) $('fLead').value = editTask.lead.username;
+      }
+    } else if (!isCenterTask && parentId) {
+      $('fParent').value = parentId;
+      fillParentFromSelect();
     }
   }
 
@@ -406,6 +428,18 @@
       setupAssignForm(t.dataset.cascade);
       openM('modalAssign');
     }
+    if (t.dataset && t.dataset.edit) {
+      var et = findTask(t.dataset.edit);
+      if (!et) return;
+      setupAssignForm(et.parent_id, et);
+      openM('modalAssign');
+    }
+    if (t.dataset && t.dataset.del) {
+      if (!window.confirm(T('confirmDelete'))) return;
+      api('/tasks/' + t.dataset.del, { method: 'DELETE' })
+        .then(function () { toast(T('okDelete')); return loadBoard(); })
+        .catch(function (err) { toast(err.message, true); });
+    }
     if (t.id === 'btnStaff') { renderStaffTable(); openM('modalStaff'); }
     if (t.id === 'btnLeaderNote') {
       $('wrapNoteDept').hidden = state.level === 'center';
@@ -443,9 +477,11 @@
 
   bind('btnSaveAssign', function () {
     var doerText = ($('fDoers').value || '').trim();
+    var editing = state.editTaskId ? findTask(state.editTaskId) : null;
+    var isCenter = editing ? (editing.level === 'center') : (state.level === 'center');
     var payload = {
       week_id: state.week.id,
-      level: state.level,
+      level: isCenter ? 'center' : 'dept',
       title: $('fTitle').value.trim(),
       description: $('fDesc').value.trim(),
       department_id: $('fDept').value || null,
@@ -453,7 +489,7 @@
       doer_text: doerText,
       doers: []
     };
-    if (state.level === 'dept') {
+    if (!isCenter) {
       var u = $('fLead').value;
       var st = state.staff.find(function (s) { return s.username === u; });
       payload.lead = u ? { username: u, full_name: st ? st.full_name : u } : null;
@@ -461,8 +497,15 @@
       var p = (parentOptions() || []).find(function (x) { return x && x.id === payload.parent_id; });
       if (p) payload.department_id = p.department_id;
     }
-    api('/tasks', { method: 'POST', body: JSON.stringify(payload) })
-      .then(function () { closeM('modalAssign'); toast(T('okAssign')); return loadBoard(); })
+    var path = state.editTaskId ? ('/tasks/' + state.editTaskId) : '/tasks';
+    var method = state.editTaskId ? 'PATCH' : 'POST';
+    api(path, { method: method, body: JSON.stringify(payload) })
+      .then(function () {
+        closeM('modalAssign');
+        state.editTaskId = null;
+        toast(T(method === 'PATCH' ? 'okEdit' : 'okAssign'));
+        return loadBoard();
+      })
       .catch(function (err) { toast(err.message, true); });
   });
 

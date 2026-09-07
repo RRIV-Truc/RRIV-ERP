@@ -454,6 +454,7 @@ def board(sb, ctx: UserContext, week_id: str, level: str) -> dict:
         out = _enrich_task(t, amap.get(t["id"], []), rmap.get(t["id"]), note, include_leader)
         out["can_report"] = rbac.can_report_task(ctx, sb, {**t, "assignees": amap.get(t["id"], [])})
         out["can_cascade"] = rbac.can_assign_dept(ctx, sb, t.get("department_id"))
+        out["can_edit"] = rbac.can_score_work(ctx, sb, t)
         return out
 
     kids_by_parent: dict[str, list] = {}
@@ -584,9 +585,9 @@ def update_task(sb, ctx: UserContext, task_id: str, payload: dict) -> dict:
     if task.get("level") == "dept" and not rbac.can_assign_dept(ctx, sb, task.get("department_id")):
         raise PermissionError("Khong co quyen sua viec cap bo phan")
     fields = {}
-    for k in ("title", "description", "deadline", "department_id", "status", "doer_text"):
+    for k in ("title", "description", "deadline", "department_id", "status", "doer_text", "parent_id"):
         if k in payload:
-            fields[k] = payload[k]
+            fields[k] = payload[k] or None
     if "progress_pct" in payload:
         fields["progress_pct"] = int(payload["progress_pct"])
     fields["updated_at"] = _now_iso()
@@ -594,7 +595,29 @@ def update_task(sb, ctx: UserContext, task_id: str, payload: dict) -> dict:
     if "lead" in payload or "doers" in payload or "assignees" in payload or "doer_text" in payload:
         sb.table("spm_gv_assignees").delete().eq("task_id", task_id).execute()
         _save_assignees(sb, task_id, payload, task.get("level"))
+    new_parent = fields.get("parent_id", task.get("parent_id"))
+    _rollup_parent(sb, task.get("parent_id"))
+    if new_parent and new_parent != task.get("parent_id"):
+        _rollup_parent(sb, new_parent)
     return {**task, **fields}
+
+
+def delete_task(sb, ctx: UserContext, task_id: str) -> None:
+    cur = sb.table("spm_gv_tasks").select("*").eq("id", task_id).limit(1).execute()
+    if not cur.data:
+        raise ValueError("Khong tim thay dau viec")
+    task = cur.data[0]
+    if task.get("level") == "center" and not rbac.can_assign_center(ctx, sb):
+        raise PermissionError("Khong co quyen xoa viec cap Trung tam")
+    if task.get("level") == "dept" and not rbac.can_assign_dept(ctx, sb, task.get("department_id")):
+        raise PermissionError("Khong co quyen xoa viec cap bo phan")
+    parent_id = task.get("parent_id")
+    if task.get("level") == "center":
+        kids = sb.table("spm_gv_tasks").select("id").eq("parent_id", task_id).execute().data or []
+        for kid in kids:
+            sb.table("spm_gv_tasks").delete().eq("id", kid["id"]).execute()
+    sb.table("spm_gv_tasks").delete().eq("id", task_id).execute()
+    _rollup_parent(sb, parent_id)
 
 
 def _save_assignees(sb, task_id: str, payload: dict, level: str | None = None) -> None:
