@@ -1,4 +1,4 @@
--- Giao việc Trung tâm NCPT Sản phẩm mới (SPM)
+-- Giao vi?c Trung t�m NCPT S?n ph?m m?i (SPM)
 CREATE TABLE IF NOT EXISTS spm_gv_departments (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -6,13 +6,13 @@ CREATE TABLE IF NOT EXISTS spm_gv_departments (
 );
 
 INSERT INTO spm_gv_departments (id, name, sort_order) VALUES
-  ('pgd',  'Phó giám đốc', 1),
-  ('nv',   'Bộ phận nghiệp vụ', 2),
-  ('nc',   'Bộ phận NC&CG', 3),
-  ('pkn',  'Phòng kiểm nghiệm / hiệu chuẩn', 4),
-  ('ktc',  'Kiểm tra chéo', 5),
-  ('tckt', 'Tài chính / kế toán', 6),
-  ('lx',   'Lái xe', 7)
+  ('pgd',  'Ph� gi�m ??c', 1),
+  ('nv',   'B? ph?n nghi?p v?', 2),
+  ('nc',   'B? ph?n NC&CG', 3),
+  ('pkn',  'Ph�ng ki?m nghi?m / hi?u chu?n', 4),
+  ('ktc',  'Ki?m tra ch�o', 5),
+  ('tckt', 'T�i ch�nh / k? to�n', 6),
+  ('lx',   'L�i xe', 7)
 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, sort_order = EXCLUDED.sort_order;
 
 CREATE TABLE IF NOT EXISTS spm_gv_staff (
@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS spm_gv_tasks (
   week_id UUID NOT NULL REFERENCES spm_gv_weeks(id) ON DELETE CASCADE,
   level TEXT NOT NULL CHECK (level IN ('center', 'dept')),
   department_id TEXT REFERENCES spm_gv_departments(id),
+  parent_id UUID REFERENCES spm_gv_tasks(id) ON DELETE SET NULL,
   title TEXT NOT NULL,
   description TEXT,
   doer_text TEXT,
@@ -65,6 +66,7 @@ CREATE TABLE IF NOT EXISTS spm_gv_tasks (
 
 CREATE INDEX IF NOT EXISTS idx_spm_gv_tasks_week ON spm_gv_tasks (week_id, level);
 CREATE INDEX IF NOT EXISTS idx_spm_gv_tasks_dept ON spm_gv_tasks (department_id);
+CREATE INDEX IF NOT EXISTS idx_spm_gv_tasks_parent ON spm_gv_tasks (parent_id);
 
 CREATE TABLE IF NOT EXISTS spm_gv_assignees (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -110,5 +112,5 @@ CREATE TABLE IF NOT EXISTS spm_gv_leader_notes (
 CREATE INDEX IF NOT EXISTS idx_spm_gv_leader_notes_week ON spm_gv_leader_notes (week_id, scope);
 
 INSERT INTO app_registry (app_id, name, sort_order, assignable, hub_enabled, scope_type)
-VALUES ('spmgv', 'Giao việc TT SPM', 45, TRUE, TRUE, 'department')
+VALUES ('spmgv', 'Giao vi?c TT SPM', 45, TRUE, TRUE, 'department')
 ON CONFLICT (app_id) DO UPDATE SET name = EXCLUDED.name, hub_enabled = TRUE;

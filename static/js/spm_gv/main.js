@@ -139,9 +139,38 @@
   }
 
   function leadLabel(t) {
-    if (state.level === 'center') return deptName(t.department_id);
+    if (t.level === 'center' || state.level === 'center') return deptName(t.department_id);
     if (t.lead) return t.lead.full_name || t.lead.username;
     return '-';
+  }
+
+  function findTask(id) {
+    var list = [];
+    ((state.board && state.board.groups) || []).forEach(function (g) {
+      if (g.parent) list.push(g.parent);
+      (g.children || []).forEach(function (c) { list.push(c); });
+    });
+    ((state.board && state.board.orphan_children) || []).forEach(function (c) { list.push(c); });
+    ((state.board && state.board.tasks) || []).forEach(function (t) { list.push(t); });
+    return list.find(function (x) { return x.id === id; });
+  }
+
+  function parentOptions() {
+    return (state.board && state.board.center_inbox) || (state.board && state.board.groups || []).map(function (g) {
+      return g.parent;
+    }).filter(Boolean);
+  }
+
+  function actionBtns(t, extra) {
+    var html = '';
+    if (extra) html += extra;
+    if (t.can_report) {
+      html += '<button type="button" class="gv-btn-sm gv-btn-outline" data-report="' + t.id + '">' + T('btnReport') + '</button> ';
+    }
+    if (canAssign()) {
+      html += '<button type="button" class="gv-btn-sm gv-btn-outline" data-score="' + t.id + '">' + T('btnScore') + '</button>';
+    }
+    return html;
   }
 
   function renderTable() {
@@ -149,14 +178,14 @@
     var center = state.level === 'center';
     $('taskHead').innerHTML = '<tr>' +
       '<th>' + T('colTask') + '</th>' +
-      (center ? '' : '<th>' + T('colDept') + '</th>') +
-      '<th>' + (center ? T('colLeadDept') : T('colLeadPerson')) + '</th>' +
+      '<th>' + T('colLeadDept') + '</th>' +
       '<th>' + T('colDoer') + '</th><th>' + T('colDeadline') + '</th>' +
+      '<th>' + T('colChildAssign') + '</th>' +
       '<th>' + T('colDone') + '</th><th>' + T('colUndone') + '</th><th>' + T('colReason') + '</th>' +
       '<th>' + T('colPct') + '</th><th>' + T('colScore') + '</th>' +
       (see ? '<th>' + T('colSecret') + '</th>' : '') +
       '<th></th></tr>';
-    var tasks = (state.board && state.board.tasks) || [];
+    var tasks = (state.board && (state.board.center_inbox || state.board.tasks)) || [];
     if (!tasks.length) {
       $('taskBody').innerHTML = '<tr><td class="gv-empty" colspan="12">' + T('emptyTasks') + '</td></tr>';
       return;
@@ -172,31 +201,100 @@
           : '<td><span class="gv-secret">' + T('secretEmpty') + '</span></td>';
       }
       var work = t.work_score ? (t.work_score + '/5') : '-';
-      var reportBtn = t.can_report
-        ? '<button type="button" class="gv-btn-sm gv-btn-outline" data-report="' + t.id + '">' + T('btnReport') + '</button> '
-        : '';
+      var casc = (t.child_count ? (t.child_count + ' nguoi: ' + (t.child_assignees || '')) : T('notCascaded'));
       return '<tr>' +
         '<td><strong>' + esc(t.title) + '</strong><div class="gv-week-card-meta">' + esc(t.description || '') + '</div></td>' +
-        (center ? '' : '<td>' + esc(deptName(t.department_id)) + '</td>') +
         '<td>' + esc(leadLabel(t)) + '</td>' +
         '<td>' + esc(doerLabel(t)) + '</td>' +
         '<td>' + (t.deadline || '-') + '</td>' +
+        '<td>' + esc(casc) + '</td>' +
         '<td class="gv-cell-note">' + esc(clip(t.completed_text, 90)) + '</td>' +
         '<td class="gv-cell-note">' + esc(clip(t.incomplete_text, 90)) + '</td>' +
         '<td class="gv-cell-note">' + esc(clip(t.reason_text, 70)) + '</td>' +
         '<td><span class="gv-rag gv-rag-' + rag + '"></span>' + (t.progress_pct || 0) + '%</td>' +
         '<td>' + work + '</td>' + secret +
-        '<td style="white-space:nowrap">' + reportBtn +
-          (canAssign() ? '<button type="button" class="gv-btn-sm gv-btn-outline" data-score="' + t.id + '">' + T('btnScore') + '</button>' : '') +
-        '</td></tr>';
+        '<td style="white-space:nowrap">' + actionBtns(t) + '</td></tr>';
     }).join('');
+  }
+
+  function childRow(t, see) {
+    var rag = t.rag || 'gray';
+    var secret = '';
+    if (see) {
+      var n = t.leader_note;
+      secret = n
+        ? ('<td><span class="gv-secret">' + T('secretSupport') + ' ' + (n.support_score || '-') +
+           ' | ' + T('secretInit') + ' ' + (n.initiative_score || '-') + '</span></td>')
+        : '<td><span class="gv-secret">' + T('secretEmpty') + '</span></td>';
+    }
+    var work = t.work_score ? (t.work_score + '/5') : '-';
+    var lead = t.lead ? (t.lead.full_name || t.lead.username) : '-';
+    return '<tr>' +
+      '<td>' + esc(t.title) + '</td>' +
+      '<td>' + esc(lead) + '</td>' +
+      '<td>' + esc(doerLabel(t)) + '</td>' +
+      '<td>' + (t.deadline || '-') + '</td>' +
+      '<td class="gv-cell-note">' + esc(clip(t.completed_text, 80)) + '</td>' +
+      '<td class="gv-cell-note">' + esc(clip(t.incomplete_text, 80)) + '</td>' +
+      '<td class="gv-cell-note">' + esc(clip(t.reason_text, 60)) + '</td>' +
+      '<td><span class="gv-rag gv-rag-' + rag + '"></span>' + (t.progress_pct || 0) + '%</td>' +
+      '<td>' + work + '</td>' + secret +
+      '<td style="white-space:nowrap">' + actionBtns(t) + '</td></tr>';
+  }
+
+  function renderGroups() {
+    var see = canSeeLeader();
+    var groups = (state.board && state.board.groups) || [];
+    var orphans = (state.board && state.board.orphan_children) || [];
+    var box = $('groupList');
+    if (!groups.length && !orphans.length) {
+      box.innerHTML = '<p class="gv-empty">' + T('emptyInbox') + '</p>';
+      return;
+    }
+    var html = groups.map(function (g) {
+      var p = g.parent || {};
+      var kids = g.children || [];
+      var cascadeBtn = (p.can_cascade)
+        ? '<button type="button" class="gv-btn gv-btn-sm gv-btn-primary" data-cascade="' + p.id + '">' + T('btnCascade') + '</button>'
+        : '';
+      var head = '<div class="gv-group">' +
+        '<div class="gv-group-head">' +
+          '<div><span class="gv-pill">' + T('fromDirector') + '</span> ' +
+          '<strong>' + esc(p.title) + '</strong>' +
+          '<div class="gv-week-card-meta">' + esc(deptName(p.department_id)) +
+            (p.deadline ? ' ù han ' + p.deadline : '') +
+            ' ù ' + (p.progress_pct || 0) + '%</div>' +
+          (p.description ? '<div class="gv-week-card-meta">' + esc(p.description) + '</div>' : '') +
+          '</div><div>' + cascadeBtn + '</div></div>';
+      if (!kids.length) {
+        return head + '<p class="gv-empty" style="padding:12px">' + T('emptyCascade') + '</p></div>';
+      }
+      return head +
+        '<div class="gv-table-wrap" style="border:0;border-radius:0">' +
+        '<table class="gv-table"><thead><tr>' +
+        '<th>' + T('colTask') + '</th><th>' + T('colLeadPerson') + '</th><th>' + T('colDoer') + '</th><th>' + T('colDeadline') + '</th>' +
+        '<th>' + T('colDone') + '</th><th>' + T('colUndone') + '</th><th>' + T('colReason') + '</th>' +
+        '<th>' + T('colPct') + '</th><th>' + T('colScore') + '</th>' +
+        (see ? '<th>' + T('colSecret') + '</th>' : '') + '<th></th></tr></thead><tbody>' +
+        kids.map(function (c) { return childRow(c, see); }).join('') +
+        '</tbody></table></div></div>';
+    }).join('');
+    box.innerHTML = html;
+  }
+
+  function renderBoard() {
+    var dept = state.level === 'dept';
+    $('tableWrap').hidden = dept;
+    $('groupList').hidden = !dept;
+    if (dept) renderGroups();
+    else renderTable();
   }
 
   async function loadBoard() {
     if (!state.week) return;
     var body = await api('/weeks/' + state.week.id + '/board?level=' + state.level);
     state.board = body;
-    renderHead(); renderStats(); renderTable();
+    renderHead(); renderStats(); renderBoard();
   }
 
   function staffForLead() {
@@ -205,12 +303,24 @@
     });
   }
 
-  function setupAssignForm() {
+  function fillParentFromSelect() {
+    var pid = $('fParent').value;
+    var p = (parentOptions() || []).find(function (x) { return x && x.id === pid; });
+    if (!p) return;
+    $('fDept').value = p.department_id || '';
+    if (!$('fTitle').value) $('fTitle').value = p.title || '';
+    if (!$('fDesc').value) $('fDesc').value = p.description || '';
+    if (!$('fDeadline').value && p.deadline) $('fDeadline').value = p.deadline;
+  }
+
+  function setupAssignForm(parentId) {
     var center = state.level === 'center';
     $('assignTitle').textContent = center ? T('assignCenter') : T('assignDept');
     $('assignHint').textContent = center ? T('hintAssignCenter') : T('hintAssignDept');
     $('lblDept').textContent = center ? T('lblDeptCenter') : T('lblDept');
     $('wrapLead').hidden = center;
+    $('wrapParent').hidden = center;
+    $('wrapDept').hidden = !center;
     $('fTitle').value = '';
     $('fDesc').value = '';
     $('fDoers').value = '';
@@ -218,13 +328,18 @@
     $('fDept').value = '';
     fillSelect($('fDept'), state.departments, 'id', 'name', true, T('pickDept'));
     if (!center) {
-      var depts = state.departments;
-      if (state.perms.is_head && state.perms.department_id && !state.perms.is_director) {
-        depts = state.departments.filter(function (d) { return d.id === state.perms.department_id; });
-        fillSelect($('fDept'), depts, 'id', 'name', false);
-      }
+      var inbox = parentOptions() || [];
+      var opts = inbox.map(function (p) {
+        return { id: p.id, label: (deptName(p.department_id) + ' ù ' + (p.title || '')) };
+      });
+      fillSelect($('fParent'), opts, 'id', 'label', true, T('pickParent'));
       fillSelect($('fLead'), staffForLead(), 'username', 'full_name', true, T('pickPerson'));
       $('fLead').value = '';
+      if (parentId) {
+        $('fParent').value = parentId;
+        fillParentFromSelect();
+      }
+      $('fParent').onchange = fillParentFromSelect;
     }
   }
 
@@ -280,7 +395,15 @@
       loadBoard().catch(function (err) { toast(err.message, true); });
     }
     if (t.id === 'btnAssign') {
+      if (state.level === 'dept' && !(parentOptions() || []).length) {
+        toast(T('needParent'), true);
+        return;
+      }
       setupAssignForm();
+      openM('modalAssign');
+    }
+    if (t.dataset && t.dataset.cascade) {
+      setupAssignForm(t.dataset.cascade);
       openM('modalAssign');
     }
     if (t.id === 'btnStaff') { renderStaffTable(); openM('modalStaff'); }
@@ -290,7 +413,7 @@
     }
     if (t.dataset && t.dataset.report) {
       state.reportTaskId = t.dataset.report;
-      var task = ((state.board && state.board.tasks) || []).find(function (x) { return x.id === state.reportTaskId; });
+      var task = findTask(state.reportTaskId);
       $('reportTaskTitle').textContent = task ? task.title : '';
       $('fPct').value = task ? (task.progress_pct || 0) : 0;
       $('fDone').value = task ? (task.completed_text || '') : '';
@@ -300,7 +423,7 @@
     }
     if (t.dataset && t.dataset.score) {
       state.scoreTaskId = t.dataset.score;
-      var ts = ((state.board && state.board.tasks) || []).find(function (x) { return x.id === state.scoreTaskId; });
+      var ts = findTask(state.scoreTaskId);
       $('scoreTaskTitle').textContent = ts ? ts.title : '';
       $('fWorkScore').value = (ts && ts.work_score) || '';
       $('fWorkCmt').value = (ts && ts.work_comment) || '';
@@ -334,6 +457,9 @@
       var u = $('fLead').value;
       var st = state.staff.find(function (s) { return s.username === u; });
       payload.lead = u ? { username: u, full_name: st ? st.full_name : u } : null;
+      payload.parent_id = $('fParent').value || null;
+      var p = (parentOptions() || []).find(function (x) { return x && x.id === payload.parent_id; });
+      if (p) payload.department_id = p.department_id;
     }
     api('/tasks', { method: 'POST', body: JSON.stringify(payload) })
       .then(function () { closeM('modalAssign'); toast(T('okAssign')); return loadBoard(); })

@@ -8,7 +8,10 @@ from pathlib import Path
 _APPLIED = False
 ROOT = Path(__file__).resolve().parents[2]
 SQL_PATH = ROOT / "supabase" / "schema-spm-gv.sql"
-PATCH_PATH = ROOT / "supabase" / "patch-spm-gv-v2.sql"
+PATCH_FILES = [
+    ROOT / "supabase" / "patch-spm-gv-v2.sql",
+    ROOT / "supabase" / "patch-spm-gv-v3.sql",
+]
 
 
 def _dsn() -> str:
@@ -51,10 +54,12 @@ def ensure_schema() -> None:
                 print("[spm_gv] schema applied")
             except Exception as exc:
                 print(f"[spm_gv] schema apply skipped: {exc}")
-    if PATCH_PATH.is_file():
+    for path in PATCH_FILES:
+        if not path.is_file():
+            continue
         try:
-            _run_sql(PATCH_PATH.read_text(encoding="utf-8"))
-            print("[spm_gv] patch v2 applied")
+            _run_sql(path.read_text(encoding="utf-8"))
+            print("[spm_gv] applied", path.name)
         except Exception as exc:
-            print(f"[spm_gv] patch v2 skipped: {exc}")
+            print(f"[spm_gv] {path.name} skipped: {exc}")
     _APPLIED = True

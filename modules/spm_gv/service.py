@@ -367,8 +367,8 @@ def _enrich_task(task: dict, assignees: list, report: dict | None, leader_note: 
     return out
 
 
-def board(sb, ctx: UserContext, week_id: str, level: str) -> dict:
-    tasks_res = (
+def _week_tasks(sb, week_id: str, level: str) -> list[dict]:
+    res = (
         sb.table("spm_gv_tasks")
         .select("*")
         .eq("week_id", week_id)
@@ -376,37 +376,74 @@ def board(sb, ctx: UserContext, week_id: str, level: str) -> dict:
         .order("created_at")
         .execute()
     )
-    tasks = tasks_res.data or []
-    ids = [t["id"] for t in tasks]
-    amap = _assignees_of(sb, ids)
-    rmap = _latest_reports(sb, ids)
+    return res.data or []
+
+
+def _rollup_parent(sb, parent_id: str | None) -> None:
+    if not parent_id:
+        return
+    kids = (
+        sb.table("spm_gv_tasks")
+        .select("progress_pct,status")
+        .eq("parent_id", parent_id)
+        .execute()
+        .data
+        or []
+    )
+    if not kids:
+        return
+    n = len(kids)
+    avg = int(round(sum(int(k.get("progress_pct") or 0) for k in kids) / n))
+    status = _auto_status(avg, "")
+    if any((k.get("status") or "") in ("blocked", "at_risk") for k in kids) and avg < 100:
+        status = "at_risk"
+    sb.table("spm_gv_tasks").update({
+        "progress_pct": avg,
+        "status": status,
+        "updated_at": _now_iso(),
+    }).eq("id", parent_id).execute()
+
+
+def board(sb, ctx: UserContext, week_id: str, level: str) -> dict:
+    center_raw = _week_tasks(sb, week_id, "center")
+    dept_raw = _week_tasks(sb, week_id, "dept")
     staff = list_staff(sb)
     heads = dept_heads(staff)
-
-    show_center = level == "center" and rbac.can_see_leader_notes_center(ctx, sb)
-    notes_pack = _leader_notes_map(sb, week_id, "center") if show_center else {"by_user": {}, "by_dept": {}, "rows": []}
-
     dept_id = rbac.staff_department_id(ctx, sb)
     is_dir = rbac.is_director(ctx, sb) or ctx.is_global_admin
     is_head = rbac.is_head(ctx, sb)
+    is_deputy = rbac.is_deputy(ctx, sb)
 
-    if level == "dept" and not is_dir and not rbac.is_deputy(ctx, sb):
-        if dept_id:
-            tasks = [t for t in tasks if t.get("department_id") == dept_id]
-            ids = [t["id"] for t in tasks]
+    def visible_dept(did: str | None) -> bool:
+        if is_dir:
+            return True
+        if is_deputy:
+            return str(did or "") in (dept_id, "pgd")
+        return bool(dept_id) and str(did or "") == dept_id
 
-    out_tasks = []
-    for t in tasks:
+    if not is_dir:
+        center_raw = [t for t in center_raw if visible_dept(t.get("department_id"))]
+        dept_raw = [t for t in dept_raw if visible_dept(t.get("department_id"))]
+
+    all_ids = [t["id"] for t in center_raw] + [t["id"] for t in dept_raw]
+    amap = _assignees_of(sb, all_ids)
+    rmap = _latest_reports(sb, all_ids)
+    show_center_notes = rbac.can_see_leader_notes_center(ctx, sb)
+    notes_center = _leader_notes_map(sb, week_id, "center") if show_center_notes else {
+        "by_user": {}, "by_dept": {}, "rows": []
+    }
+
+    def pack(t: dict) -> dict:
         include_leader = False
         note = None
-        if level == "center" and show_center:
-            note = notes_pack["by_dept"].get(t.get("department_id"))
+        if t.get("level") == "center" and show_center_notes:
+            note = notes_center["by_dept"].get(t.get("department_id"))
             if not note:
                 head = heads.get(t.get("department_id") or "")
                 if head:
-                    note = notes_pack["by_user"].get(head.get("username"))
+                    note = notes_center["by_user"].get(head.get("username"))
             include_leader = True
-        elif level == "dept":
+        elif t.get("level") == "dept":
             d = t.get("department_id")
             if rbac.can_see_leader_notes_dept(ctx, sb, d):
                 nmap = _leader_notes_map(sb, week_id, "dept", d)
@@ -414,65 +451,126 @@ def board(sb, ctx: UserContext, week_id: str, level: str) -> dict:
                 key = (lead or {}).get("username")
                 note = nmap["by_user"].get(key) if key else None
                 include_leader = True
-        out_tasks.append(_enrich_task(t, amap.get(t["id"], []), rmap.get(t["id"]), note, include_leader))
-        out_tasks[-1]["can_report"] = rbac.can_report_task(
-            ctx, sb, {**t, "assignees": amap.get(t["id"], [])}
-        )
+        out = _enrich_task(t, amap.get(t["id"], []), rmap.get(t["id"]), note, include_leader)
+        out["can_report"] = rbac.can_report_task(ctx, sb, {**t, "assignees": amap.get(t["id"], [])})
+        out["can_cascade"] = rbac.can_assign_dept(ctx, sb, t.get("department_id"))
+        return out
 
-    people_notes = []
-    if level == "center" and show_center:
-        people_notes = notes_pack["rows"]
-    elif level == "dept" and (is_dir or is_head):
-        scope_dept = None if is_dir else dept_id
-        nmap = _leader_notes_map(sb, week_id, "dept", scope_dept)
-        people_notes = nmap["rows"]
+    kids_by_parent: dict[str, list] = {}
+    for d in dept_raw:
+        pid = d.get("parent_id")
+        if pid:
+            kids_by_parent.setdefault(pid, []).append(d)
 
-    n = len(out_tasks)
-    avg = int(round(sum(int(t.get("progress_pct") or 0) for t in out_tasks) / n)) if n else 0
+    center_packed = []
+    for t in center_raw:
+        item = pack(t)
+        kids = [pack(k) for k in kids_by_parent.get(t["id"], [])]
+        item["children"] = kids
+        item["child_count"] = len(kids)
+        names = []
+        for k in kids:
+            if k.get("lead"):
+                names.append(k["lead"].get("full_name") or k["lead"].get("username"))
+            if k.get("doer_text"):
+                names.append(k["doer_text"])
+        item["child_assignees"] = ", ".join([n for n in names if n])
+        center_packed.append(item)
+
+    if level == "center":
+        out_tasks = center_packed
+        people_notes = notes_center["rows"] if show_center_notes else []
+        groups = [{"parent": t, "children": t.get("children") or []} for t in center_packed]
+    else:
+        groups = [{"parent": t, "children": t.get("children") or []} for t in center_packed]
+        orphans = [pack(d) for d in dept_raw if not d.get("parent_id")]
+        out_tasks = []
+        for g in groups:
+            out_tasks.extend(g["children"])
+        out_tasks.extend(orphans)
+        people_notes = []
+        if is_dir or is_head:
+            scope_dept = None if is_dir else dept_id
+            people_notes = _leader_notes_map(sb, week_id, "dept", scope_dept)["rows"]
+
+    n = len(out_tasks) if level == "dept" else len(center_packed)
+    src = center_packed if level == "center" else out_tasks
+    avg = int(round(sum(int(t.get("progress_pct") or 0) for t in src) / n)) if n else 0
     rag_count = {"green": 0, "yellow": 0, "red": 0, "gray": 0}
-    for t in out_tasks:
+    for t in src:
         rag_count[t["rag"]] = rag_count.get(t["rag"], 0) + 1
 
     return {
         "tasks": out_tasks,
+        "groups": groups,
+        "orphan_children": [pack(d) for d in dept_raw if not d.get("parent_id")] if level == "dept" else [],
+        "center_inbox": center_packed,
         "summary": {"count": n, "avg_pct": avg, "rag": rag_count},
         "leader_notes": people_notes,
-        "can_see_leader": show_center or (level == "dept" and (is_dir or is_head)),
+        "can_see_leader": (
+            (level == "center" and show_center_notes)
+            or (level == "dept" and (is_dir or is_head))
+        ),
     }
 
 
 def create_task(sb, ctx: UserContext, payload: dict) -> dict:
     level = payload.get("level") or "center"
     dept = payload.get("department_id")
+    parent_id = payload.get("parent_id") or None
+    parent = None
+    if parent_id:
+        found = sb.table("spm_gv_tasks").select("*").eq("id", parent_id).limit(1).execute()
+        if not found.data:
+            raise ValueError("Khong tim thay dau viec Giam doc da giao")
+        parent = found.data[0]
+        if parent.get("level") != "center":
+            raise ValueError("Chi phan cong tiep tu dau viec cap Trung tam")
+        dept = parent.get("department_id")
+        payload["week_id"] = parent.get("week_id") or payload.get("week_id")
     if level == "center" and not rbac.can_assign_center(ctx, sb):
         raise PermissionError("Chi Giam doc giao viec cap Trung tam")
     if level == "dept" and not rbac.can_assign_dept(ctx, sb, dept):
         raise PermissionError("Khong co quyen giao viec cap bo phan nay")
     title = str(payload.get("title") or "").strip()
+    if not title and parent:
+        title = str(parent.get("title") or "").strip()
     if not title:
         raise ValueError("Thieu ten dau viec")
     if not dept:
         raise ValueError("Chon bo phan chiu trach nhiem")
     if level == "dept":
+        if not parent_id:
+            raise ValueError("Chon dau viec Giam doc da giao de phan cong tiep")
         lead = payload.get("lead") or {}
         if not lead.get("username"):
             raise ValueError("Chon nguoi chiu trach nhiem chinh")
+    deadline = payload.get("deadline") or None
+    if not deadline and parent:
+        deadline = parent.get("deadline")
     doc = {
         "week_id": payload["week_id"],
         "level": level,
         "department_id": dept,
+        "parent_id": parent_id if level == "dept" else None,
         "title": title,
-        "description": payload.get("description") or "",
+        "description": payload.get("description") or (parent.get("description") if parent else "") or "",
         "doer_text": str(payload.get("doer_text") or "").strip(),
-        "deadline": payload.get("deadline") or None,
+        "deadline": deadline,
         "status": payload.get("status") or "not_started",
         "progress_pct": int(payload.get("progress_pct") or 0),
         "created_by": ctx.username,
         "updated_at": _now_iso(),
     }
-    ins = sb.table("spm_gv_tasks").insert(doc).execute()
+    try:
+        ins = sb.table("spm_gv_tasks").insert(doc).execute()
+    except Exception:
+        doc.pop("parent_id", None)
+        ins = sb.table("spm_gv_tasks").insert(doc).execute()
     task = (ins.data or [doc])[0]
     _save_assignees(sb, task["id"], payload, level)
+    if parent_id:
+        _rollup_parent(sb, parent_id)
     return task
 
 
@@ -571,6 +669,7 @@ def submit_report(sb, ctx: UserContext, task_id: str, payload: dict) -> dict:
         "status": status,
         "updated_at": _now_iso(),
     }).eq("id", task_id).execute()
+    _rollup_parent(sb, task.get("parent_id"))
     return (ins.data or [rep])[0]
 
 

@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SQL_FILES = [
     ROOT / "supabase" / "schema-spm-gv.sql",
     ROOT / "supabase" / "patch-spm-gv-v2.sql",
+    ROOT / "supabase" / "patch-spm-gv-v3.sql",
 ]
 
 

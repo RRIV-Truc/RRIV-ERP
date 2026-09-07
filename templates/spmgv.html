@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Giao việc TT SPM</title>
 <meta name="theme-color" content="#312e81">
-<link rel="stylesheet" href="/static/css/app-spm-gv.css?v=4">
+<link rel="stylesheet" href="/static/css/app-spm-gv.css?v=6">
 </head>
 <body class="gv-body">
 <div class="gv-shell">
@@ -59,12 +59,13 @@
         <button type="button" class="gv-btn gv-btn-outline" id="btnStaff" hidden>Nhân sự Trung tâm</button>
         <button type="button" class="gv-btn gv-btn-outline" id="btnLeaderNote" hidden>Ghi nhận lãnh đạo (kín)</button>
       </div>
-      <div class="gv-table-wrap">
+      <div class="gv-table-wrap" id="tableWrap">
         <table class="gv-table" id="taskTable">
           <thead id="taskHead"></thead>
           <tbody id="taskBody"><tr><td class="gv-empty" colspan="11">Chưa có dữ liệu</td></tr></tbody>
         </table>
       </div>
+      <div id="groupList" hidden></div>
     </div>
   </div>
 </div>
@@ -73,7 +74,11 @@
   <div class="gv-dialog">
     <h3 id="assignTitle">Giao việc</h3>
     <p id="assignHint" class="gv-lock-hint"></p>
-    <div class="gv-field"><label>Đầu việc</label><input id="fTitle" maxlength="200"></div>
+    <div class="gv-field" id="wrapParent" hidden>
+      <label>Đầu việc Giám đốc đã giao</label>
+      <select id="fParent"></select>
+    </div>
+    <div class="gv-field"><label>Đầu việc / nội dung phân công tiếp</label><input id="fTitle" maxlength="200"></div>
     <div class="gv-field"><label>Mô tả / sản phẩm giao</label><textarea id="fDesc" rows="3"></textarea></div>
     <div class="gv-field" id="wrapDept">
       <label id="lblDept">Chịu trách nhiệm (bộ phận)</label>
@@ -167,11 +172,21 @@
   "chooseWeek": "Chọn tuần",
   "weekDash": "Tuần —",
   "kickerCenter": "Cấp Trung tâm — Giám đốc giao cho bộ phận (không giao tên cá nhân)",
-  "kickerDept": "Cấp bộ phận — giao việc tuần cho cá nhân tại Trung tâm",
+  "kickerDept": "Cấp bộ phận — nhận đầu việc Giám đốc giao, phân công tiếp cho nhân sự",
   "hintStaff": "Bạn báo cáo tiến độ các đầu việc được giao. Không thấy cột ghi nhận lãnh đạo.",
-  "hintDir": "Giám đốc: cấp 1 giao bộ phận; xem ghi nhận kín.",
-  "hintDeputy": "Phó GD: nhận việc cấp 1 theo bộ phận PGĐ; giao việc cấp 2.",
-  "hintHead": "Trưởng/phụ trách bộ phận: nhận việc cấp 1; giao tên nhân sự cấp 2.",
+  "hintDir": "Giám đốc: cấp 1 giao bộ phận; cấp 2 xem bộ phận phân công tiếp cho ai.",
+  "hintDeputy": "Phó GD: nhận việc cấp 1 của PGĐ; phân công tiếp cho người thực hiện.",
+  "hintHead": "Phụ trách bộ phận: nhận đúng đầu việc Giám đốc đã giao, rồi phân công tiếp cho nhân sự.",
+  "emptyInbox": "Chưa có đầu việc Giám đốc giao cho bộ phận tuần này.",
+  "emptyCascade": "Chưa phân công xuống nhân sự.",
+  "btnCascade": "Phân công tiếp",
+  "colChildAssign": "Cấp 2 đã phân công",
+  "notCascaded": "Chưa phân công",
+  "fromDirector": "Giám đốc giao",
+  "assignDept": "Phân công tiếp đầu việc Giám đốc đã giao",
+  "hintAssignDept": "Chọn đúng đầu việc cấp 1, rồi chọn người chịu trách nhiệm chính và người thực hiện.",
+  "pickParent": "— Chọn đầu việc Giám đốc giao —",
+  "needParent": "Chưa có đầu việc Giám đốc giao. Vào cấp 1 để Giám đốc phân công trước.",
   "statTasks": "Đầu việc",
   "statAvg": "Tiến độ TB",
   "statNote": "Cần lưu ý",
@@ -195,9 +210,7 @@
   "btnReport": "Báo cáo",
   "btnScore": "Chấm CV",
   "assignCenter": "Giám đốc giao việc cấp Trung tâm",
-  "assignDept": "Giao việc hàng tuần — bộ phận",
   "hintAssignCenter": "Chịu trách nhiệm: chọn bộ phận (PGĐ, nghiệp vụ, NC&CG, kiểm tra chéo, lái xe...). Không ghi tên cá nhân. Thực hiện có thể gõ nhiều tên.",
-  "hintAssignDept": "Chọn người chịu trách nhiệm chính từ danh sách nhân sự Trung tâm. Thực hiện có thể gõ thêm nhiều tên.",
   "lblDeptCenter": "Chịu trách nhiệm (bộ phận)",
   "lblDept": "Bộ phận",
   "pickDept": "— Chọn bộ phận —",
@@ -213,6 +226,6 @@
   "okWeek": "Đã mở tuần hiện tại"
 }
 </script>
-<script src="/static/js/spm_gv/main.js?v=5"></script>
+<script src="/static/js/spm_gv/main.js?v=6"></script>
 </body>
 </html>
