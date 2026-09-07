@@ -40,6 +40,9 @@ app.register_blueprint(meetings_bp)
 from modules.tbkl.routes import tbkl_bp
 app.register_blueprint(tbkl_bp)
 
+from modules.spm_gv.routes import spmgv_bp
+app.register_blueprint(spmgv_bp)
+
 EMAIL_SENDER = os.getenv("EMAIL_SENDER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "")
@@ -104,7 +107,7 @@ OTP_SESSIONS = {}
 VALID_APPS = [
     'vanphongpham', 'doanhnghiep', 'dieuhanhxe', 'vanbannoibo', 'nhansu',
     'dautu', 'diemdanh', 'vuoncay', 'sanxuat', 'chatluong', 'thoitiet',
-    'baocao', 'thongbao', 'phanquyen', 'phonghop', 'tbkl'
+    'baocao', 'thongbao', 'phanquyen', 'phonghop', 'tbkl', 'spmgv'
 ]
 
 PHUOC_HOA_FILES = {
@@ -124,6 +127,7 @@ PHUOC_HOA_FILES = {
     'phanquyen': 'app-admin-roles.html',
     'phonghop': 'phonghop.html',
     'tbkl': 'tbkl.html',
+    'spmgv': 'spmgv.html',
 }
 
 APP_TITLES = {
@@ -143,6 +147,7 @@ APP_TITLES = {
     'phanquyen': 'Quản Lý Phân Quyền',
     'phonghop': 'Phòng Họp',
     'tbkl': 'Theo dõi KL họp',
+    'spmgv': 'Giao việc TT SPM',
 }
 
 # URL /app/<tên> → file template thực tế (tên có thể khác URL)
@@ -163,6 +168,7 @@ APP_TEMPLATES = {
     'doanhnghiep': 'doanhnghiep.html',
     'phonghop': 'phonghop.html',
     'tbkl': 'tbkl.html',
+    'spmgv': 'spmgv.html',
 }
 
 # Firestore collection name → bảng Supabase chuyên biệt (nếu có)
@@ -1501,6 +1507,7 @@ APP_SCOPE_TYPES = {
     'thongbao': 'department',
     'phanquyen': 'none',
     'tbkl': 'department',
+    'spmgv': 'department',
 }
 
 

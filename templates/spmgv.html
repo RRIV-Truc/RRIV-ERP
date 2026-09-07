@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+{% include 'includes/rriv_core_slim.html' %}
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Giao việc TT SPM</title>
+<meta name="theme-color" content="#312e81">
+<link rel="stylesheet" href="/static/css/app-spm-gv.css?v=4">
+</head>
+<body class="gv-body">
+<div class="gv-shell">
+  <header class="gv-topbar">
+    <div class="gv-topbar-left">
+      <button type="button" class="gv-btn-icon" id="btnHome" title="Trang chủ">🏠</button>
+      <div class="gv-brand">
+        <span class="gv-brand-mark">GV</span>
+        <div>
+          <strong>Giao việc — TT NCPT Sản phẩm mới</strong>
+          <span>Cấp 1 giao bộ phận · Cấp 2 giao cá nhân · Báo cáo tiến độ</span>
+        </div>
+      </div>
+    </div>
+    <div class="gv-topbar-right">
+      <span class="gv-week-badge" id="weekBadge">Tuần —</span>
+      <div class="gv-user-chip">
+        <div class="gv-avatar" id="userAvatar">?</div>
+        <div class="gv-user-name" id="userChip">Đang tải…</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="gv-body-row">
+    <aside class="gv-sidebar">
+      <div class="gv-sidebar-head">
+        <h2>Tuần làm việc</h2>
+        <button type="button" class="gv-btn gv-btn-sm gv-btn-primary" id="btnNewWeek" hidden>+ Tuần</button>
+      </div>
+      <p class="gv-sidebar-hint">Chọn tuần để giao việc và theo dõi tiến độ (giống theo dõi kết luận họp).</p>
+      <div class="gv-week-list" id="weekList"><p class="gv-empty">Đang tải…</p></div>
+    </aside>
+
+    <div class="gv-content">
+      <section class="gv-head">
+        <div>
+          <p class="gv-kicker" id="levelKicker">Cấp Trung tâm</p>
+          <h1 class="gv-title" id="weekTitle">Chọn tuần</h1>
+          <p id="roleHint" class="gv-lock-hint"></p>
+        </div>
+        <div class="gv-tabs" id="levelTabs">
+          <button type="button" class="gv-tab is-active" data-level="center">Cấp 1 · Giám đốc giao bộ phận</button>
+          <button type="button" class="gv-tab" data-level="dept">Cấp 2 · Bộ phận giao nhân sự</button>
+        </div>
+      </section>
+
+      <div class="gv-stats" id="statsRow"></div>
+      <div class="gv-toolbar">
+        <button type="button" class="gv-btn gv-btn-primary" id="btnAssign" hidden>＋ Giao việc</button>
+        <button type="button" class="gv-btn gv-btn-outline" id="btnStaff" hidden>Nhân sự Trung tâm</button>
+        <button type="button" class="gv-btn gv-btn-outline" id="btnLeaderNote" hidden>Ghi nhận lãnh đạo (kín)</button>
+      </div>
+      <div class="gv-table-wrap">
+        <table class="gv-table" id="taskTable">
+          <thead id="taskHead"></thead>
+          <tbody id="taskBody"><tr><td class="gv-empty" colspan="11">Chưa có dữ liệu</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="gv-modal" id="modalAssign" hidden>
+  <div class="gv-dialog">
+    <h3 id="assignTitle">Giao việc</h3>
+    <p id="assignHint" class="gv-lock-hint"></p>
+    <div class="gv-field"><label>Đầu việc</label><input id="fTitle" maxlength="200"></div>
+    <div class="gv-field"><label>Mô tả / sản phẩm giao</label><textarea id="fDesc" rows="3"></textarea></div>
+    <div class="gv-field" id="wrapDept">
+      <label id="lblDept">Chịu trách nhiệm (bộ phận)</label>
+      <select id="fDept"></select>
+    </div>
+    <div class="gv-field" id="wrapLead" hidden>
+      <label>Người chịu trách nhiệm chính</label>
+      <select id="fLead"></select>
+    </div>
+    <div class="gv-field">
+      <label>Người thực hiện (nếu có, có thể nhiều người)</label>
+      <input id="fDoers" list="dlStaff" placeholder="Gõ tên, cách nhau bằng dấu phẩy">
+      <datalist id="dlStaff"></datalist>
+    </div>
+    <div class="gv-field"><label>Hạn</label><input type="date" id="fDeadline"></div>
+    <div class="gv-dialog-actions">
+      <button type="button" class="gv-btn gv-btn-outline" data-close="modalAssign">Hủy</button>
+      <button type="button" class="gv-btn gv-btn-primary" id="btnSaveAssign">Lưu phân công</button>
+    </div>
+  </div>
+</div>
+
+<div class="gv-modal" id="modalReport" hidden>
+  <div class="gv-dialog">
+    <h3>Báo cáo thực hiện</h3>
+    <p id="reportTaskTitle" class="gv-lock-hint"></p>
+    <div class="gv-field"><label>Nội dung đã hoàn thành</label><textarea id="fDone" rows="3" placeholder="Những việc đã xong trong tuần"></textarea></div>
+    <div class="gv-field"><label>Chưa hoàn thành</label><textarea id="fUndone" rows="3" placeholder="Phần còn lại"></textarea></div>
+    <div class="gv-field"><label>Lý do</label><textarea id="fReason" rows="2" placeholder="Nếu chưa xong: nguyên nhân"></textarea></div>
+    <div class="gv-field"><label>Tỷ lệ hoàn thành (%)</label><input type="number" id="fPct" min="0" max="100" value="0"></div>
+    <div class="gv-dialog-actions">
+      <button type="button" class="gv-btn gv-btn-outline" data-close="modalReport">Hủy</button>
+      <button type="button" class="gv-btn gv-btn-primary" id="btnSaveReport">Gửi báo cáo</button>
+    </div>
+  </div>
+</div>
+
+<div class="gv-modal" id="modalScore" hidden>
+  <div class="gv-dialog">
+    <h3>Đánh giá đầu mục công việc</h3>
+    <p id="scoreTaskTitle" class="gv-lock-hint"></p>
+    <div class="gv-field"><label>Điểm 1–5</label>
+      <select id="fWorkScore"><option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+    </div>
+    <div class="gv-field"><label>Nhận xét (người liên quan nhìn thấy)</label><textarea id="fWorkCmt" rows="3"></textarea></div>
+    <div class="gv-dialog-actions">
+      <button type="button" class="gv-btn gv-btn-outline" data-close="modalScore">Hủy</button>
+      <button type="button" class="gv-btn gv-btn-primary" id="btnSaveScore">Lưu đánh giá</button>
+    </div>
+  </div>
+</div>
+
+<div class="gv-modal" id="modalLeader" hidden>
+  <div class="gv-dialog">
+    <h3>Ghi nhận lãnh đạo — kín</h3>
+    <p class="gv-lock-hint">Chỉ Giám đốc (cấp Trung tâm) hoặc trưởng bộ phận + Giám đốc (cấp bộ phận) nhìn thấy. Nhân viên không thấy cột này.</p>
+    <div class="gv-field"><label>Người được ghi nhận</label><select id="fNoteUser"></select></div>
+    <div class="gv-field" id="wrapNoteDept"><label>Bộ phận (cấp 2)</label><select id="fNoteDept"></select></div>
+    <div class="gv-field"><label>Tinh thần hỗ trợ lãnh đạo (1–5)</label>
+      <select id="fSupport"><option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+    </div>
+    <div class="gv-field"><label>Sáng kiến công việc (1–5)</label>
+      <select id="fInit"><option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+    </div>
+    <div class="gv-field"><label>Ghi chú nội bộ</label><textarea id="fLeadNote" rows="3"></textarea></div>
+    <div class="gv-dialog-actions">
+      <button type="button" class="gv-btn gv-btn-outline" data-close="modalLeader">Hủy</button>
+      <button type="button" class="gv-btn gv-btn-primary" id="btnSaveLeader">Lưu ghi nhận</button>
+    </div>
+  </div>
+</div>
+
+<div class="gv-modal" id="modalStaff" hidden>
+  <div class="gv-dialog">
+    <h3>Nhân sự Trung tâm (đồng bộ từ danh mục nhân sự)</h3>
+    <p class="gv-lock-hint">Không nhập lại. Bộ phận nội bộ dùng khi Giám đốc giao việc cấp 1. Hiền được gắn Kiểm tra chéo.</p>
+    <div class="gv-table-wrap" style="margin-top:12px">
+      <table class="gv-table"><thead><tr><th>Tài khoản</th><th>Họ tên</th><th>Bộ phận giao việc</th><th>Vai trò</th></tr></thead>
+      <tbody id="staffBody"></tbody></table>
+    </div>
+    <div class="gv-dialog-actions">
+      <button type="button" class="gv-btn gv-btn-outline" data-close="modalStaff">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<div class="gv-toast" id="gvToast" hidden></div>
+<script type="application/json" id="gvI18n">
+{
+  "noWeek": "Chưa có tuần",
+  "chooseWeek": "Chọn tuần",
+  "weekDash": "Tuần —",
+  "kickerCenter": "Cấp Trung tâm — Giám đốc giao cho bộ phận (không giao tên cá nhân)",
+  "kickerDept": "Cấp bộ phận — giao việc tuần cho cá nhân tại Trung tâm",
+  "hintStaff": "Bạn báo cáo tiến độ các đầu việc được giao. Không thấy cột ghi nhận lãnh đạo.",
+  "hintDir": "Giám đốc: cấp 1 giao bộ phận; xem ghi nhận kín.",
+  "hintDeputy": "Phó GD: nhận việc cấp 1 theo bộ phận PGĐ; giao việc cấp 2.",
+  "hintHead": "Trưởng/phụ trách bộ phận: nhận việc cấp 1; giao tên nhân sự cấp 2.",
+  "statTasks": "Đầu việc",
+  "statAvg": "Tiến độ TB",
+  "statNote": "Cần lưu ý",
+  "statRisk": "Rủi ro",
+  "colTask": "Đầu việc",
+  "colDept": "Bộ phận",
+  "colLeadDept": "Chịu trách nhiệm (bộ phận)",
+  "colLeadPerson": "Chịu trách nhiệm chính",
+  "colDoer": "Thực hiện",
+  "colDeadline": "Hạn",
+  "colDone": "Đã hoàn thành",
+  "colUndone": "Chưa hoàn thành",
+  "colReason": "Lý do",
+  "colPct": "% HT",
+  "colScore": "Đánh giá CV",
+  "colSecret": "Ghi nhận LĐ (kín)",
+  "emptyTasks": "Chưa có đầu việc tuần này.",
+  "secretSupport": "Hỗ trợ",
+  "secretInit": "Sáng kiến",
+  "secretEmpty": "Chưa ghi",
+  "btnReport": "Báo cáo",
+  "btnScore": "Chấm CV",
+  "assignCenter": "Giám đốc giao việc cấp Trung tâm",
+  "assignDept": "Giao việc hàng tuần — bộ phận",
+  "hintAssignCenter": "Chịu trách nhiệm: chọn bộ phận (PGĐ, nghiệp vụ, NC&CG, kiểm tra chéo, lái xe...). Không ghi tên cá nhân. Thực hiện có thể gõ nhiều tên.",
+  "hintAssignDept": "Chọn người chịu trách nhiệm chính từ danh sách nhân sự Trung tâm. Thực hiện có thể gõ thêm nhiều tên.",
+  "lblDeptCenter": "Chịu trách nhiệm (bộ phận)",
+  "lblDept": "Bộ phận",
+  "pickDept": "— Chọn bộ phận —",
+  "pickPerson": "— Chọn người —",
+  "roleDir": "Giám đốc",
+  "roleDeputy": "Phó GD",
+  "roleHead": "Phụ trách BP",
+  "roleStaff": "Nhân viên",
+  "okAssign": "Đã giao việc",
+  "okReport": "Đã gửi báo cáo",
+  "okScore": "Đã chấm đầu việc",
+  "okNote": "Đã lưu ghi nhận (kín)",
+  "okWeek": "Đã mở tuần hiện tại"
+}
+</script>
+<script src="/static/js/spm_gv/main.js?v=5"></script>
+</body>
+</html>
