@@ -372,6 +372,12 @@
       var ctx = await api('/context');
       state.perms = ctx.permissions || {};
       state.user = ctx.user || {};
+      if (state.perms.is_deputy || state.perms.is_head) {
+        state.level = 'dept';
+        document.querySelectorAll('.gv-tab').forEach(function (b) {
+          b.classList.toggle('is-active', b.dataset.level === state.level);
+        });
+      }
       state.departments = ctx.departments || [];
       state.staff = ctx.staff || [];
       state.week = ctx.current_week;

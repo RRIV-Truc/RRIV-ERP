@@ -17,6 +17,14 @@ def director_usernames() -> set[str]:
     return {x.strip().lower() for x in raw.split(",") if x.strip()}
 
 
+def deputy_usernames() -> set[str]:
+    raw = os.getenv("SPM_GV_DEPUTY_USERNAMES", "rriv.nhtruong").strip()
+    return {x.strip().lower() for x in raw.split(",") if x.strip()}
+
+
+INTERNAL_DEPTS = {"pgd", "nv", "nc", "pkn", "ktc", "tckt", "lx"}
+
+
 def spm_dept_ids() -> set[str]:
     raw = os.getenv(DEPT_ENV, "dl-2").strip()
     return {x.strip() for x in raw.split(",") if x.strip()}
@@ -52,6 +60,8 @@ def is_director(ctx: UserContext, supabase=None) -> bool:
 
 
 def is_deputy(ctx: UserContext, supabase=None) -> bool:
+    if ctx and ctx.username in deputy_usernames():
+        return True
     row = staff_of(ctx, supabase)
     return bool(row and row.get("role") == "deputy")
 
@@ -63,7 +73,12 @@ def is_head(ctx: UserContext, supabase=None) -> bool:
 
 def staff_department_id(ctx: UserContext, supabase=None) -> str:
     row = staff_of(ctx, supabase) or {}
-    return str(row.get("department_id") or ctx.department_id or "").strip()
+    did = str(row.get("department_id") or "").strip()
+    if did in INTERNAL_DEPTS:
+        return did
+    if is_deputy(ctx, supabase):
+        return "pgd"
+    return ""
 
 
 def can_enter(ctx: UserContext, supabase=None) -> bool:
@@ -87,7 +102,10 @@ def can_assign_dept(ctx: UserContext, supabase=None, department_id: str | None =
     if can_assign_center(ctx, supabase):
         return True
     if is_deputy(ctx, supabase):
-        return True
+        if not department_id:
+            return True
+        mine = staff_department_id(ctx, supabase) or "pgd"
+        return str(department_id) in (mine, "pgd")
     if not is_head(ctx, supabase):
         return False
     if not department_id:

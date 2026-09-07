@@ -17,8 +17,10 @@ STATUS_LABEL = {
 }
 
 HIEN_USERNAME = "rriv.ntdhien"
+DEPUTY_USERNAME = "rriv.nhtruong"
 KTC_TEAM_ID = "team-spm-ktc"
 SPM_DEPT = "dl-2"
+INTERNAL_DEPTS = {"pgd", "nv", "nc", "pkn", "ktc", "tckt", "lx"}
 
 
 def iso_week_bounds(d: date | None = None):
@@ -54,7 +56,7 @@ def _now_iso():
 def _fold(s: str) -> str:
     text = unicodedata.normalize("NFD", str(s or ""))
     text = "".join(c for c in text if unicodedata.category(c) != "Mn")
-    return text.lower().replace("?", "d").replace("?", "d")
+    return text.lower().replace("\u0111", "d").replace("\u0110", "d")
 
 
 def _is_hien(emp: dict) -> bool:
@@ -71,9 +73,11 @@ def infer_role_dept(emp: dict) -> tuple[str, str | None]:
     username = str(emp.get("username") or "").strip().lower()
     pos = _fold(emp.get("position_name") or "")
     team = str(emp.get("team_id") or "")
+    if username == DEPUTY_USERNAME:
+        return "deputy", "pgd"
     if username in rbac.director_usernames() or ("giam doc" in pos and "pho" not in pos):
         return "director", None
-    if "pho giam doc" in pos or "pho gd" in pos:
+    if "pho giam doc" in pos or "pho gd" in pos or pos.startswith("pho "):
         return "deputy", "pgd"
     if "kiem tra cheo" in pos or team == KTC_TEAM_ID:
         return "head", "ktc"
@@ -417,9 +421,10 @@ def board(sb, ctx: UserContext, week_id: str, level: str) -> dict:
     def visible_dept(did: str | None) -> bool:
         if is_dir:
             return True
+        mine = dept_id if dept_id in INTERNAL_DEPTS else ""
         if is_deputy:
-            return str(did or "") in (dept_id, "pgd")
-        return bool(dept_id) and str(did or "") == dept_id
+            return str(did or "") in {mine, "pgd"} or not did
+        return bool(mine) and str(did or "") == mine
 
     if not is_dir:
         center_raw = [t for t in center_raw if visible_dept(t.get("department_id"))]
