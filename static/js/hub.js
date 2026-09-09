@@ -39,6 +39,7 @@ const RrivHub = (function () {
     if (dash) dash.style.display = 'block';
 
     applyHubAppLocks();
+    refreshSpmUnread();
 
     if (typeof RrivAdminBackup !== 'undefined') {
       RrivAdminBackup.init(currentUser);
@@ -142,6 +143,75 @@ const RrivHub = (function () {
     return currentUser;
   }
 
+  function hubUsername() {
+    try {
+      var u = currentUser || (typeof Auth !== 'undefined' && Auth.getUser && Auth.getUser()) || {};
+      return String(u.username || u.userName || '').toLowerCase();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function applyAppBadge(n) {
+    try {
+      if (n > 0 && navigator.setAppBadge) navigator.setAppBadge(n);
+      else if (navigator.clearAppBadge) navigator.clearAppBadge();
+    } catch (_) {}
+  }
+
+  function ensureSpmBadgeEl() {
+    var card = document.querySelector('.vrg-app-card[data-app="spmgv"]');
+    if (!card) return null;
+    var badge = document.getElementById('spmgvUnread');
+    if (badge) return badge;
+    badge = document.createElement('span');
+    badge.id = 'spmgvUnread';
+    badge.className = 'vrg-hub-unread';
+    badge.hidden = true;
+    badge.setAttribute('aria-label', 'Viec moi');
+    card.appendChild(badge);
+    return badge;
+  }
+
+  function setSpmBadge(n) {
+    var badge = ensureSpmBadgeEl();
+    if (!badge) return;
+    if (n > 0) {
+      badge.hidden = false;
+      badge.textContent = n > 99 ? '99+' : String(n);
+    } else {
+      badge.hidden = true;
+      badge.textContent = '';
+    }
+    applyAppBadge(n);
+  }
+
+  function refreshSpmUnread() {
+    var name = hubUsername();
+    if (!name) {
+      setSpmBadge(0);
+      return;
+    }
+    var since = '';
+    try { since = localStorage.getItem('spm_gv_seen_' + name) || ''; } catch (_) {}
+    var url = '/api/spm-gv/unread?username=' + encodeURIComponent(name);
+    if (since) url += '&since=' + encodeURIComponent(since);
+    fetch(url, { headers: { 'X-RRIV-Username': name } })
+      .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+      .then(function (pack) {
+        if (!pack.ok) { setSpmBadge(0); return; }
+        setSpmBadge(Number((pack.body && pack.body.count) || 0));
+      })
+      .catch(function () { setSpmBadge(0); });
+  }
+
+  if (!refreshSpmUnread._timer) {
+    refreshSpmUnread._timer = setInterval(function () {
+      var dash = document.getElementById('dashboardScreen');
+      if (dash && dash.style.display === 'block') refreshSpmUnread();
+    }, 90000);
+  }
+
   return {
     init,
     applyHubAppLocks,
@@ -153,6 +223,7 @@ const RrivHub = (function () {
     getSafeReturnUrl,
     redirectIfReturnUrl,
     onPageShow,
-    userDisplayName
+    userDisplayName,
+    refreshSpmUnread
   };
 })();

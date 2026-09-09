@@ -11,6 +11,7 @@ SQL_PATH = ROOT / "supabase" / "schema-spm-gv.sql"
 PATCH_FILES = [
     ROOT / "supabase" / "patch-spm-gv-v2.sql",
     ROOT / "supabase" / "patch-spm-gv-v3.sql",
+    ROOT / "supabase" / "patch-spm-gv-v4.sql",
 ]
 
 

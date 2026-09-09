@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Giao việc TT SPM</title>
 <meta name="theme-color" content="#312e81">
-<link rel="stylesheet" href="/static/css/app-spm-gv.css?v=9">
+<link rel="stylesheet" href="/static/css/app-spm-gv.css?v=10">
 </head>
 <body class="gv-body">
 <div class="gv-shell">
@@ -22,6 +22,13 @@
       </div>
     </div>
     <div class="gv-topbar-right">
+      <div class="gv-bell-wrap">
+        <button type="button" class="gv-btn-icon" id="btnUnread" title="Việc mới">🔔<span class="gv-bell-dot" id="unreadDot" hidden>0</span></button>
+        <div class="gv-unread-drop" id="unreadDrop" hidden>
+          <div class="gv-unread-head">Việc mới được giao</div>
+          <div id="unreadList"></div>
+        </div>
+      </div>
       <span class="gv-week-badge" id="weekBadge">Tuần —</span>
       <div class="gv-user-chip">
         <div class="gv-avatar" id="userAvatar">?</div>
@@ -229,9 +236,12 @@
   "okReport": "Đã gửi báo cáo",
   "okScore": "Đã chấm đầu việc",
   "okNote": "Đã lưu ghi nhận (kín)",
-  "okWeek": "Đã mở tuần hiện tại"
+  "okWeek": "Đã mở tuần hiện tại",
+  "badgeNew": "MỚI",
+  "unreadEmpty": "Không có việc mới.",
+  "unreadHead": "Việc mới được giao"
 }
 </script>
-<script src="/static/js/spm_gv/main.js?v=9"></script>
+<script src="/static/js/spm_gv/main.js?v=10"></script>
 </body>
 </html>

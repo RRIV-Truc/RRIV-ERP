@@ -10,7 +10,8 @@
   var state = {
     weeks: [], week: null, level: 'center', board: null,
     perms: {}, user: {}, departments: [], staff: [],
-    reportTaskId: null, scoreTaskId: null, editTaskId: null
+    reportTaskId: null, scoreTaskId: null, editTaskId: null,
+    unread: { count: 0, items: [] }
   };
 
   function $(id) { return document.getElementById(id); }
@@ -38,6 +39,55 @@
     try { body = await res.json(); } catch (_) {}
     if (!res.ok) throw new Error(body.message || ('HTTP ' + res.status));
     return body;
+  }
+  function applyAppBadge(n) {
+    try {
+      if (n > 0 && navigator.setAppBadge) navigator.setAppBadge(n);
+      else if (navigator.clearAppBadge) navigator.clearAppBadge();
+    } catch (_) {}
+  }
+  function renderUnread() {
+    var n = (state.unread && state.unread.count) || 0;
+    var items = (state.unread && state.unread.items) || [];
+    var dot = $('unreadDot');
+    if (dot) {
+      if (n > 0) { dot.hidden = false; dot.textContent = n > 99 ? '99+' : String(n); }
+      else { dot.hidden = true; dot.textContent = ''; }
+    }
+    applyAppBadge(n);
+    var list = $('unreadList');
+    if (!list) return;
+    if (!items.length) {
+      list.innerHTML = '<p class="gv-empty" style="padding:14px">' + T('unreadEmpty') + '</p>';
+      return;
+    }
+    list.innerHTML = items.map(function (it) {
+      return '<button type="button" class="gv-unread-item" data-unread-id="' + esc(it.id) + '">' +
+        '<span class="gv-new-pill">' + T('badgeNew') + '</span>' + esc(it.title) + '</button>';
+    }).join('');
+  }
+  async function loadUnread() {
+    try {
+      var since = '';
+      try { since = localStorage.getItem('spm_gv_seen_' + username()) || ''; } catch (_) {}
+      var q = '/unread' + (since ? ('?since=' + encodeURIComponent(since)) : '');
+      var body = await api(q);
+      state.unread = { count: body.count || 0, items: body.items || [] };
+    } catch (_) {
+      state.unread = { count: 0, items: [] };
+    }
+    renderUnread();
+  }
+  async function markUnreadSeen() {
+    try {
+      var body = await api('/unread/seen', { method: 'POST', body: '{}' });
+      try { localStorage.setItem('spm_gv_seen_' + username(), body.last_seen_at || new Date().toISOString()); } catch (_) {}
+    } catch (_) {
+      try { localStorage.setItem('spm_gv_seen_' + username(), new Date().toISOString()); } catch (e) {}
+    }
+    state.unread = { count: 0, items: state.unread.items || [] };
+    renderUnread();
+    applyAppBadge(0);
   }
   function toast(msg, err) {
     var el = $('gvToast');
@@ -207,7 +257,8 @@
       var work = t.work_score ? (t.work_score + '/5') : '-';
       var casc = (t.child_count ? (t.child_count + ' nguoi: ' + (t.child_assignees || '')) : T('notCascaded'));
       return '<tr>' +
-        '<td><strong>' + esc(t.title) + '</strong><div class="gv-week-card-meta">' + esc(t.description || '') + '</div></td>' +
+        '<td>' + (t.is_new ? '<span class="gv-new-pill">' + T('badgeNew') + '</span>' : '') +
+        '<strong>' + esc(t.title) + '</strong><div class="gv-week-card-meta">' + esc(t.description || '') + '</div></td>' +
         '<td>' + esc(leadLabel(t)) + '</td>' +
         '<td>' + esc(doerLabel(t)) + '</td>' +
         '<td>' + (t.deadline || '-') + '</td>' +
@@ -234,7 +285,7 @@
     var work = t.work_score ? (t.work_score + '/5') : '-';
     var lead = t.lead ? (t.lead.full_name || t.lead.username) : '-';
     return '<tr>' +
-      '<td>' + esc(t.title) + '</td>' +
+      '<td>' + (t.is_new ? '<span class="gv-new-pill">' + T('badgeNew') + '</span>' : '') + esc(t.title) + '</td>' +
       '<td>' + esc(lead) + '</td>' +
       '<td>' + esc(doerLabel(t)) + '</td>' +
       '<td>' + (t.deadline || '-') + '</td>' +
@@ -269,6 +320,7 @@
       var head = '<div class="gv-group">' +
         '<div class="gv-group-head">' +
           '<div><span class="gv-pill">' + T('fromDirector') + '</span> ' +
+          (p.is_new ? '<span class="gv-new-pill">' + T('badgeNew') + '</span>' : '') +
           '<strong>' + esc(p.title) + '</strong>' +
           '<div class="gv-week-card-meta">' + esc(deptName(p.department_id)) +
             (p.deadline ? ' ? han ' + p.deadline : '') +
@@ -390,7 +442,9 @@
       fillSelect($('fNoteUser'), state.staff, 'username', 'full_name');
       fillDatalist();
       renderWeeks();
+      await loadUnread();
       await loadBoard();
+      setTimeout(function () { markUnreadSeen(); }, 1800);
     } catch (e) {
       toast(e.message || String(e), true);
       $('weekList').innerHTML = '<p class="gv-empty">' + esc(e.message) + '</p>';
@@ -407,6 +461,20 @@
 
   document.addEventListener('click', function (e) {
     var t = e.target;
+    if (t.id === 'btnUnread' || (t.closest && t.closest('#btnUnread'))) {
+      var drop = $('unreadDrop');
+      if (drop) drop.hidden = !drop.hidden;
+      return;
+    }
+    if (t.dataset && t.dataset.unreadId) {
+      var ud = $('unreadDrop');
+      if (ud) ud.hidden = true;
+      return;
+    }
+    if (!t.closest || !t.closest('.gv-bell-wrap')) {
+      var d2 = $('unreadDrop');
+      if (d2) d2.hidden = true;
+    }
     if (t.id === 'btnHome') location.href = '/';
     if (t.dataset && t.dataset.close) closeM(t.dataset.close);
     if (t.classList.contains('gv-week-card')) {

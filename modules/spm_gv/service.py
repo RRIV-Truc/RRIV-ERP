@@ -12,7 +12,7 @@ STATUS_LABEL = {
     "not_started": "Ch?a b?t ??u",
     "in_progress": "?ang th?c hi?n",
     "at_risk": "R?i ro",
-    "completed": "Hon thnh",
+    "completed": "Ho?n th?nh",
     "blocked": "B? v??ng",
 }
 
@@ -135,7 +135,7 @@ def ensure_hien_ktc(sb) -> None:
     try:
         sb.table("category_teams").upsert({
             "id": KTC_TEAM_ID,
-            "name": "Ki?m tra cho",
+            "name": "Ki?m tra ch?o",
             "department": SPM_DEPT,
             "metadata": {"source": "spm-gv"},
         }).execute()
@@ -144,7 +144,7 @@ def ensure_hien_ktc(sb) -> None:
     try:
         sb.table("employee").update({
             "team_id": KTC_TEAM_ID,
-            "position_name": "Ph? trch ki?m tra cho",
+            "position_name": "Ph? tr?ch ki?m tra ch?o",
             "position_id": "pos-phu-trach",
         }).eq("username", HIEN_USERNAME).execute()
     except Exception:
@@ -408,6 +408,118 @@ def _rollup_parent(sb, parent_id: str | None) -> None:
     }).eq("id", parent_id).execute()
 
 
+
+def get_last_seen(sb, username: str) -> str | None:
+    try:
+        res = (
+            sb.table("spm_gv_seen")
+            .select("last_seen_at")
+            .eq("username", username)
+            .limit(1)
+            .execute()
+        )
+        if res.data:
+            return res.data[0].get("last_seen_at")
+    except Exception:
+        pass
+    return None
+
+
+def mark_seen(sb, username: str) -> str:
+    now = _now_iso()
+    try:
+        found = (
+            sb.table("spm_gv_seen")
+            .select("username")
+            .eq("username", username)
+            .limit(1)
+            .execute()
+        )
+        if found.data:
+            sb.table("spm_gv_seen").update({"last_seen_at": now}).eq("username", username).execute()
+        else:
+            sb.table("spm_gv_seen").insert({"username": username, "last_seen_at": now}).execute()
+    except Exception as exc:
+        print("spm mark_seen", exc)
+    return now
+
+
+def _unread_cutoff(sb, username: str, since_client: str | None) -> str:
+    last = get_last_seen(sb, username)
+    for raw in (last, since_client):
+        if raw:
+            return str(raw)
+    return (datetime.utcnow() - timedelta(hours=48)).isoformat() + "Z"
+
+
+def _parse_ts(s: str | None):
+    text = str(s or "").strip()
+    if not text:
+        return None
+    text = text.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(text)
+    except Exception:
+        return None
+
+
+def _task_is_new(task: dict, ctx: UserContext, cutoff: str) -> bool:
+    if (task.get("created_by") or "").lower() == ctx.username:
+        return False
+    created = _parse_ts(task.get("created_at"))
+    limit = _parse_ts(cutoff)
+    return bool(created and limit and created > limit)
+
+
+def _task_is_for_user(sb, ctx: UserContext, task: dict, assignee_names: set[str]) -> bool:
+    if (task.get("created_by") or "").lower() == ctx.username:
+        return False
+    if ctx.username in assignee_names:
+        return True
+    dept = str(task.get("department_id") or "")
+    if not dept:
+        return False
+    if task.get("level") == "center":
+        return rbac.owns_department(ctx, sb, dept)
+    return rbac.owns_department(ctx, sb, dept) and (
+        rbac.is_deputy(ctx, sb) or rbac.is_head(ctx, sb)
+    )
+
+
+def unread_payload(sb, ctx: UserContext, since_client: str | None = None) -> dict:
+    cutoff = _unread_cutoff(sb, ctx.username, since_client)
+    try:
+        res = (
+            sb.table("spm_gv_tasks")
+            .select("id,title,level,department_id,created_at,created_by,week_id")
+            .gt("created_at", cutoff)
+            .order("created_at", desc=True)
+            .limit(80)
+            .execute()
+        )
+    except Exception as exc:
+        print("spm unread", exc)
+        return {"count": 0, "items": [], "last_seen_at": get_last_seen(sb, ctx.username)}
+    tasks = res.data or []
+    amap = _assignees_of(sb, [t["id"] for t in tasks])
+    items = []
+    for t in tasks:
+        names = {str(a.get("username") or "").lower() for a in amap.get(t["id"], [])}
+        if _task_is_for_user(sb, ctx, t, names):
+            items.append({
+                "id": t["id"],
+                "title": t.get("title"),
+                "level": t.get("level"),
+                "department_id": t.get("department_id"),
+                "created_at": t.get("created_at"),
+            })
+    return {
+        "count": len(items),
+        "items": items[:15],
+        "last_seen_at": get_last_seen(sb, ctx.username),
+    }
+
+
 def board(sb, ctx: UserContext, week_id: str, level: str) -> dict:
     center_raw = _week_tasks(sb, week_id, "center")
     dept_raw = _week_tasks(sb, week_id, "dept")
@@ -415,6 +527,7 @@ def board(sb, ctx: UserContext, week_id: str, level: str) -> dict:
     heads = dept_heads(staff)
     dept_id = rbac.staff_department_id(ctx, sb)
     dept_ids = rbac.staff_department_ids(ctx, sb)
+    new_cutoff = _unread_cutoff(sb, ctx.username, None)
     is_dir = rbac.is_director(ctx, sb) or ctx.is_global_admin
     is_head = rbac.is_head(ctx, sb)
     is_deputy = rbac.is_deputy(ctx, sb)
@@ -458,6 +571,7 @@ def board(sb, ctx: UserContext, week_id: str, level: str) -> dict:
         out["can_report"] = rbac.can_report_task(ctx, sb, {**t, "assignees": amap.get(t["id"], [])})
         out["can_cascade"] = rbac.can_assign_dept(ctx, sb, t.get("department_id"))
         out["can_edit"] = rbac.can_score_work(ctx, sb, t)
+        out["is_new"] = _task_is_new(t, ctx, new_cutoff)
         return out
 
     kids_by_parent: dict[str, list] = {}

@@ -44,6 +44,34 @@
 .gv-week-badge {
   background: #4338ca; padding: 4px 10px; border-radius: 999px; font-size: 0.8rem;
 }
+.gv-bell-wrap { position: relative; }
+.gv-bell-dot {
+  position: absolute; top: -4px; right: -4px;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 999px; background: #dc2626; color: #fff;
+  font-size: 10px; font-weight: 800; line-height: 16px; text-align: center;
+}
+.gv-bell-dot[hidden] { display: none !important; }
+.gv-unread-drop {
+  position: absolute; right: 0; top: 42px; width: min(320px, 80vw);
+  background: #fff; color: #1e1b4b; border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(15,23,42,.25); z-index: 40; overflow: hidden;
+}
+.gv-unread-drop[hidden] { display: none !important; }
+.gv-unread-head {
+  font-size: 0.78rem; font-weight: 700; padding: 10px 12px;
+  background: #eef2ff; border-bottom: 1px solid #c7d2fe;
+}
+.gv-unread-item {
+  display: block; width: 100%; text-align: left; border: 0; background: #fff;
+  padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #eef2ff; font: inherit;
+}
+.gv-unread-item:hover { background: #eef2ff; }
+.gv-new-pill {
+  display: inline-block; background: #dc2626; color: #fff;
+  font-size: 0.65rem; font-weight: 800; padding: 1px 6px; border-radius: 999px;
+  margin-right: 6px; letter-spacing: .03em;
+}
 .gv-user-chip { display: flex; align-items: center; gap: 8px; }
 .gv-avatar {
   width: 32px; height: 32px; border-radius: 50%; background: #6366f1;

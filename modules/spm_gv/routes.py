@@ -104,6 +104,28 @@ def api_board(week_id):
         return jsonify({"success": False, "message": str(exc)}), 500
 
 
+@spmgv_bp.route("/api/spm-gv/unread", methods=["GET"])
+@require_spm_auth
+def api_unread():
+    since = (request.args.get("since") or "").strip() or None
+    try:
+        data = svc.unread_payload(_sb(), _ctx(), since)
+        return jsonify({"success": True, **data})
+    except Exception as exc:
+        print("spm unread", exc)
+        return jsonify({"success": False, "message": str(exc), "count": 0, "items": []}), 500
+
+
+@spmgv_bp.route("/api/spm-gv/unread/seen", methods=["POST"])
+@require_spm_auth
+def api_unread_seen():
+    try:
+        seen_at = svc.mark_seen(_sb(), _ctx().username)
+        return jsonify({"success": True, "last_seen_at": seen_at, "count": 0})
+    except Exception as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
+
+
 @spmgv_bp.route("/api/spm-gv/tasks", methods=["POST"])
 @require_spm_auth
 def api_task_create():
