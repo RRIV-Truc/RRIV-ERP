@@ -67,7 +67,10 @@ def api_boot():
 @require_spm_auth
 def api_ticket():
     tok = ticket_mod.issue_ticket(_ctx().username, ttl_sec=90)
-    pages = (os.getenv("SPM_GV_PAGES_URL") or "").strip().rstrip("/")
+    pages = (
+        os.getenv("SPM_GV_PAGES_URL")
+        or "https://rriv-spmgv.qm-rriv.workers.dev"
+    ).strip().rstrip("/")
     return jsonify({
         "success": True,
         "ticket": tok,

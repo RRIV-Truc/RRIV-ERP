@@ -3,36 +3,36 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Giao vi?c TT SPM</title>
+<title>Giao việc TT SPM</title>
+<script src="/config.js"></script>
 <meta name="theme-color" content="#312e81">
 <link rel="stylesheet" href="./app-spm-gv.css">
-<script src="/config.js"></script>
 </head>
 <body class="gv-body">
 <div class="gv-shell">
   <header class="gv-topbar">
     <div class="gv-topbar-left">
-      <button type="button" class="gv-btn-icon" id="btnHome" title="Trang ch?">??</button>
+      <button type="button" class="gv-btn-home" id="btnHome" title="Trang chủ">Về trang chủ</button>
       <div class="gv-brand">
         <span class="gv-brand-mark">GV</span>
         <div>
-          <strong>Giao vi?c � TT NCPT S?n ph?m m?i</strong>
-          <span>C?p 1 giao b? ph?n � C?p 2 giao c� nh�n � B�o c�o ti?n ??</span>
+          <strong>Giao việc — TT NCPT Sản phẩm mới</strong>
+          <span>Cấp 1 giao bộ phận · Cấp 2 giao cá nhân · Báo cáo tiến độ</span>
         </div>
       </div>
     </div>
     <div class="gv-topbar-right">
       <div class="gv-bell-wrap">
-        <button type="button" class="gv-btn-icon" id="btnUnread" title="Vi?c m?i">??<span class="gv-bell-dot" id="unreadDot" hidden>0</span></button>
+        <button type="button" class="gv-btn-icon" id="btnUnread" title="Việc mới">🔔<span class="gv-bell-dot" id="unreadDot" hidden>0</span></button>
         <div class="gv-unread-drop" id="unreadDrop" hidden>
-          <div class="gv-unread-head">Vi?c m?i ???c giao</div>
+          <div class="gv-unread-head">Việc mới được giao</div>
           <div id="unreadList"></div>
         </div>
       </div>
-      <span class="gv-week-badge" id="weekBadge">Tu?n �</span>
+      <span class="gv-week-badge" id="weekBadge">Tuần —</span>
       <div class="gv-user-chip">
         <div class="gv-avatar" id="userAvatar">?</div>
-        <div class="gv-user-name" id="userChip">?ang t?i�</div>
+        <div class="gv-user-name" id="userChip">Đang tải…</div>
       </div>
     </div>
   </header>
@@ -40,36 +40,36 @@
   <div class="gv-body-row">
     <aside class="gv-sidebar">
       <div class="gv-sidebar-head">
-        <h2>Tu?n l�m vi?c</h2>
-        <button type="button" class="gv-btn gv-btn-sm gv-btn-primary" id="btnNewWeek" hidden>+ Tu?n</button>
+        <h2>Tuần làm việc</h2>
+        <button type="button" class="gv-btn gv-btn-sm gv-btn-primary" id="btnNewWeek" hidden>+ Tuần</button>
       </div>
-      <p class="gv-sidebar-hint">Ch?n tu?n ?? giao vi?c v� theo d�i ti?n ?? (gi?ng theo d�i k?t lu?n h?p).</p>
-      <div class="gv-week-list" id="weekList"><p class="gv-empty gv-skeleton">?ang t?i�</p></div>
+      <p class="gv-sidebar-hint">Chọn tuần để giao việc và theo dõi tiến độ (giống theo dõi kết luận họp).</p>
+      <div class="gv-week-list" id="weekList"><p class="gv-empty gv-skeleton">Đang tải…</p></div>
     </aside>
 
     <div class="gv-content">
       <section class="gv-head">
         <div>
-          <p class="gv-kicker" id="levelKicker">C?p Trung t�m</p>
-          <h1 class="gv-title" id="weekTitle">Ch?n tu?n</h1>
+          <p class="gv-kicker" id="levelKicker">Cấp Trung tâm</p>
+          <h1 class="gv-title" id="weekTitle">Chọn tuần</h1>
           <p id="roleHint" class="gv-lock-hint"></p>
         </div>
         <div class="gv-tabs" id="levelTabs">
-          <button type="button" class="gv-tab is-active" data-level="center">C?p 1 � Gi�m ??c giao b? ph?n</button>
-          <button type="button" class="gv-tab" data-level="dept">C?p 2 � B? ph?n giao nh�n s?</button>
+          <button type="button" class="gv-tab is-active" data-level="center">Cấp 1 · Giám đốc giao bộ phận</button>
+          <button type="button" class="gv-tab" data-level="dept">Cấp 2 · Bộ phận giao nhân sự</button>
         </div>
       </section>
 
       <div class="gv-stats" id="statsRow"></div>
       <div class="gv-toolbar">
-        <button type="button" class="gv-btn gv-btn-primary" id="btnAssign" hidden>? Giao vi?c</button>
-        <button type="button" class="gv-btn gv-btn-outline" id="btnStaff" hidden>Nh�n s? Trung t�m</button>
-        <button type="button" class="gv-btn gv-btn-outline" id="btnLeaderNote" hidden>Ghi nh?n l�nh ??o (k�n)</button>
+        <button type="button" class="gv-btn gv-btn-primary" id="btnAssign" hidden>＋ Giao việc</button>
+        <button type="button" class="gv-btn gv-btn-outline" id="btnStaff" hidden>Nhân sự Trung tâm</button>
+        <button type="button" class="gv-btn gv-btn-outline" id="btnLeaderNote" hidden>Ghi nhận lãnh đạo (kín)</button>
       </div>
       <div class="gv-table-wrap" id="tableWrap">
         <table class="gv-table" id="taskTable">
           <thead id="taskHead"></thead>
-          <tbody id="taskBody"><tr><td class="gv-empty gv-skeleton" colspan="11">?ang t?i b?ng vi?c�</td></tr></tbody>
+          <tbody id="taskBody"><tr><td class="gv-empty gv-skeleton" colspan="11">Đang tải bảng việc…</td></tr></tbody>
         </table>
       </div>
       <div id="groupList" hidden></div>
@@ -79,96 +79,96 @@
 
 <div class="gv-modal" id="modalAssign" hidden>
   <div class="gv-dialog">
-    <h3 id="assignTitle">Giao vi?c</h3>
+    <h3 id="assignTitle">Giao việc</h3>
     <p id="assignHint" class="gv-lock-hint"></p>
     <div class="gv-field" id="wrapParent" hidden>
-      <label>??u vi?c Gi�m ??c ?� giao</label>
+      <label>Đầu việc Giám đốc đã giao</label>
       <select id="fParent"></select>
     </div>
-    <div class="gv-field"><label>??u vi?c / n?i dung ph�n c�ng ti?p</label><input id="fTitle" maxlength="200"></div>
-    <div class="gv-field"><label>M� t? / s?n ph?m giao</label><textarea id="fDesc" rows="3"></textarea></div>
+    <div class="gv-field"><label>Đầu việc / nội dung phân công tiếp</label><input id="fTitle" maxlength="200"></div>
+    <div class="gv-field"><label>Mô tả / sản phẩm giao</label><textarea id="fDesc" rows="3"></textarea></div>
     <div class="gv-field" id="wrapDept">
-      <label id="lblDept">Ch?u tr�ch nhi?m (b? ph?n)</label>
+      <label id="lblDept">Chịu trách nhiệm (bộ phận)</label>
       <select id="fDept"></select>
     </div>
     <div class="gv-field" id="wrapLead" hidden>
-      <label>Ng??i ch?u tr�ch nhi?m ch�nh</label>
+      <label>Người chịu trách nhiệm chính</label>
       <select id="fLead"></select>
     </div>
     <div class="gv-field">
-      <label>Ng??i th?c hi?n (n?u c�, c� th? nhi?u ng??i)</label>
-      <input id="fDoers" list="dlStaff" placeholder="G� t�n, c�ch nhau b?ng d?u ph?y">
+      <label>Người thực hiện (nếu có, có thể nhiều người)</label>
+      <input id="fDoers" list="dlStaff" placeholder="Gõ tên, cách nhau bằng dấu phẩy">
       <datalist id="dlStaff"></datalist>
     </div>
-    <div class="gv-field"><label>H?n</label><input type="date" id="fDeadline"></div>
+    <div class="gv-field"><label>Hạn</label><input type="date" id="fDeadline"></div>
     <div class="gv-dialog-actions">
-      <button type="button" class="gv-btn gv-btn-outline" data-close="modalAssign">H?y</button>
-      <button type="button" class="gv-btn gv-btn-primary" id="btnSaveAssign">L?u ph�n c�ng</button>
+      <button type="button" class="gv-btn gv-btn-outline" data-close="modalAssign">Hủy</button>
+      <button type="button" class="gv-btn gv-btn-primary" id="btnSaveAssign">Lưu phân công</button>
     </div>
   </div>
 </div>
 
 <div class="gv-modal" id="modalReport" hidden>
   <div class="gv-dialog">
-    <h3>B�o c�o th?c hi?n</h3>
+    <h3>Báo cáo thực hiện</h3>
     <p id="reportTaskTitle" class="gv-lock-hint"></p>
-    <div class="gv-field"><label>N?i dung ?� ho�n th�nh</label><textarea id="fDone" rows="3" placeholder="Nh?ng vi?c ?� xong trong tu?n"></textarea></div>
-    <div class="gv-field"><label>Ch?a ho�n th�nh</label><textarea id="fUndone" rows="3" placeholder="Ph?n c�n l?i"></textarea></div>
-    <div class="gv-field"><label>L� do</label><textarea id="fReason" rows="2" placeholder="N?u ch?a xong: nguy�n nh�n"></textarea></div>
-    <div class="gv-field"><label>T? l? ho�n th�nh (%)</label><input type="number" id="fPct" min="0" max="100" value="0"></div>
+    <div class="gv-field"><label>Nội dung đã hoàn thành</label><textarea id="fDone" rows="3" placeholder="Những việc đã xong trong tuần"></textarea></div>
+    <div class="gv-field"><label>Chưa hoàn thành</label><textarea id="fUndone" rows="3" placeholder="Phần còn lại"></textarea></div>
+    <div class="gv-field"><label>Lý do</label><textarea id="fReason" rows="2" placeholder="Nếu chưa xong: nguyên nhân"></textarea></div>
+    <div class="gv-field"><label>Tỷ lệ hoàn thành (%)</label><input type="number" id="fPct" min="0" max="100" value="0"></div>
     <div class="gv-dialog-actions">
-      <button type="button" class="gv-btn gv-btn-outline" data-close="modalReport">H?y</button>
-      <button type="button" class="gv-btn gv-btn-primary" id="btnSaveReport">G?i b�o c�o</button>
+      <button type="button" class="gv-btn gv-btn-outline" data-close="modalReport">Hủy</button>
+      <button type="button" class="gv-btn gv-btn-primary" id="btnSaveReport">Gửi báo cáo</button>
     </div>
   </div>
 </div>
 
 <div class="gv-modal" id="modalScore" hidden>
   <div class="gv-dialog">
-    <h3>?�nh gi� ??u m?c c�ng vi?c</h3>
+    <h3>Đánh giá đầu mục công việc</h3>
     <p id="scoreTaskTitle" class="gv-lock-hint"></p>
-    <div class="gv-field"><label>?i?m 1�5</label>
-      <select id="fWorkScore"><option value="">�</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+    <div class="gv-field"><label>Điểm 1–5</label>
+      <select id="fWorkScore"><option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
     </div>
-    <div class="gv-field"><label>Nh?n x�t (ng??i li�n quan nh�n th?y)</label><textarea id="fWorkCmt" rows="3"></textarea></div>
+    <div class="gv-field"><label>Nhận xét (người liên quan nhìn thấy)</label><textarea id="fWorkCmt" rows="3"></textarea></div>
     <div class="gv-dialog-actions">
-      <button type="button" class="gv-btn gv-btn-outline" data-close="modalScore">H?y</button>
-      <button type="button" class="gv-btn gv-btn-primary" id="btnSaveScore">L?u ?�nh gi�</button>
+      <button type="button" class="gv-btn gv-btn-outline" data-close="modalScore">Hủy</button>
+      <button type="button" class="gv-btn gv-btn-primary" id="btnSaveScore">Lưu đánh giá</button>
     </div>
   </div>
 </div>
 
 <div class="gv-modal" id="modalLeader" hidden>
   <div class="gv-dialog">
-    <h3>Ghi nh?n l�nh ??o � k�n</h3>
-    <p class="gv-lock-hint">Ch? Gi�m ??c (c?p Trung t�m) ho?c tr??ng b? ph?n + Gi�m ??c (c?p b? ph?n) nh�n th?y. Nh�n vi�n kh�ng th?y c?t n�y.</p>
-    <div class="gv-field"><label>Ng??i ???c ghi nh?n</label><select id="fNoteUser"></select></div>
-    <div class="gv-field" id="wrapNoteDept"><label>B? ph?n (c?p 2)</label><select id="fNoteDept"></select></div>
-    <div class="gv-field"><label>Tinh th?n h? tr? l�nh ??o (1�5)</label>
-      <select id="fSupport"><option value="">�</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+    <h3>Ghi nhận lãnh đạo — kín</h3>
+    <p class="gv-lock-hint">Chỉ Giám đốc (cấp Trung tâm) hoặc trưởng bộ phận + Giám đốc (cấp bộ phận) nhìn thấy. Nhân viên không thấy cột này.</p>
+    <div class="gv-field"><label>Người được ghi nhận</label><select id="fNoteUser"></select></div>
+    <div class="gv-field" id="wrapNoteDept"><label>Bộ phận (cấp 2)</label><select id="fNoteDept"></select></div>
+    <div class="gv-field"><label>Tinh thần hỗ trợ lãnh đạo (1–5)</label>
+      <select id="fSupport"><option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
     </div>
-    <div class="gv-field"><label>S�ng ki?n c�ng vi?c (1�5)</label>
-      <select id="fInit"><option value="">�</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+    <div class="gv-field"><label>Sáng kiến công việc (1–5)</label>
+      <select id="fInit"><option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
     </div>
-    <div class="gv-field"><label>Ghi ch� n?i b?</label><textarea id="fLeadNote" rows="3"></textarea></div>
+    <div class="gv-field"><label>Ghi chú nội bộ</label><textarea id="fLeadNote" rows="3"></textarea></div>
     <div class="gv-dialog-actions">
-      <button type="button" class="gv-btn gv-btn-outline" data-close="modalLeader">H?y</button>
-      <button type="button" class="gv-btn gv-btn-primary" id="btnSaveLeader">L?u ghi nh?n</button>
+      <button type="button" class="gv-btn gv-btn-outline" data-close="modalLeader">Hủy</button>
+      <button type="button" class="gv-btn gv-btn-primary" id="btnSaveLeader">Lưu ghi nhận</button>
     </div>
   </div>
 </div>
 
 <div class="gv-modal" id="modalStaff" hidden>
   <div class="gv-dialog">
-    <h3>Nh�n s? Trung t�m (??ng b? t? danh m?c nh�n s?)</h3>
-    <p class="gv-lock-hint">Kh�ng nh?p l?i m?i l?n m? app. Gi�m ??c b?m ??ng b? khi c� ng??i m?i ho?c ??i ch?c danh.</p>
+    <h3>Nhân sự Trung tâm (đồng bộ từ danh mục nhân sự)</h3>
+    <p class="gv-lock-hint">Không nhập lại mỗi lần mở app. Giám đốc bấm đồng bộ khi có người mới hoặc đổi chức danh.</p>
     <div class="gv-table-wrap" style="margin-top:12px">
-      <table class="gv-table"><thead><tr><th>T�i kho?n</th><th>H? t�n</th><th>B? ph?n giao vi?c</th><th>Vai tr�</th></tr></thead>
+      <table class="gv-table"><thead><tr><th>Tài khoản</th><th>Họ tên</th><th>Bộ phận giao việc</th><th>Vai trò</th></tr></thead>
       <tbody id="staffBody"></tbody></table>
     </div>
     <div class="gv-dialog-actions">
-      <button type="button" class="gv-btn gv-btn-primary" id="btnSyncStaff" hidden>??ng b? nh�n s?</button>
-      <button type="button" class="gv-btn gv-btn-outline" data-close="modalStaff">?�ng</button>
+      <button type="button" class="gv-btn gv-btn-primary" id="btnSyncStaff" hidden>Đồng bộ nhân sự</button>
+      <button type="button" class="gv-btn gv-btn-outline" data-close="modalStaff">Đóng</button>
     </div>
   </div>
 </div>
@@ -176,72 +176,73 @@
 <div class="gv-toast" id="gvToast" hidden></div>
 <script type="application/json" id="gvI18n">
 {
-  "noWeek": "Ch?a c� tu?n",
-  "chooseWeek": "Ch?n tu?n",
-  "weekDash": "Tu?n �",
-  "kickerCenter": "C?p Trung t�m � Gi�m ??c giao cho b? ph?n (kh�ng giao t�n c� nh�n)",
-  "kickerDept": "C?p b? ph?n � nh?n ??u vi?c Gi�m ??c giao, ph�n c�ng ti?p cho nh�n s?",
-  "hintStaff": "B?n b�o c�o ti?n ?? c�c ??u vi?c ???c giao. Kh�ng th?y c?t ghi nh?n l�nh ??o.",
-  "hintDir": "Gi�m ??c: c?p 1 giao b? ph?n; c?p 2 xem b? ph?n ph�n c�ng ti?p cho ai.",
-  "hintDeputy": "Ph� G? ki�m tr??ng ph�ng Ki?m nghi?m/Hi?u chu?n: th?y vi?c giao cho PG? v� ph�ng KN/HC, ph�n c�ng ti?p cho ng??i th?c hi?n.",
-  "hintHead": "Ph? tr�ch b? ph?n: nh?n ?�ng ??u vi?c Gi�m ??c ?� giao, r?i ph�n c�ng ti?p cho nh�n s?.",
-  "emptyInbox": "Ch?a c� ??u vi?c Gi�m ??c giao cho b? ph?n tu?n n�y.",
-  "emptyCascade": "Ch?a ph�n c�ng xu?ng nh�n s?.",
-  "btnCascade": "Ph�n c�ng ti?p",
-  "colChildAssign": "C?p 2 ?� ph�n c�ng",
-  "notCascaded": "Ch?a ph�n c�ng",
-  "fromDirector": "Gi�m ??c giao",
-  "assignDept": "Ph�n c�ng ti?p ??u vi?c Gi�m ??c ?� giao",
-  "hintAssignDept": "Ch?n ?�ng ??u vi?c c?p 1, r?i ch?n ng??i ch?u tr�ch nhi?m ch�nh v� ng??i th?c hi?n.",
-  "pickParent": "� Ch?n ??u vi?c Gi�m ??c giao �",
-  "needParent": "Ch?a c� ??u vi?c Gi�m ??c giao. V�o c?p 1 ?? Gi�m ??c ph�n c�ng tr??c.",
-  "statTasks": "??u vi?c",
-  "statAvg": "Ti?n ?? TB",
-  "statNote": "C?n l?u �",
-  "statRisk": "R?i ro",
-  "colTask": "??u vi?c",
-  "colDept": "B? ph?n",
-  "colLeadDept": "Ch?u tr�ch nhi?m (b? ph?n)",
-  "colLeadPerson": "Ch?u tr�ch nhi?m ch�nh",
-  "colDoer": "Th?c hi?n",
-  "colDeadline": "H?n",
-  "colDone": "?� ho�n th�nh",
-  "colUndone": "Ch?a ho�n th�nh",
-  "colReason": "L� do",
+  "noWeek": "Chưa có tuần",
+  "chooseWeek": "Chọn tuần",
+  "weekDash": "Tuần —",
+  "kickerCenter": "Cấp Trung tâm — Giám đốc giao cho bộ phận (không giao tên cá nhân)",
+  "kickerDept": "Cấp bộ phận — nhận đầu việc Giám đốc giao, phân công tiếp cho nhân sự",
+  "hintStaff": "Bạn báo cáo tiến độ các đầu việc được giao. Không thấy cột ghi nhận lãnh đạo.",
+  "hintDir": "Giám đốc: cấp 1 giao bộ phận; cấp 2 xem bộ phận phân công tiếp cho ai.",
+  "hintDeputy": "Phó GĐ kiêm trưởng phòng Kiểm nghiệm/Hiệu chuẩn: thấy việc giao cho PGĐ và phòng KN/HC, phân công tiếp cho người thực hiện.",
+  "hintHead": "Phụ trách bộ phận: nhận đúng đầu việc Giám đốc đã giao, rồi phân công tiếp cho nhân sự.",
+  "emptyInbox": "Chưa có đầu việc Giám đốc giao cho bộ phận tuần này.",
+  "emptyCascade": "Chưa phân công xuống nhân sự.",
+  "btnCascade": "Phân công tiếp",
+  "colChildAssign": "Cấp 2 đã phân công",
+  "notCascaded": "Chưa phân công",
+  "fromDirector": "Giám đốc giao",
+  "assignDept": "Phân công tiếp đầu việc Giám đốc đã giao",
+  "hintAssignDept": "Chọn đúng đầu việc cấp 1, rồi chọn người chịu trách nhiệm chính và người thực hiện.",
+  "pickParent": "— Chọn đầu việc Giám đốc giao —",
+  "needParent": "Chưa có đầu việc Giám đốc giao. Vào cấp 1 để Giám đốc phân công trước.",
+  "statTasks": "Đầu việc",
+  "statAvg": "Tiến độ TB",
+  "statNote": "Cần lưu ý",
+  "statRisk": "Rủi ro",
+  "colTask": "Đầu việc",
+  "colDept": "Bộ phận",
+  "colLeadDept": "Chịu trách nhiệm (bộ phận)",
+  "colLeadPerson": "Chịu trách nhiệm chính",
+  "colDoer": "Thực hiện",
+  "colDeadline": "Hạn",
+  "colDone": "Đã hoàn thành",
+  "colUndone": "Chưa hoàn thành",
+  "colReason": "Lý do",
   "colPct": "% HT",
-  "colScore": "?�nh gi� CV",
-  "colSecret": "Ghi nh?n L? (k�n)",
-  "emptyTasks": "Ch?a c� ??u vi?c tu?n n�y.",
-  "secretSupport": "H? tr?",
-  "secretInit": "S�ng ki?n",
-  "secretEmpty": "Ch?a ghi",
-  "btnReport": "B�o c�o",
-  "btnScore": "Ch?m CV",
-  "assignCenter": "Gi�m ??c giao vi?c c?p Trung t�m",
-  "hintAssignCenter": "Ch?u tr�ch nhi?m: ch?n b? ph?n (PG?, nghi?p v?, NC&CG, ki?m tra ch�o, l�i xe...). Kh�ng ghi t�n c� nh�n. Th?c hi?n c� th? g� nhi?u t�n.",
-  "lblDeptCenter": "Ch?u tr�ch nhi?m (b? ph?n)",
-  "lblDept": "B? ph?n",
-  "pickDept": "� Ch?n b? ph?n �",
-  "pickPerson": "� Ch?n ng??i �",
-  "roleDir": "Gi�m ??c",
-  "roleDeputy": "Ph� GD",
-  "roleHead": "Ph? tr�ch BP",
-  "roleStaff": "Nh�n vi�n",
-  "okAssign": "?� giao vi?c",
-  "okEdit": "?� c?p nh?t ph�n c�ng",
-  "okDelete": "?� x�a ??u vi?c",
-  "btnEdit": "S?a",
-  "btnDelete": "X�a",
-  "editTitle": "S?a ph�n c�ng",
-  "confirmDelete": "X�a ??u vi?c n�y? N?u l� vi?c Gi�m ??c giao th� c�c ph�n c�ng c?p 2 b�n d??i c?ng b? x�a.",
-  "okReport": "?� g?i b�o c�o",
-  "okScore": "?� ch?m ??u vi?c",
-  "okNote": "?� l?u ghi nh?n (k�n)",
-  "okWeek": "?� m? tu?n hi?n t?i",
-  "okSync": "?� ??ng b? nh�n s?",
-  "badgeNew": "M?I",
-  "unreadEmpty": "Kh�ng c� vi?c m?i.",
-  "unreadHead": "Vi?c m?i ???c giao"
+  "colScore": "Đánh giá CV",
+  "colSecret": "Ghi nhận LĐ (kín)",
+  "emptyTasks": "Chưa có đầu việc tuần này.",
+  "secretSupport": "Hỗ trợ",
+  "secretInit": "Sáng kiến",
+  "secretEmpty": "Chưa ghi",
+  "btnReport": "Báo cáo",
+  "btnScore": "Chấm CV",
+  "assignCenter": "Giám đốc giao việc cấp Trung tâm",
+  "hintAssignCenter": "Chịu trách nhiệm: chọn bộ phận (PGĐ, nghiệp vụ, NC&CG, kiểm tra chéo, lái xe...). Không ghi tên cá nhân. Thực hiện có thể gõ nhiều tên.",
+  "lblDeptCenter": "Chịu trách nhiệm (bộ phận)",
+  "lblDept": "Bộ phận",
+  "pickDept": "— Chọn bộ phận —",
+  "pickPerson": "— Chọn người —",
+  "roleDir": "Giám đốc",
+  "roleDeputy": "Phó GD",
+  "roleHead": "Phụ trách BP",
+  "roleStaff": "Nhân viên",
+  "okAssign": "Đã giao việc",
+  "okEdit": "Đã cập nhật phân công",
+  "okDelete": "Đã xóa đầu việc",
+  "btnEdit": "Sửa",
+  "btnDelete": "Xóa",
+  "editTitle": "Sửa phân công",
+  "confirmDelete": "Xóa đầu việc này? Nếu là việc Giám đốc giao thì các phân công cấp 2 bên dưới cũng bị xóa.",
+  "okReport": "Đã gửi báo cáo",
+  "okScore": "Đã chấm đầu việc",
+  "okNote": "Đã lưu ghi nhận (kín)",
+  "okWeek": "Đã mở tuần hiện tại",
+  "okSync": "Đã đồng bộ nhân sự",
+  "ticketFail": "Không mở được phiên Cloudflare. Đang mở bản trên trang chủ.",
+  "badgeNew": "MỚI",
+  "unreadEmpty": "Không có việc mới.",
+  "unreadHead": "Việc mới được giao"
 }
 </script>
 <script src="./main.js"></script>

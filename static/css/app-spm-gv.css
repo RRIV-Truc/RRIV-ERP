@@ -34,6 +34,17 @@
   border: 0; background: rgba(255,255,255,.12); color: white;
   width: 36px; height: 36px; border-radius: 8px; cursor: pointer; font-size: 16px;
 }
+.gv-btn-home {
+  border: 1px solid rgba(255,255,255,.45);
+  background: #fff;
+  color: #312e81;
+  font-weight: 700;
+  font-size: 0.82rem;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
 .gv-brand { display: flex; gap: 10px; align-items: center; }
 .gv-brand-mark {
   width: 36px; height: 36px; border-radius: 8px; background: #6366f1;

@@ -212,6 +212,11 @@ const RrivHub = (function () {
     }, 90000);
   }
 
+  function bodyPagesFromConfig() {
+    if (typeof Config !== 'undefined' && Config.SPM_GV_PAGES) return Config.SPM_GV_PAGES;
+    return 'https://rriv-spmgv.qm-rriv.workers.dev';
+  }
+
   function openSpmGv() {
     var name = hubUsername();
     var fallback = '/app/spmgv?stay=1';
@@ -220,6 +225,10 @@ const RrivHub = (function () {
       window.location.href = fallback;
       return;
     }
+    var pages = '';
+    try {
+      pages = (bodyPagesFromConfig() || '').replace(/\/$/, '');
+    } catch (_) {}
     fetch('/api/spm-gv/ticket', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-RRIV-Username': name },
@@ -228,8 +237,9 @@ const RrivHub = (function () {
       .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
       .then(function (pack) {
         var body = pack.body || {};
-        if (pack.ok && body.pages_url && body.ticket) {
-          window.location.href = body.pages_url.replace(/\/$/, '') + '/#ticket=' + encodeURIComponent(body.ticket);
+        var dest = (body.pages_url || pages || '').replace(/\/$/, '');
+        if (pack.ok && dest && body.ticket) {
+          window.location.href = dest + '/#ticket=' + encodeURIComponent(body.ticket);
           return;
         }
         window.location.href = fallback;

@@ -67,9 +67,11 @@ const Config = (function () {
     phonghop: '/app/phonghop',
     phonghopJoin: '/app/phonghop/join',
     tbkl: '/app/tbkl',
-    // Render /app/spmgv; nếu SPM_GV_PAGES_URL có thì hub mở Cloudflare kèm ticket
+    // Render /app/spmgv; hub mở Cloudflare kèm ticket
     spmgv: '/app/spmgv'
   };
+
+  const SPM_GV_PAGES = 'https://rriv-spmgv.qm-rriv.workers.dev';
 
   /**
    * Bật/tắt app trên màn hình hub (index).
@@ -104,6 +106,7 @@ const Config = (function () {
 
   return {
     ENV, currentEnv, API, APP, AUTH, COLLECTIONS, APP_ROUTES, HUB_APP_ENABLED,
+    SPM_GV_PAGES,
     getCollection, isDevelopment, isHubAppEnabled
   };
 })();
