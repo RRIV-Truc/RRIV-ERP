@@ -14,13 +14,20 @@ const STATUS_LABEL = {
 };
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, execCtx) {
     if (request.method === "OPTIONS") return cors(env, new Response(null, { status: 204 }));
     const url = new URL(request.url);
     try {
       if (url.pathname === "/config.js") return cors(env, configJs(env));
       if (url.pathname.startsWith("/api/spm-gv")) {
-        return cors(env, await handleApi(request, env, url));
+        env._waitUntil = execCtx && execCtx.waitUntil ? (p) => execCtx.waitUntil(p) : null;
+        const res = await handleApi(request, env, url);
+        await flushSnap(env);
+        if (env._waitUntil && env._bg && env._bg.length) {
+          const jobs = env._bg.slice();
+          env._waitUntil(Promise.all(jobs.map((fn) => fn().catch((e) => console.log("sb-bg", e)))));
+        }
+        return cors(env, res);
       }
       if (env.ASSETS) return env.ASSETS.fetch(request);
       return new Response("Not found", { status: 404 });
@@ -48,8 +55,119 @@ function cors(env, res) {
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8" },
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   });
+}
+
+const SNAP_KEY = "spm-gv-json-v1";
+const TMAP = {
+  spm_gv_departments: "departments",
+  spm_gv_staff: "staff",
+  spm_gv_weeks: "weeks",
+  spm_gv_tasks: "tasks",
+  spm_gv_assignees: "assignees",
+  spm_gv_reports: "reports",
+  spm_gv_leader_notes: "notes",
+  spm_gv_seen: "seen",
+};
+
+function emptySnap() {
+  return {
+    departments: [], staff: [], weeks: [], tasks: [],
+    assignees: [], reports: [], notes: [], seen: [],
+    pulled_at: null,
+  };
+}
+
+async function pullSupabase(env) {
+  const snap = emptySnap();
+  const jobs = [
+    ["spm_gv_departments", "departments", "select=*"],
+    ["spm_gv_staff", "staff", "select=*"],
+    ["spm_gv_weeks", "weeks", "select=*"],
+    ["spm_gv_tasks", "tasks", "select=*"],
+    ["spm_gv_assignees", "assignees", "select=*"],
+    ["spm_gv_reports", "reports", "select=*"],
+    ["spm_gv_leader_notes", "notes", "select=*"],
+    ["spm_gv_seen", "seen", "select=*"],
+  ];
+  await Promise.all(jobs.map(async ([table, key, qstr]) => {
+    try { snap[key] = await rowsSb(env, table, qstr); }
+    catch (_) { snap[key] = []; }
+  }));
+  snap.pulled_at = nowIso();
+  return snap;
+}
+
+async function getSnap(env) {
+  if (env._snap) return env._snap;
+  if (env.DATA) {
+    try {
+      const hit = await env.DATA.get(SNAP_KEY, "json");
+      if (hit && Array.isArray(hit.tasks)) {
+        env._snap = hit;
+        env._cacheHit = true;
+        return hit;
+      }
+    } catch (_) {}
+  }
+  const snap = await pullSupabase(env);
+  env._snap = snap;
+  env._dirty = true;
+  env._cacheHit = false;
+  return snap;
+}
+
+async function flushSnap(env) {
+  if (!env.DATA || !env._snap || !env._dirty) return;
+  await env.DATA.put(SNAP_KEY, JSON.stringify(env._snap));
+  env._dirty = false;
+}
+
+function snapList(env, table) {
+  const key = TMAP[table];
+  if (!key || !env._snap) return null;
+  if (!Array.isArray(env._snap[key])) env._snap[key] = [];
+  return env._snap[key];
+}
+
+function applyPostgrest(list, query) {
+  const params = new URLSearchParams(query);
+  let out = list.slice();
+  const order = params.get("order");
+  const limit = params.get("limit");
+  params.forEach((val, key) => {
+    if (key === "select" || key === "order" || key === "limit") return;
+    if (val.startsWith("eq.")) {
+      const want = val.slice(3).replace(/^"|"$/g, "");
+      out = out.filter((row) => String(row[key] ?? "") === want);
+    } else if (val.startsWith("gt.")) {
+      const want = val.slice(3).replace(/^"|"$/g, "");
+      out = out.filter((row) => String(row[key] ?? "") > want);
+    } else if (val.startsWith("in.")) {
+      const inner = val.slice(3).replace(/^\(/, "").replace(/\)$/, "");
+      const ids = inner.split(",").map((x) => decodeURIComponent(x));
+      out = out.filter((row) => ids.includes(String(row[key] ?? "")));
+    }
+  });
+  if (order) {
+    const [col, dir] = order.split(".");
+    const desc = dir === "desc";
+    out.sort((a, b) => {
+      const av = a[col], bv = b[col];
+      if (av === bv) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      return (av > bv ? 1 : -1) * (desc ? -1 : 1);
+    });
+  }
+  if (limit) out = out.slice(0, Number(limit) || out.length);
+  return out;
+}
+
+async function rowsSb(env, table, query) {
+  const data = await sb(env, q(table, query));
+  return Array.isArray(data) ? data : [];
 }
 
 function csv(env, name, fallback) {
@@ -187,8 +305,9 @@ function lit(val) {
 function q(table, query) { return table + "?" + query; }
 
 async function rows(env, table, query) {
-  const data = await sb(env, q(table, query));
-  return Array.isArray(data) ? data : [];
+  const local = snapList(env, table);
+  if (local) return applyPostgrest(local, query);
+  return rowsSb(env, table, query);
 }
 
 async function one(env, table, query) {
@@ -197,6 +316,23 @@ async function one(env, table, query) {
 }
 
 async function insertRow(env, table, doc) {
+  const local = snapList(env, table);
+  const payload = doc;
+  if (local) {
+    const rowsIn = Array.isArray(payload) ? payload : [payload];
+    rowsIn.forEach((row) => {
+      if (!row.id) row.id = crypto.randomUUID();
+      local.push(row);
+    });
+    env._dirty = true;
+    env._bg = env._bg || [];
+    env._bg.push(() => sb(env, table, {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(payload),
+    }));
+    return Array.isArray(payload) ? rowsIn[0] : rowsIn[0];
+  }
   const data = await sb(env, table, {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -206,6 +342,19 @@ async function insertRow(env, table, doc) {
 }
 
 async function updateRows(env, table, query, fields) {
+  const local = snapList(env, table);
+  if (local) {
+    const hits = applyPostgrest(local, query);
+    hits.forEach((row) => Object.assign(row, fields));
+    env._dirty = true;
+    env._bg = env._bg || [];
+    env._bg.push(() => sb(env, q(table, query), {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(fields),
+    }));
+    return hits;
+  }
   const data = await sb(env, q(table, query), {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
@@ -215,6 +364,16 @@ async function updateRows(env, table, query, fields) {
 }
 
 async function deleteRows(env, table, query) {
+  const local = snapList(env, table);
+  if (local) {
+    const hits = new Set(applyPostgrest(local, query).map((r) => r.id || JSON.stringify(r)));
+    const key = TMAP[table];
+    env._snap[key] = local.filter((r) => !hits.has(r.id || JSON.stringify(r)));
+    env._dirty = true;
+    env._bg = env._bg || [];
+    env._bg.push(() => sb(env, q(table, query), { method: "DELETE" }));
+    return;
+  }
   await sb(env, q(table, query), { method: "DELETE" });
 }
 
@@ -295,19 +454,22 @@ function canEnter(ctx, env) {
 async function loadCtx(env, username) {
   username = String(username || "").trim().toLowerCase();
   if (!username) return null;
-  const staff = await one(env, "spm_gv_staff", `select=*&username=eq.${lit(username)}&active=eq.true`);
+  const staff = await one(env, "spm_gv_staff", `select=*&username=eq.${lit(username)}&active=eq.true`)
+    || await one(env, "spm_gv_staff", `select=*&username=eq.${lit(username)}`);
   let departmentId = staff && staff.department_id;
   let erpRole = "user";
-  try {
-    const ua = await one(env, "user_accounts", `username=eq.${encodeURIComponent(username)}&select=username,role,employee_id`);
-    if (ua) {
-      erpRole = ua.role || "user";
-      if (ua.employee_id) {
-        const emp = await one(env, "employee", `id=eq.${encodeURIComponent(ua.employee_id)}&select=id,department_id`);
-        if (emp && emp.department_id) departmentId = emp.department_id;
+  if (!env._cacheHit) {
+    try {
+      const ua = await one(env, "user_accounts", `username=eq.${encodeURIComponent(username)}&select=username,role,employee_id`);
+      if (ua) {
+        erpRole = ua.role || "user";
+        if (ua.employee_id) {
+          const emp = await one(env, "employee", `id=eq.${encodeURIComponent(ua.employee_id)}&select=id,department_id`);
+          if (emp && emp.department_id) departmentId = emp.department_id;
+        }
       }
-    }
-  } catch (_) {}
+    } catch (_) {}
+  }
   const isAdmin = String(erpRole).toLowerCase() === "admin";
   const isDirector = directors(env).has(username) || !!(staff && staff.role === "director");
   const isDeputy = deputies(env).has(username) || !!(staff && staff.role === "deputy");
@@ -728,6 +890,8 @@ async function bootPayload(env, ctx, level) {
     unread,
     board: boardData,
     level,
+    cached: !!env._cacheHit,
+    pulled_at: (env._snap && env._snap.pulled_at) || null,
   };
 }
 
@@ -795,11 +959,24 @@ async function handleApi(request, env, url) {
     }
   }
 
+  await getSnap(env);
+  env._bg = env._bg || [];
+
   const gate = await authCtx(request, env, url);
   if (gate.error) return gate.error;
   const ctx = gate.ctx;
 
   try {
+    if (path === "/refresh" && method === "POST") {
+      env._snap = await pullSupabase(env);
+      env._dirty = true;
+      await flushSnap(env);
+      return json({
+        success: true,
+        pulled_at: env._snap.pulled_at,
+        tasks: (env._snap.tasks || []).length,
+      });
+    }
     if (path === "/boot" && method === "GET") {
       const data = await bootPayload(env, ctx, url.searchParams.get("level") || "auto");
       return json(Object.assign({ success: true }, data));

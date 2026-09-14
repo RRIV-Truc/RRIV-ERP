@@ -6,11 +6,9 @@ compatibility_date = "2026-03-01"
 directory = "./public"
 binding = "ASSETS"
 
-# After first deploy: wrangler kv namespace create SESSIONS
-# then uncomment and paste the id.
-# [[kv_namespaces]]
-# binding = "SESSIONS"
-# id = "replace-with-kv-namespace-id"
+[[kv_namespaces]]
+binding = "DATA"
+id = "fa894ca7711d4d968c0ee20f58619b2c"
 
 [vars]
 HUB_URL = "https://rriv-erp.onrender.com"
