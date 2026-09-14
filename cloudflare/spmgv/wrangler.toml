@@ -1,0 +1,25 @@
+name = "rriv-spmgv"
+main = "src/worker.js"
+compatibility_date = "2026-03-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# After first deploy: wrangler kv namespace create SESSIONS
+# then uncomment and paste the id.
+# [[kv_namespaces]]
+# binding = "SESSIONS"
+# id = "replace-with-kv-namespace-id"
+
+[vars]
+HUB_URL = "https://rriv-erp.onrender.com"
+PAGES_ORIGIN = ""
+DIRECTOR_USERNAMES = "rriv.nttruc"
+DEPUTY_USERNAMES = "rriv.nhtruong"
+SPM_DEPT_IDS = "dl-2"
+
+# Secrets (wrangler secret put):
+#   SUPABASE_URL
+#   SUPABASE_SERVICE_KEY
+#   SPM_GV_TICKET_SECRET   # same value as Render

@@ -1,0 +1,12 @@
+{
+  "name": "rriv-spmgv",
+  "private": true,
+  "description": "Giao vi?c TT SPM on Cloudflare Workers + static assets",
+  "scripts": {
+    "sync-assets": "node ./scripts/sync-assets.js",
+    "deploy": "node ./scripts/sync-assets.js && wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

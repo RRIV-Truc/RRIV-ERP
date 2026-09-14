@@ -366,11 +366,11 @@
     </div>
     <div id="footerCopyright" class="copyright">Copyright © 2025 by RRIV</div>
 
-    <script src="{{ url_for('static', filename='js/utils/config.js') }}?v=33"></script>
+    <script src="{{ url_for('static', filename='js/utils/config.js') }}?v=34"></script>
     <script src="{{ url_for('static', filename='js/services/SupabaseService.js') }}"></script>
     <script src="{{ url_for('static', filename='js/services/FirestoreService.js') }}"></script>
     <script src="{{ url_for('static', filename='js/modules/auth.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/hub.js') }}?v=36"></script>
+    <script src="{{ url_for('static', filename='js/hub.js') }}?v=37"></script>
     <script src="{{ url_for('static', filename='js/admin-backup.js') }}?v=4"></script>
     <script>
         let currentActiveUsername = "";
@@ -545,6 +545,10 @@ function navigateToApp(appName) {
         return;
     }
     if (typeof Config !== 'undefined' && Config.isHubAppEnabled && !Config.isHubAppEnabled(appName)) {
+        return;
+    }
+    if (appName === 'spmgv' && window.RrivHub && typeof RrivHub.openSpmGv === 'function') {
+        RrivHub.openSpmGv();
         return;
     }
     const route = (Config.APP_ROUTES && Config.APP_ROUTES[appName]) || ('/app/' + appName);

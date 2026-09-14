@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import os
+
 from flask import Blueprint, jsonify, request
 
 from modules.spm_gv.decorators import require_spm_auth
 from modules.spm_gv import rbac
 from modules.spm_gv import service as svc
+from modules.spm_gv import ticket as ticket_mod
 
 spmgv_bp = Blueprint("spmgv", __name__)
 
@@ -46,6 +49,60 @@ def api_context():
     except Exception as exc:
         print("spm context", exc)
         return jsonify({"success": False, "message": str(exc)}), 500
+
+
+@spmgv_bp.route("/api/spm-gv/boot", methods=["GET"])
+@require_spm_auth
+def api_boot():
+    level = (request.args.get("level") or "center").strip()
+    try:
+        data = svc.boot_payload(_sb(), _ctx(), level)
+        return jsonify({"success": True, **data})
+    except Exception as exc:
+        print("spm boot", exc)
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+
+@spmgv_bp.route("/api/spm-gv/ticket", methods=["POST"])
+@require_spm_auth
+def api_ticket():
+    tok = ticket_mod.issue_ticket(_ctx().username, ttl_sec=90)
+    pages = (os.getenv("SPM_GV_PAGES_URL") or "").strip().rstrip("/")
+    return jsonify({
+        "success": True,
+        "ticket": tok,
+        "pages_url": pages,
+        "expires_in": 90,
+    })
+
+
+@spmgv_bp.route("/api/spm-gv/session", methods=["POST"])
+def api_session():
+    data = request.get_json(silent=True) or {}
+    tok = str(data.get("ticket") or request.args.get("ticket") or "").strip()
+    payload = ticket_mod.verify_ticket(tok)
+    if not payload:
+        return jsonify({"success": False, "message": "Ticket het han hoac khong hop le"}), 401
+    sess = ticket_mod.issue_session(payload["u"])
+    return jsonify({
+        "success": True,
+        "session": sess,
+        "username": payload["u"],
+        "expires_in": 8 * 3600,
+    })
+
+
+@spmgv_bp.route("/api/spm-gv/staff/sync", methods=["POST"])
+@require_spm_auth
+def api_staff_sync():
+    ctx, sb = _ctx(), _sb()
+    if not rbac.can_assign_center(ctx, sb):
+        return jsonify({"success": False, "message": "Chi Giam doc dong bo nhan su"}), 403
+    try:
+        rows = svc.sync_staff_from_employee(sb)
+        return jsonify({"success": True, "staff": rows})
+    except Exception as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
 
 
 @spmgv_bp.route("/api/spm-gv/staff", methods=["GET"])

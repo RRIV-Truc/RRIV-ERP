@@ -9,9 +9,22 @@ from modules.meetings.rbac import load_user_context
 from modules.spm_gv.rbac import can_enter
 
 
+def _bearer_username() -> str:
+    auth = request.headers.get("Authorization") or ""
+    if not auth.lower().startswith("bearer "):
+        return ""
+    token = auth[7:].strip()
+    if not token:
+        return ""
+    from modules.spm_gv import ticket as ticket_mod
+    payload = ticket_mod.verify_session(token) or ticket_mod.verify_ticket(token)
+    return str((payload or {}).get("u") or "").strip().lower()
+
+
 def _resolve_username() -> str:
     username = (
-        request.headers.get("X-RRIV-Username")
+        _bearer_username()
+        or request.headers.get("X-RRIV-Username")
         or request.args.get("username")
         or (request.json or {}).get("username")
         or ""

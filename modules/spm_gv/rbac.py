@@ -54,6 +54,17 @@ def _staff_row(supabase, username: str) -> dict | None:
 def staff_of(ctx: UserContext, supabase=None) -> dict | None:
     if not ctx or not supabase:
         return None
+    try:
+        from flask import g, has_request_context
+        if has_request_context():
+            cache = getattr(g, "_spm_staff_row", None)
+            if isinstance(cache, dict) and cache.get("_u") == ctx.username:
+                return cache.get("row")
+            row = _staff_row(supabase, ctx.username)
+            g._spm_staff_row = {"_u": ctx.username, "row": row}
+            return row
+    except Exception:
+        pass
     return _staff_row(supabase, ctx.username)
 
 

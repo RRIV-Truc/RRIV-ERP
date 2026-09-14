@@ -67,6 +67,7 @@ const Config = (function () {
     phonghop: '/app/phonghop',
     phonghopJoin: '/app/phonghop/join',
     tbkl: '/app/tbkl',
+    // Render /app/spmgv; nếu SPM_GV_PAGES_URL có thì hub mở Cloudflare kèm ticket
     spmgv: '/app/spmgv'
   };
 

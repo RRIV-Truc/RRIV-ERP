@@ -30,7 +30,8 @@
     if (typeof Auth !== 'undefined' && typeof Auth.persistSession === 'function') {
       Auth.persistSession();
     }
-    window.location.href = '/';
+    var hub = (window.SPM_GV && window.SPM_GV.hubUrl) || '/';
+    window.location.href = hub;
   }
 
   window.goBackHome = goBackHome;

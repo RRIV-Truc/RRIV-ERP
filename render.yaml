@@ -45,3 +45,7 @@ services:
         sync: false
       - key: SUPABASE_DB_POOLER_HOST
         sync: false
+      - key: SPM_GV_PAGES_URL
+        sync: false
+      - key: SPM_GV_TICKET_SECRET
+        sync: false

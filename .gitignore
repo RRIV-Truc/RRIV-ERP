@@ -14,3 +14,6 @@ terminals/
 supabase/backups/data/**
 !supabase/backups/data/.gitkeep
 !supabase/backups/data/logs/.gitkeep
+cloudflare/spmgv/node_modules/
+cloudflare/spmgv/.wrangler/
+cloudflare/spmgv/.dev.vars

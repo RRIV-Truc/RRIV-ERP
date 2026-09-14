@@ -212,6 +212,32 @@ const RrivHub = (function () {
     }, 90000);
   }
 
+  function openSpmGv() {
+    var name = hubUsername();
+    var fallback = (typeof Config !== 'undefined' && Config.APP_ROUTES && Config.APP_ROUTES.spmgv)
+      ? Config.APP_ROUTES.spmgv
+      : '/app/spmgv';
+    if (!name) {
+      window.location.href = fallback;
+      return;
+    }
+    fetch('/api/spm-gv/ticket', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-RRIV-Username': name },
+      body: '{}'
+    })
+      .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+      .then(function (pack) {
+        var body = pack.body || {};
+        if (pack.ok && body.pages_url && body.ticket) {
+          window.location.href = body.pages_url.replace(/\/$/, '') + '/#ticket=' + encodeURIComponent(body.ticket);
+          return;
+        }
+        window.location.href = fallback;
+      })
+      .catch(function () { window.location.href = fallback; });
+  }
+
   return {
     init,
     applyHubAppLocks,
@@ -224,6 +250,7 @@ const RrivHub = (function () {
     redirectIfReturnUrl,
     onPageShow,
     userDisplayName,
-    refreshSpmUnread
+    refreshSpmUnread,
+    openSpmGv
   };
 })();

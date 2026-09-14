@@ -1,12 +1,11 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-{% include 'includes/rriv_core_slim.html' %}
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Giao việc TT SPM</title>
 <meta name="theme-color" content="#312e81">
-<link rel="stylesheet" href="/static/css/app-spm-gv.css?v=10">
+<link rel="stylesheet" href="/static/css/app-spm-gv.css?v=11">
 </head>
 <body class="gv-body">
 <div class="gv-shell">
@@ -44,7 +43,7 @@
         <button type="button" class="gv-btn gv-btn-sm gv-btn-primary" id="btnNewWeek" hidden>+ Tuần</button>
       </div>
       <p class="gv-sidebar-hint">Chọn tuần để giao việc và theo dõi tiến độ (giống theo dõi kết luận họp).</p>
-      <div class="gv-week-list" id="weekList"><p class="gv-empty">Đang tải…</p></div>
+      <div class="gv-week-list" id="weekList"><p class="gv-empty gv-skeleton">Đang tải…</p></div>
     </aside>
 
     <div class="gv-content">
@@ -69,7 +68,7 @@
       <div class="gv-table-wrap" id="tableWrap">
         <table class="gv-table" id="taskTable">
           <thead id="taskHead"></thead>
-          <tbody id="taskBody"><tr><td class="gv-empty" colspan="11">Chưa có dữ liệu</td></tr></tbody>
+          <tbody id="taskBody"><tr><td class="gv-empty gv-skeleton" colspan="11">Đang tải bảng việc…</td></tr></tbody>
         </table>
       </div>
       <div id="groupList" hidden></div>
@@ -161,12 +160,13 @@
 <div class="gv-modal" id="modalStaff" hidden>
   <div class="gv-dialog">
     <h3>Nhân sự Trung tâm (đồng bộ từ danh mục nhân sự)</h3>
-    <p class="gv-lock-hint">Không nhập lại. Bộ phận nội bộ dùng khi Giám đốc giao việc cấp 1. Hiền được gắn Kiểm tra chéo.</p>
+    <p class="gv-lock-hint">Không nhập lại mỗi lần mở app. Giám đốc bấm đồng bộ khi có người mới hoặc đổi chức danh.</p>
     <div class="gv-table-wrap" style="margin-top:12px">
       <table class="gv-table"><thead><tr><th>Tài khoản</th><th>Họ tên</th><th>Bộ phận giao việc</th><th>Vai trò</th></tr></thead>
       <tbody id="staffBody"></tbody></table>
     </div>
     <div class="gv-dialog-actions">
+      <button type="button" class="gv-btn gv-btn-primary" id="btnSyncStaff" hidden>Đồng bộ nhân sự</button>
       <button type="button" class="gv-btn gv-btn-outline" data-close="modalStaff">Đóng</button>
     </div>
   </div>
@@ -237,11 +237,12 @@
   "okScore": "Đã chấm đầu việc",
   "okNote": "Đã lưu ghi nhận (kín)",
   "okWeek": "Đã mở tuần hiện tại",
+  "okSync": "Đã đồng bộ nhân sự",
   "badgeNew": "MỚI",
   "unreadEmpty": "Không có việc mới.",
   "unreadHead": "Việc mới được giao"
 }
 </script>
-<script src="/static/js/spm_gv/main.js?v=10"></script>
+<script src="/static/js/spm_gv/main.js?v=11"></script>
 </body>
 </html>

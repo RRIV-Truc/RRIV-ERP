@@ -186,8 +186,13 @@ def sync_staff_from_employee(sb) -> list[dict]:
 
 
 def bootstrap_director(sb, ctx: UserContext) -> dict | None:
-    sync_staff_from_employee(sb)
     rows = list_staff(sb)
+    if not rows:
+        try:
+            sync_staff_from_employee(sb)
+            rows = list_staff(sb)
+        except Exception as exc:
+            print("spm first sync", exc)
     if rows:
         return rbac.staff_of(ctx, sb)
     if not (ctx.is_global_admin or ctx.username in rbac.director_usernames()):
@@ -544,14 +549,21 @@ def board(sb, ctx: UserContext, week_id: str, level: str) -> dict:
     all_ids = [t["id"] for t in center_raw] + [t["id"] for t in dept_raw]
     amap = _assignees_of(sb, all_ids)
     rmap = _latest_reports(sb, all_ids)
-    show_center_notes = rbac.can_see_leader_notes_center(ctx, sb)
+    show_center_notes = is_dir
     notes_center = _leader_notes_map(sb, week_id, "center") if show_center_notes else {
         "by_user": {}, "by_dept": {}, "rows": []
     }
+    notes_dept = (
+        _leader_notes_map(sb, week_id, "dept")
+        if (is_dir or is_head or is_deputy)
+        else {"by_user": {}, "by_dept": {}, "rows": []}
+    )
+    uname = ctx.username
 
     def pack(t: dict) -> dict:
         include_leader = False
         note = None
+        did = str(t.get("department_id") or "")
         if t.get("level") == "center" and show_center_notes:
             note = notes_center["by_dept"].get(t.get("department_id"))
             if not note:
@@ -559,18 +571,19 @@ def board(sb, ctx: UserContext, week_id: str, level: str) -> dict:
                 if head:
                     note = notes_center["by_user"].get(head.get("username"))
             include_leader = True
-        elif t.get("level") == "dept":
-            d = t.get("department_id")
-            if rbac.can_see_leader_notes_dept(ctx, sb, d):
-                nmap = _leader_notes_map(sb, week_id, "dept", d)
-                lead = next((a for a in amap.get(t["id"], []) if a.get("kind") == "lead"), None)
-                key = (lead or {}).get("username")
-                note = nmap["by_user"].get(key) if key else None
-                include_leader = True
-        out = _enrich_task(t, amap.get(t["id"], []), rmap.get(t["id"]), note, include_leader)
-        out["can_report"] = rbac.can_report_task(ctx, sb, {**t, "assignees": amap.get(t["id"], [])})
-        out["can_cascade"] = rbac.can_assign_dept(ctx, sb, t.get("department_id"))
-        out["can_edit"] = rbac.can_score_work(ctx, sb, t)
+        elif t.get("level") == "dept" and (is_dir or ((is_head or is_deputy) and did in dept_ids)):
+            lead = next((a for a in amap.get(t["id"], []) if a.get("kind") == "lead"), None)
+            key = (lead or {}).get("username")
+            note = notes_dept["by_user"].get(key) if key else None
+            include_leader = True
+        assignees = amap.get(t["id"], [])
+        out = _enrich_task(t, assignees, rmap.get(t["id"]), note, include_leader)
+        owns = is_dir or did in dept_ids
+        assigned = any(str(a.get("username") or "").lower() == uname for a in assignees)
+        can_cascade = is_dir or ((is_deputy or is_head) and owns)
+        out["can_report"] = is_dir or assigned or ((is_deputy or is_head) and owns)
+        out["can_cascade"] = can_cascade
+        out["can_edit"] = is_dir if t.get("level") == "center" else can_cascade
         out["is_new"] = _task_is_new(t, ctx, new_cutoff)
         return out
 
@@ -607,13 +620,13 @@ def board(sb, ctx: UserContext, week_id: str, level: str) -> dict:
             out_tasks.extend(g["children"])
         out_tasks.extend(orphans)
         people_notes = []
-        if is_dir or is_head or is_deputy:
-            if is_dir:
-                people_notes = _leader_notes_map(sb, week_id, "dept")["rows"]
-            else:
-                people_notes = []
-                for d in sorted(dept_ids):
-                    people_notes.extend(_leader_notes_map(sb, week_id, "dept", d)["rows"])
+        if is_dir:
+            people_notes = notes_dept["rows"]
+        elif is_head or is_deputy:
+            people_notes = [
+                row for row in notes_dept["rows"]
+                if str(row.get("department_id") or "") in dept_ids
+            ]
 
     n = len(out_tasks) if level == "dept" else len(center_packed)
     src = center_packed if level == "center" else out_tasks
@@ -872,6 +885,42 @@ def upsert_leader_note(sb, ctx: UserContext, payload: dict) -> dict:
         return doc
     ins = sb.table("spm_gv_leader_notes").insert(doc).execute()
     return (ins.data or [doc])[0]
+
+
+def boot_payload(sb, ctx: UserContext, level: str = "center") -> dict:
+    if level not in ("center", "dept"):
+        if (rbac.is_deputy(ctx, sb) or rbac.is_head(ctx, sb)) and not rbac.is_director(ctx, sb):
+            level = "dept"
+        else:
+            level = "center"
+    staff_row = bootstrap_director(sb, ctx)
+    perms = permissions_payload(ctx, sb)
+    if staff_row:
+        perms["full_name"] = staff_row.get("full_name") or perms.get("full_name")
+        perms["role"] = staff_row.get("role") or perms.get("role")
+        perms["department_id"] = staff_row.get("department_id") or perms.get("department_id")
+    week = ensure_current_week(sb, ctx)
+    weeks = list_weeks(sb)
+    board_data = board(sb, ctx, week["id"], level) if week else {
+        "tasks": [], "groups": [], "center_inbox": [], "summary": {"count": 0, "avg_pct": 0, "rag": {}},
+        "orphan_children": [], "leader_notes": [], "can_see_leader": False,
+    }
+    unread = unread_payload(sb, ctx)
+    return {
+        "user": {
+            "username": ctx.username,
+            "full_name": perms.get("full_name"),
+            "department_id": perms.get("department_id"),
+        },
+        "permissions": perms,
+        "departments": list_departments(sb),
+        "staff": list_staff(sb),
+        "current_week": week,
+        "weeks": weeks,
+        "unread": unread,
+        "board": board_data,
+        "level": level,
+    }
 
 
 def permissions_payload(ctx: UserContext, sb) -> dict:
