@@ -67,8 +67,7 @@ const Config = (function () {
     phonghop: '/app/phonghop',
     phonghopJoin: '/app/phonghop/join',
     tbkl: '/app/tbkl',
-    // Render /app/spmgv; hub mở Cloudflare kèm ticket
-    spmgv: '/app/spmgv'
+    spmgv: 'https://rriv-spmgv.qm-rriv.workers.dev'
   };
 
   const SPM_GV_PAGES = 'https://rriv-spmgv.qm-rriv.workers.dev';

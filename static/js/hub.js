@@ -219,8 +219,7 @@ const RrivHub = (function () {
 
   function openSpmGv() {
     var name = hubUsername();
-    var fallback = '/app/spmgv?stay=1';
-    if (name) fallback += '&username=' + encodeURIComponent(name);
+    var fallback = bodyPagesFromConfig();
     if (!name) {
       window.location.href = fallback;
       return;

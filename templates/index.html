@@ -366,11 +366,11 @@
     </div>
     <div id="footerCopyright" class="copyright">Copyright © 2025 by RRIV</div>
 
-    <script src="{{ url_for('static', filename='js/utils/config.js') }}?v=35"></script>
+    <script src="{{ url_for('static', filename='js/utils/config.js') }}?v=36"></script>
     <script src="{{ url_for('static', filename='js/services/SupabaseService.js') }}"></script>
     <script src="{{ url_for('static', filename='js/services/FirestoreService.js') }}"></script>
     <script src="{{ url_for('static', filename='js/modules/auth.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/hub.js') }}?v=40"></script>
+    <script src="{{ url_for('static', filename='js/hub.js') }}?v=41"></script>
     <script src="{{ url_for('static', filename='js/admin-backup.js') }}?v=4"></script>
     <script>
         let currentActiveUsername = "";
@@ -547,8 +547,28 @@ function navigateToApp(appName) {
     if (typeof Config !== 'undefined' && Config.isHubAppEnabled && !Config.isHubAppEnabled(appName)) {
         return;
     }
-    if (appName === 'spmgv' && window.RrivHub && typeof RrivHub.openSpmGv === 'function') {
-        RrivHub.openSpmGv();
+    if (appName === 'spmgv') {
+        var pages = (typeof Config !== 'undefined' && Config.SPM_GV_PAGES)
+            ? Config.SPM_GV_PAGES
+            : 'https://rriv-spmgv.qm-rriv.workers.dev';
+        var u = '';
+        try {
+            var cu = (window.RrivHub && RrivHub.getCurrentUser && RrivHub.getCurrentUser())
+                || (typeof Auth !== 'undefined' && Auth.getUser && Auth.getUser())
+                || {};
+            u = String(cu.username || '').toLowerCase();
+        } catch (e) {}
+        fetch('/api/spm-gv/ticket', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-RRIV-Username': u },
+            body: '{}'
+        }).then(function (res) { return res.json(); }).then(function (body) {
+            var dest = ((body && body.pages_url) || pages).replace(/\/$/, '');
+            if (body && body.ticket) dest += '/#ticket=' + encodeURIComponent(body.ticket);
+            window.location.href = dest;
+        }).catch(function () {
+            window.location.href = pages;
+        });
         return;
     }
     const route = (Config.APP_ROUTES && Config.APP_ROUTES[appName]) || ('/app/' + appName);
