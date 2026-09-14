@@ -1,4 +1,4 @@
-/* Giao viec TT SPM ó Cloudflare Worker API (ghi thang Supabase). */
+/* Giao viec TT SPM ù Cloudflare Worker API (ghi thang Supabase). */
 const INTERNAL_DEPTS = new Set(["pgd", "nv", "nc", "pkn", "ktc", "tckt", "lx"]);
 const EXTRA_DEPTS = { "rriv.nhtruong": new Set(["pkn"]) };
 const HIEN = "rriv.ntdhien";
@@ -715,6 +715,21 @@ async function bootPayload(env, ctx, level) {
   };
 }
 
+async function verifyTicketViaHub(env, ticket) {
+  const hub = String(env.HUB_URL || "").replace(/\/$/, "");
+  if (!hub || !ticket) return null;
+  try {
+    const res = await fetch(hub + "/api/spm-gv/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticket }),
+    });
+    const data = await res.json();
+    if (res.ok && data && data.username) return { u: String(data.username).toLowerCase() };
+  } catch (_) {}
+  return null;
+}
+
 async function readBody(request) {
   try { return await request.json(); } catch { return {}; }
 }
@@ -725,8 +740,14 @@ async function handleApi(request, env, url) {
 
   if (path === "/session" && method === "POST") {
     const body = await readBody(request);
-    const payload = await verifyToken(env, body.ticket || url.searchParams.get("ticket") || "");
-    if (!payload || payload.kind === "session") return json({ success: false, message: "Ticket het han hoac khong hop le" }, 401);
+    const raw = body.ticket || url.searchParams.get("ticket") || "";
+    let payload = await verifyToken(env, raw);
+    if (!payload || payload.kind === "session") {
+      payload = await verifyTicketViaHub(env, raw);
+    }
+    if (!payload || !payload.u || payload.kind === "session") {
+      return json({ success: false, message: "Ticket het han hoac khong hop le" }, 401);
+    }
     const issued = await issueToken(env, payload.u, { kind: "session" }, 8 * 3600);
     await saveSession(env, issued.payload);
     return json({ success: true, session: issued.token, username: payload.u, expires_in: 8 * 3600 });
