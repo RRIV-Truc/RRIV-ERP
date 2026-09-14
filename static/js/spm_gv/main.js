@@ -68,8 +68,15 @@
     if (!res.ok) throw new Error(body.message || ('HTTP ' + res.status));
     return body;
   }
+  function stayOnRender() {
+    var origin = (HUB || '/').replace(/\/$/, '');
+    var u = username();
+    var url = origin + '/app/spmgv?stay=1';
+    if (u) url += '&username=' + encodeURIComponent(u);
+    location.href = url;
+  }
   function goHub() {
-    location.href = HUB;
+    location.href = HUB || '/';
   }
   function applyAppBadge(n) {
     try {
@@ -503,9 +510,18 @@
       if (ticket) await exchangeTicket(ticket);
     } catch (e) {
       storeSession('');
-      if (!username()) { goHub(); return; }
+      toast((e && e.message) || T('ticketFail') || 'Khong doi duoc phien', true);
+      if (!username()) { stayOnRender(); return; }
     }
-    if (!username() && !state.session) { goHub(); return; }
+    if (!username() && !state.session) {
+      if (ticket) stayOnRender();
+      else {
+        var box = $('weekList');
+        if (box) box.innerHTML = '<p class="gv-empty">Mo app tu trang chu (hub) de dang nhap.</p>';
+        toast('Mo app tu trang chu', true);
+      }
+      return;
+    }
     try {
       var body = await api('/boot?level=auto');
       applyBoot(body);

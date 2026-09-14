@@ -214,9 +214,10 @@ const RrivHub = (function () {
 
   function openSpmGv() {
     var name = hubUsername();
-    var fallback = (typeof Config !== 'undefined' && Config.APP_ROUTES && Config.APP_ROUTES.spmgv)
-      ? Config.APP_ROUTES.spmgv
-      : '/app/spmgv';
+    // Tam thoi mo tren Render (?stay=1). Cloudflare chi mo khi ticket doi duoc phien
+    // (cung SPM_GV_TICKET_SECRET tren Render va Worker).
+    var fallback = '/app/spmgv?stay=1';
+    if (name) fallback += '&username=' + encodeURIComponent(name);
     if (!name) {
       window.location.href = fallback;
       return;
@@ -229,7 +230,7 @@ const RrivHub = (function () {
       .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
       .then(function (pack) {
         var body = pack.body || {};
-        if (pack.ok && body.pages_url && body.ticket) {
+        if (pack.ok && body.pages_url && body.ticket && body.pages_ready) {
           window.location.href = body.pages_url.replace(/\/$/, '') + '/#ticket=' + encodeURIComponent(body.ticket);
           return;
         }

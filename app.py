@@ -1135,7 +1135,7 @@ def show_app(app_name):
     if app_name not in VALID_APPS:
         abort(404)
 
-    if app_name == 'spmgv':
+    if app_name == 'spmgv' and request.args.get('stay') != '1':
         pages = (os.getenv('SPM_GV_PAGES_URL') or '').strip().rstrip('/')
         if pages:
             from modules.spm_gv import ticket as ticket_mod
@@ -1147,7 +1147,7 @@ def show_app(app_name):
             if uname:
                 tok = ticket_mod.issue_ticket(uname, ttl_sec=90)
                 return redirect(pages + '/#ticket=' + tok)
-            return redirect(pages)
+            # Không ticket thì giữ app trên Render — redirect trần sẽ bị CF đẩy về hub.
 
     template_name = APP_TEMPLATES.get(app_name, f'{app_name}.html')
     template_path = os.path.join(app.root_path, 'templates', template_name)
