@@ -548,9 +548,7 @@ function navigateToApp(appName) {
         return;
     }
     if (appName === 'spmgv') {
-        var pages = (typeof Config !== 'undefined' && Config.SPM_GV_PAGES)
-            ? Config.SPM_GV_PAGES
-            : 'https://rriv-spmgv.qm-rriv.workers.dev';
+        var pages = 'https://rriv-spmgv.qm-rriv.workers.dev';
         var u = '';
         try {
             var cu = (window.RrivHub && RrivHub.getCurrentUser && RrivHub.getCurrentUser())
@@ -558,17 +556,7 @@ function navigateToApp(appName) {
                 || {};
             u = String(cu.username || '').toLowerCase();
         } catch (e) {}
-        fetch('/api/spm-gv/ticket', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-RRIV-Username': u },
-            body: '{}'
-        }).then(function (res) { return res.json(); }).then(function (body) {
-            var dest = ((body && body.pages_url) || pages).replace(/\/$/, '');
-            if (body && body.ticket) dest += '/#ticket=' + encodeURIComponent(body.ticket);
-            window.location.href = dest;
-        }).catch(function () {
-            window.location.href = pages;
-        });
+        window.location.replace(pages + (u ? ('/#u=' + encodeURIComponent(u)) : ''));
         return;
     }
     const route = (Config.APP_ROUTES && Config.APP_ROUTES[appName]) || ('/app/' + appName);

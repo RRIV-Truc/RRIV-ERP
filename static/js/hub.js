@@ -219,31 +219,8 @@ const RrivHub = (function () {
 
   function openSpmGv() {
     var name = hubUsername();
-    var fallback = bodyPagesFromConfig();
-    if (!name) {
-      window.location.href = fallback;
-      return;
-    }
-    var pages = '';
-    try {
-      pages = (bodyPagesFromConfig() || '').replace(/\/$/, '');
-    } catch (_) {}
-    fetch('/api/spm-gv/ticket', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-RRIV-Username': name },
-      body: '{}'
-    })
-      .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
-      .then(function (pack) {
-        var body = pack.body || {};
-        var dest = (body.pages_url || pages || '').replace(/\/$/, '');
-        if (pack.ok && dest && body.ticket) {
-          window.location.href = dest + '/#ticket=' + encodeURIComponent(body.ticket);
-          return;
-        }
-        window.location.href = fallback;
-      })
-      .catch(function () { window.location.href = fallback; });
+    var pages = bodyPagesFromConfig().replace(/\/$/, '');
+    window.location.replace(pages + (name ? ('/#u=' + encodeURIComponent(name)) : ''));
   }
 
   return {

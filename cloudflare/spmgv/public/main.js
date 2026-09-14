@@ -22,6 +22,10 @@
   function $(id) { return document.getElementById(id); }
   function username() {
     try {
+      var hu = sessionStorage.getItem('spm_gv_u') || '';
+      if (hu) return String(hu).toLowerCase();
+    } catch (_) {}
+    try {
       if (typeof Auth !== 'undefined' && Auth.getUser) {
         var au = Auth.getUser() || Auth.restoreSession();
         if (au && au.username) return String(au.username).toLowerCase();
@@ -43,12 +47,25 @@
       else localStorage.removeItem(sessionKey());
     } catch (_) {}
   }
-  function takeHashTicket() {
+  function takeHashParams() {
     var hash = String(location.hash || '');
-    var m = hash.match(/(?:^|#|&)ticket=([^&]+)/);
-    if (!m) return '';
-    try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
-    return decodeURIComponent(m[1]);
+    var ticket = '';
+    var u = '';
+    var mt = hash.match(/(?:^|#|&)ticket=([^&]+)/);
+    var mu = hash.match(/(?:^|#|&)u=([^&]+)/);
+    if (mt) {
+      try { ticket = decodeURIComponent(mt[1]); } catch (_) { ticket = mt[1]; }
+    }
+    if (mu) {
+      try { u = decodeURIComponent(mu[1]).toLowerCase(); } catch (_) { u = mu[1]; }
+    }
+    if (u) {
+      try { sessionStorage.setItem('spm_gv_u', u); } catch (_) {}
+    }
+    if (ticket || u) {
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
+    }
+    return { ticket: ticket, u: u };
   }
   function headers() {
     var h = { 'Content-Type': 'application/json' };
@@ -67,13 +84,6 @@
     try { body = await res.json(); } catch (_) {}
     if (!res.ok) throw new Error(body.message || ('HTTP ' + res.status));
     return body;
-  }
-  function stayOnRender() {
-    var origin = (HUB || '/').replace(/\/$/, '');
-    var u = username();
-    var url = origin + '/app/spmgv?stay=1';
-    if (u) url += '&username=' + encodeURIComponent(u);
-    location.href = url;
   }
   function goHub() {
     location.href = HUB || '/';
@@ -504,22 +514,16 @@
   async function boot() {
     if (typeof Auth !== 'undefined' && Auth.restoreSession) Auth.restoreSession();
     storeSession(loadStoredSession());
-    var ticket = takeHashTicket();
+    var hp = takeHashParams();
     showSkeleton();
     try {
-      if (ticket) await exchangeTicket(ticket);
+      if (hp.ticket) await exchangeTicket(hp.ticket);
     } catch (e) {
       storeSession('');
-      toast((e && e.message) || T('ticketFail') || 'Khong doi duoc phien', true);
-      if (!username()) { stayOnRender(); return; }
     }
     if (!username() && !state.session) {
-      if (ticket) stayOnRender();
-      else {
-        var box = $('weekList');
-        if (box) box.innerHTML = '<p class="gv-empty">Mo app tu trang chu (hub) de dang nhap.</p>';
-        toast('Mo app tu trang chu', true);
-      }
+      var box = $('weekList');
+      if (box) box.innerHTML = '<p class="gv-empty">Bam nut Ve trang chu, dang nhap hub, roi mo lai app.</p>';
       return;
     }
     try {

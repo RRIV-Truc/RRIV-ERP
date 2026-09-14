@@ -1147,7 +1147,7 @@ def show_app(app_name):
         ).strip().lower()
         if uname:
             tok = ticket_mod.issue_ticket(uname, ttl_sec=90)
-            return redirect(pages + '/#ticket=' + tok)
+            return redirect(pages + '/#ticket=' + tok + '&u=' + uname)
         return redirect(pages)
 
     template_name = APP_TEMPLATES.get(app_name, f'{app_name}.html')
