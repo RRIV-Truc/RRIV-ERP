@@ -145,12 +145,23 @@ async function sessionOk(env, payload) {
 }
 
 function sbHeaders(env, extra) {
-  const key = env.SUPABASE_SERVICE_KEY;
-  return Object.assign({
+  const key = String(env.SUPABASE_SERVICE_KEY || "");
+  const headers = {
     apikey: key,
-    Authorization: "Bearer " + key,
     "Content-Type": "application/json",
-  }, extra || {});
+    Accept: "application/json",
+    "User-Agent": "rriv-spmgv-worker/1.0",
+  };
+  if (key.startsWith("eyJ")) headers.Authorization = "Bearer " + key;
+  return Object.assign(headers, extra || {});
+}
+
+function errText(data, text, status) {
+  if (data && typeof data === "object") {
+    return data.message || data.error || data.details || data.hint || JSON.stringify(data);
+  }
+  if (text) return String(text).slice(0, 400);
+  return "HTTP " + status;
 }
 
 async function sb(env, path, opts) {
@@ -162,10 +173,15 @@ async function sb(env, path, opts) {
     try { data = JSON.parse(text); } catch { data = text; }
   }
   if (!res.ok) {
-    const msg = (data && (data.message || data.error_description || data.hint)) || text || ("HTTP " + res.status);
-    throw new Error(msg);
+    throw new Error(path.split("?")[0] + ": " + errText(data, text, res.status));
   }
   return data;
+}
+
+function lit(val) {
+  const s = String(val == null ? "" : val);
+  if (/^[A-Za-z0-9._:-]+$/.test(s)) return s;
+  return '"' + s.replace(/"/g, '\\"') + '"';
 }
 
 function q(table, query) { return table + "?" + query; }
@@ -279,7 +295,7 @@ function canEnter(ctx, env) {
 async function loadCtx(env, username) {
   username = String(username || "").trim().toLowerCase();
   if (!username) return null;
-  const staff = await one(env, "spm_gv_staff", `username=eq.${encodeURIComponent(username)}&active=eq.true&select=*`);
+  const staff = await one(env, "spm_gv_staff", `select=*&username=eq.${lit(username)}&active=eq.true`);
   let departmentId = staff && staff.department_id;
   let erpRole = "user";
   try {
@@ -467,7 +483,7 @@ async function unreadPayload(env, ctx, since) {
   const cutoff = await unreadCutoff(env, ctx.username, since);
   let tasks = [];
   try {
-    tasks = await rows(env, "spm_gv_tasks", `select=id,title,level,department_id,created_at,created_by,week_id&created_at=gt.${encodeURIComponent(cutoff)}&order=created_at.desc&limit=80`);
+    tasks = await rows(env, "spm_gv_tasks", `select=id,title,level,department_id,created_at,created_by,week_id&created_at=gt.${lit(cutoff)}&order=created_at.desc&limit=80`);
   } catch {
     return { count: 0, items: [], last_seen_at: await lastSeen(env, ctx.username) };
   }
@@ -751,6 +767,32 @@ async function handleApi(request, env, url) {
     const issued = await issueToken(env, payload.u, { kind: "session" }, 8 * 3600);
     await saveSession(env, issued.payload);
     return json({ success: true, session: issued.token, username: payload.u, expires_in: 8 * 3600 });
+  }
+
+  if (path === "/health" && method === "GET") {
+    const base = String(env.SUPABASE_URL || "").replace(/\/$/, "");
+    const key = String(env.SUPABASE_SERVICE_KEY || "");
+    const target = base + "/rest/v1/spm_gv_departments?select=id&limit=1";
+    try {
+      const res = await fetch(target, {
+        headers: {
+          apikey: key,
+          Accept: "application/json",
+          "User-Agent": "rriv-spmgv-worker/1.0",
+        },
+      });
+      const text = await res.text();
+      return json({
+        success: res.ok,
+        status: res.status,
+        host: base,
+        key_prefix: key.slice(0, 10),
+        key_len: key.length,
+        body: String(text).slice(0, 240),
+      }, res.ok ? 200 : 400);
+    } catch (err) {
+      return json({ success: false, message: String(err.message || err), host: base, key_prefix: key.slice(0, 10) }, 400);
+    }
   }
 
   const gate = await authCtx(request, env, url);
